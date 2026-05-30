@@ -1,9 +1,0 @@
-Metadata-Version: 2.4
-Name: bm-scout-agent-worker
-Version: 0.1.0
-Summary: Worker agentique BM Scout V1 avec OpenAI Agents SDK
-Requires-Python: >=3.11
-Requires-Dist: openai-agents==0.17.4
-Requires-Dist: pydantic<3,>=2.12
-Provides-Extra: dev
-Requires-Dist: pytest<10,>=9; extra == "dev"

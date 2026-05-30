@@ -1,2 +1,0 @@
-[console_scripts]
-bm-scout-worker = bm_scout_worker.cli:main
