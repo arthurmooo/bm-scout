@@ -23,7 +23,7 @@ from bm_scout_worker.providers import (
 )
 from bm_scout_worker.quality import mission_blockers
 from bm_scout_worker.runner import run_bm_scout_mission
-from bm_scout_worker.schemas import OutreachPack, QualityGate, ScoutLead, StructuredInsights
+from bm_scout_worker.schemas import FeedbackEvent, OutreachPack, QualityGate, ScoutLead, StructuredInsights
 from bm_scout_worker.tool_recorder import capture_tool_calls, compact_payload
 
 
@@ -259,6 +259,109 @@ def test_provider_score_uses_negative_feedback_notes() -> None:
     assert penalized < neutral
 
 
+def test_provider_feedback_memory_blocks_rejected_company() -> None:
+    provider = ConfiguredWebResearchProvider(
+        [CompanySeed(company="Test Finance Ops", website="https://example.com", segment="Finance ops")]
+    )
+    provider.fetch_company_site = lambda _url: "Finance reporting document client team"
+    feedbacks = [
+        FeedbackEvent(
+            id="fb-reject-company",
+            lead_id="company-uuid",
+            kind="bad_lead",
+            note="À exclure : mauvais secteur.",
+            created_at="2026-05-30T10:00:00+00:00",
+            company_name="Test Finance Ops",
+            segment="Finance ops",
+        )
+    ]
+
+    lead = provider.build_candidates("core", feedback_events=feedbacks)[0]
+
+    assert lead.verdict == "reject"
+    assert lead.quality_decision == "blocked"
+    assert lead.score <= 15
+    assert "déjà rejeté" in (lead.rejection_reason or "")
+    assert any(step.step == "apply_feedback_memory" for step in provider.run_steps)
+
+
+def test_provider_feedback_memory_penalizes_weak_segment_without_exact_reject() -> None:
+    provider = ConfiguredWebResearchProvider(
+        [CompanySeed(company="Another Finance Ops", website="https://another.example", segment="Finance ops")]
+    )
+    provider.fetch_company_site = lambda _url: "Finance reporting document client team"
+    feedbacks = [
+        FeedbackEvent(
+            id="fb-sector-bad",
+            lead_id="other-company",
+            kind="bad_lead",
+            note="Mauvais secteur et douleur faible.",
+            created_at="2026-05-30T10:00:00+00:00",
+            company_name="Different Company",
+            segment="Finance ops",
+        )
+    ]
+
+    neutral = provider.build_candidates("core")[0]
+    adjusted = provider.build_candidates("core", feedback_events=feedbacks)[0]
+
+    assert adjusted.score < neutral.score
+    assert "Mémoire Romu" in adjusted.score_justification
+
+
+def test_provider_feedback_memory_rewrites_generic_message_and_angle() -> None:
+    provider = ConfiguredWebResearchProvider(
+        [CompanySeed(company="Angle M&A", website="https://angle.example", segment="Conseil M&A")]
+    )
+    provider.fetch_company_site = lambda _url: "M&A transaction reporting document client team"
+    feedbacks = [
+        FeedbackEvent(
+            id="fb-angle",
+            lead_id="company-uuid",
+            kind="good_angle",
+            note="Très bon angle reporting documents.",
+            created_at="2026-05-30T10:00:00+00:00",
+            segment="Conseil M&A",
+        ),
+        FeedbackEvent(
+            id="fb-generic",
+            lead_id="company-uuid",
+            kind="generic_message",
+            note="Message trop générique.",
+            created_at="2026-05-30T11:00:00+00:00",
+        ),
+    ]
+
+    lead = provider.build_candidates("core", feedback_events=feedbacks)[0]
+
+    assert "Angle validé Romu" in lead.score_justification
+    assert "message régénéré" in lead.score_justification
+    assert "J'ai relevé un signal public précis" in lead.outreach.cold_email
+
+
+def test_provider_feedback_memory_hard_blocks_dnc() -> None:
+    provider = ConfiguredWebResearchProvider(
+        [CompanySeed(company="DNC M&A", website="https://dnc.example", segment="Conseil M&A")]
+    )
+    provider.fetch_company_site = lambda _url: "M&A transaction reporting document client team"
+    feedbacks = [
+        FeedbackEvent(
+            id="fb-dnc",
+            lead_id="company-uuid",
+            kind="do_not_contact",
+            note="Ne plus contacter.",
+            created_at="2026-05-30T10:00:00+00:00",
+            website="https://dnc.example",
+        )
+    ]
+
+    lead = provider.build_candidates("core", feedback_events=feedbacks)[0]
+
+    assert lead.quality_decision == "blocked"
+    assert all(persona.do_not_contact for persona in lead.personas)
+    assert "do-not-contact" in lead.outreach.cold_email.lower()
+
+
 def test_parse_company_seeds_supports_json_and_compact_format() -> None:
     json_seeds = parse_company_seeds('[{"company":"A","website":"https://a.test","segment":"M&A"}]')
     compact_seeds = parse_company_seeds("B|https://b.test|Finance ops")
@@ -371,6 +474,11 @@ def test_supabase_memory_loads_feedback_and_outcomes() -> None:
                 "kind": "good_angle",
                 "note": "Angle validé par Romu.",
                 "created_at": "2026-05-30T10:00:00+00:00",
+                "scout_companies": {
+                    "name": "Cambon Partners",
+                    "segment": "Conseil M&A",
+                    "website": "https://www.cambonpartners.com",
+                },
             }
         ],
         [
@@ -380,6 +488,11 @@ def test_supabase_memory_loads_feedback_and_outcomes() -> None:
                 "outcome": "interested",
                 "note": "Réponse positive.",
                 "occurred_at": "2026-05-30T11:00:00+00:00",
+                "scout_companies": {
+                    "name": "Cambon Partners",
+                    "segment": "Conseil M&A",
+                    "website": "https://www.cambonpartners.com",
+                },
             }
         ],
     ]
@@ -407,3 +520,5 @@ def test_supabase_memory_loads_feedback_and_outcomes() -> None:
 
     assert [event.kind for event in events] == ["positive_outcome", "good_angle"]
     assert events[0].note == "Réponse positive."
+    assert events[0].company_name == "Cambon Partners"
+    assert events[0].segment == "Conseil M&A"

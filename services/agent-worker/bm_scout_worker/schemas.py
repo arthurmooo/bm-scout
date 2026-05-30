@@ -98,6 +98,9 @@ class FeedbackEvent(BaseModel):
     kind: FeedbackKind
     note: str
     created_at: str
+    company_name: str | None = None
+    segment: str | None = None
+    website: str | None = None
 
 
 class RunStep(BaseModel):

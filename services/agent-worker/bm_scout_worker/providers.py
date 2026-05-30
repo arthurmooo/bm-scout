@@ -13,7 +13,8 @@ from typing import Protocol
 from urllib.parse import urlparse
 
 from .fixtures import candidate_leads
-from .schemas import Evidence, OutreachPack, Persona, QualityGate, RunStep, ScoutLead, ScoutMode, StructuredInsights
+from .feedback_memory import apply_provider_feedback_memory, build_provider_feedback_memory
+from .schemas import Evidence, FeedbackEvent, OutreachPack, Persona, QualityGate, RunStep, ScoutLead, ScoutMode, StructuredInsights
 
 
 @dataclass(frozen=True)
@@ -110,10 +111,28 @@ class ConfiguredWebResearchProvider:
     def from_env(cls) -> "ConfiguredWebResearchProvider":
         return cls(parse_company_seeds(os.getenv("BM_SCOUT_REAL_SEEDS", "")))
 
-    def build_candidates(self, mode: ScoutMode, include_weak: bool = False, feedback_notes: list[str] | None = None) -> list[ScoutLead]:
+    def build_candidates(
+        self,
+        mode: ScoutMode,
+        include_weak: bool = False,
+        feedback_notes: list[str] | None = None,
+        feedback_events: list[FeedbackEvent] | None = None,
+    ) -> list[ScoutLead]:
         candidates: list[ScoutLead] = []
         seen_keys: set[str] = set()
+        feedback_memory = build_provider_feedback_memory(feedback_events or [])
         self.run_steps = []
+        self.record_step(
+            "feedback_memory",
+            {
+                "feedback_event_count": len(feedback_events or []),
+                "segment_delta_count": len(feedback_memory.segment_deltas),
+                "rejected_target_count": len(feedback_memory.rejected_targets),
+                "dnc_target_count": len(feedback_memory.do_not_contact_targets),
+                "preferred_angle_count": len(feedback_memory.preferred_angles),
+                "generic_message_feedback": feedback_memory.generic_message_feedback,
+            },
+        )
         for seed in self.seeds:
             dedupe_key = self.dedupe_company(seed)
             if dedupe_key in seen_keys:
@@ -150,7 +169,21 @@ class ConfiguredWebResearchProvider:
             self.record_step("save_evidence", {"company": seed.company, "evidence_count": len(evidence)})
             score = self.score_candidate(seed, evidence, feedback_notes or [])
             self.record_step("score_candidate", {"company": seed.company, "score": score, "feedback_notes_count": len(feedback_notes or [])})
-            candidates.append(to_scout_lead(seed, mode, score, signals, evidence, emails))
+            lead = to_scout_lead(seed, mode, score, signals, evidence, emails)
+            adjusted = apply_provider_feedback_memory(lead, feedback_memory)
+            if adjusted != lead:
+                self.record_step(
+                    "apply_feedback_memory",
+                    {
+                        "company": lead.company,
+                        "before_score": lead.score,
+                        "after_score": adjusted.score,
+                        "before_verdict": lead.verdict,
+                        "after_verdict": adjusted.verdict,
+                        "after_quality_decision": adjusted.quality_decision,
+                    },
+                )
+            candidates.append(adjusted)
         return candidates
 
     def record_step(self, step: str, payload: dict[str, object]) -> None:
@@ -241,7 +274,13 @@ class OpenWebResearchProvider(ConfiguredWebResearchProvider):
     def from_env(cls) -> "OpenWebResearchProvider":
         return cls(parse_search_queries(os.getenv("BM_SCOUT_SEARCH_QUERIES", "")))
 
-    def build_candidates(self, mode: ScoutMode, include_weak: bool = False, feedback_notes: list[str] | None = None) -> list[ScoutLead]:
+    def build_candidates(
+        self,
+        mode: ScoutMode,
+        include_weak: bool = False,
+        feedback_notes: list[str] | None = None,
+        feedback_events: list[FeedbackEvent] | None = None,
+    ) -> list[ScoutLead]:
         self.run_steps = []
         queries = default_search_queries(mode) if self.uses_default_queries else self.queries
         target_scan = scan_target_for_mode(mode)
@@ -259,7 +298,12 @@ class OpenWebResearchProvider(ConfiguredWebResearchProvider):
         )
         discovery_steps = [*self.run_steps]
         self.seeds = discovered[:fetch_limit]
-        leads = super().build_candidates(mode, include_weak=include_weak, feedback_notes=feedback_notes)
+        leads = super().build_candidates(
+            mode,
+            include_weak=include_weak,
+            feedback_notes=feedback_notes,
+            feedback_events=feedback_events,
+        )
         self.run_steps = [*discovery_steps, *self.run_steps]
         return leads
 
@@ -375,8 +419,14 @@ def build_candidate_batch(
     *,
     include_weak: bool,
     feedback_notes: list[str],
+    feedback_events: list[FeedbackEvent] | None = None,
 ) -> list[ScoutLead]:
-    return build_candidate_batch_with_steps(mode, include_weak=include_weak, feedback_notes=feedback_notes).leads
+    return build_candidate_batch_with_steps(
+        mode,
+        include_weak=include_weak,
+        feedback_notes=feedback_notes,
+        feedback_events=feedback_events,
+    ).leads
 
 
 def build_candidate_batch_with_steps(
@@ -384,6 +434,7 @@ def build_candidate_batch_with_steps(
     *,
     include_weak: bool,
     feedback_notes: list[str],
+    feedback_events: list[FeedbackEvent] | None = None,
 ) -> CandidateBatch:
     provider = provider_from_env()
     if isinstance(provider, DemoFixtureProvider):
@@ -400,7 +451,12 @@ def build_candidate_batch_with_steps(
             ],
         )
     if isinstance(provider, ConfiguredWebResearchProvider):
-        leads = provider.build_candidates(mode, include_weak=include_weak, feedback_notes=feedback_notes)
+        leads = provider.build_candidates(
+            mode,
+            include_weak=include_weak,
+            feedback_notes=feedback_notes,
+            feedback_events=feedback_events,
+        )
         return CandidateBatch(leads=leads, run_steps=provider.run_steps)
     raise RuntimeError("Provider BM Scout inconnu.")
 

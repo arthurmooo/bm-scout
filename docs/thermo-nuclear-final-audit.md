@@ -1,6 +1,6 @@
 # Audit thermo-nuclear - BM Scout
 
-Date : 2026-05-30
+Date : 2026-05-31
 
 Verdict : `production_not_ready`.
 
@@ -14,8 +14,8 @@ Verdict : `production_not_ready`.
    - Risque : proactivité configurable, mais pas encore démontrée en production.
    - Remède : exécuter le workflow avec secrets et vérifier les transitions sur le projet interne.
 
-3. La feedback loop causale existe localement, mais elle n'est pas encore prouvée en run réel Supabase à volume.
-   - Risque : le moteur local change bien le scoring/message, mais le pilote réel peut rester sous-exercé.
+3. La feedback loop causale existe localement côté TS et worker Python, mais elle n'est pas encore prouvée en run réel Supabase à volume.
+   - Risque : les moteurs testés changent bien le scoring/message, mais le pilote réel peut rester sous-exercé.
    - Remède : exécuter Core/Exploration réels avec feedbacks/outcomes Supabase et comparer avant/après.
 
 4. Les run steps couvrent maintenant provider et function tools Agents SDK, mais le tracing OpenAI hébergé doit encore être corrélé à des runs réels persistés.
@@ -28,7 +28,7 @@ Verdict : `production_not_ready`.
 - Les tâches `queued` peuvent maintenant passer par un runner `running -> completed/blocked/failed`.
 - Le worker réel ne retombe plus silencieusement sur fixtures et expose `WebSearchTool` OpenAI plus 8 tools métier Agents SDK.
 - `search_jobs` produit maintenant des preuves recrutement publiques et des run steps au lieu d'être un no-op.
-- La mémoire feedback locale pénalise les secteurs faibles, bloque les leads rejetés, renforce les angles validés et régénère les messages trop génériques.
+- La mémoire feedback TS et worker pénalise les secteurs faibles, bloque les leads rejetés/DNC, renforce les angles validés et régénère les messages trop génériques.
 - Observé/Inféré/Incertain et email confidence sont maintenant portés par TS, worker Pydantic, DB et RPC.
 - Le RPC écrit des run steps minimaux (`mission_start`, `lead_persisted`, steps worker, `mission_complete`).
 - Le provider réel ajoute des run steps outil-par-outil pour déduplication, fetch, extraction, email discovery, evidence save et scoring.
@@ -49,7 +49,7 @@ Verdict : `production_not_ready`.
 - `npm run quality:readiness` échoue comme attendu en `production_not_ready`
 - `npm run agent:tasks` échoue sans env Supabase avec un message explicite.
 - Import manager Agents SDK : 13 tools dont `WebSearchTool` et 8 tools métier.
-- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 24 tests
+- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 28 tests
 - Supabase interne : migration `bm_scout_structured_insights_email_confidence_steps` appliquée.
 
 ## Décision

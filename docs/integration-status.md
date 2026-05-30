@@ -1,6 +1,6 @@
 # BM Scout - Etat d'intégration
 
-Date : 2026-05-30
+Date : 2026-05-31
 
 ## Verdict PM actuel
 
@@ -16,7 +16,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Remplacer la routine UI codée en dur par un brief construit depuis runs/tasks.
 - Mettre `quality:readiness` en échec tant que les preuves runtime réelles manquent.
 - Bloquer le DNC avant copie/message, pas seulement dans une table décorative.
-- Faire influencer le run suivant par les feedbacks Romu, pas seulement produire une synthèse.
+- Faire influencer le run suivant par les feedbacks Romu, pas seulement produire une synthèse ou enrichir un prompt.
 - Stocker Observé/Inféré/Incertain et les statuts d'email dans Supabase.
 
 ## Implémenté dans cette passe
@@ -34,6 +34,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Worker réel : provider `auto` avec seeds, OpenAI `web_search` ou fallback web public, plus `WebSearchTool` hébergé OpenAI et 8 tools métier Agents SDK.
 - `search_jobs` n'est plus décoratif : le provider web cherche des sources recrutement publiques, les transforme en preuves et les trace dans `run_steps`.
 - Mémoire feedback TS : rejet lead, pénalité secteur, bonus angle validé, régénération anti-générique.
+- Mémoire feedback worker : chargement feedbacks/outcomes Supabase avec contexte entreprise/segment/site, blocage DNC/rejets, pénalités segments faibles, bonus angles validés et régénération anti-générique dans le provider Python.
 - Worker Pydantic : contrat Observé/Inféré/Incertain, email confidence, run steps.
 - Recorder Agents SDK : les function tools poussent maintenant leurs entrées/sorties compactées dans `run_steps` pendant `Runner.run`.
 - Migration Supabase `20260530214847_bm_scout_structured_insights_email_confidence_steps.sql` appliquée au projet interne.
@@ -46,7 +47,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Le worker réel peut découvrir des candidats sans seeds via OpenAI `web_search` ou fallback web public, mais ce n'est pas encore prouvé à volume PRD ni enrichi par SerpAPI.
 - Les providers `search_web`, `fetch_company_site`, `search_jobs`, `find_public_emails`, `dedupe_company` existent ; `search_jobs` reste minimal et la robustesse search dépend encore des sources publiques.
 - Les volumes 15 Core / 100 Exploration sont paramétrés mais non prouvés en run réel.
-- Le feedback influence le moteur local et les tests, mais il n'est pas encore prouvé sur un run réel Supabase à volume.
+- Le feedback influence le moteur TS et le provider Python en tests locaux, mais il n'est pas encore prouvé sur un run réel Supabase à volume.
 
 ## Réellement end-to-end aujourd'hui
 
@@ -54,7 +55,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Runner queue reproductible : `npm run agent:tasks:offline` ou `npm run agent:tasks:real` avec env Supabase serveur.
 - Actions API persistantes si `NEXT_PUBLIC_SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` existent.
 - DNC bloque côté TS, worker offline et trigger Supabase.
-- Feedback Romu influence le scoring et les messages dans le moteur local testé.
+- Feedback Romu influence le scoring et les messages dans le moteur TS et le worker provider testés.
 - Run steps et email confidence sont écrits par le worker/RPC quand `--persist` est exécuté.
 - Console Next buildée avec route d'action dynamique.
 
@@ -66,7 +67,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - `npm run build` : pass.
 - `npm run quality:runs` : pass fixture, décision produit `production_not_ready`.
 - `npm run quality:readiness` : fail attendu, décision produit `production_not_ready`.
-- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 24 tests pass.
+- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 28 tests pass.
 - Import Agents SDK manager : 13 tools disponibles, dont `WebSearchTool` et 8 tools métier provider.
 - `npm run agent:schedule` : pass, 6 routines planifiées.
 - `npm run agent:tasks` sans env serveur : fail attendu avec message env Supabase requis.
@@ -78,5 +79,5 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 1. Fournir l'env service role au runner local/cron et tester `agent:tasks:offline` contre Supabase.
 2. Prouver `openai_web` à volume, puis brancher SerpAPI si la couverture ou le coût OpenAI web search n'est pas suffisant.
 3. Prouver les volumes PRD 15 Core / 100 Exploration avec artefacts réels.
-4. Prouver la feedback loop sur scoring et recommandations dans un run réel Supabase.
+4. Prouver la feedback loop sur scoring, messages et recommandations dans un run réel Supabase.
 5. Exécuter le cron GitHub Actions avec secrets et vérifier les transitions `queued -> completed`.

@@ -153,7 +153,7 @@ cd services/agent-worker
 ../../.venv/bin/python -m bm_scout_worker.cli --real --mode core --persist
 ```
 
-Le worker lit `scout_feedback` et `scout_outcomes` si les variables Supabase serveur sont presentes. La persistance passe par la RPC transactionnelle `scout_persist_mission_output`, qui écrit aussi les insights structurés, l'email confidence, les run steps provider et les tool calls Agents SDK compactés.
+Le worker lit `scout_feedback` et `scout_outcomes` si les variables Supabase serveur sont presentes, avec le contexte `scout_companies(name, segment, website)` quand la relation PostgREST est disponible. La persistance passe par la RPC transactionnelle `scout_persist_mission_output`, qui écrit aussi les insights structurés, l'email confidence, les run steps provider et les tool calls Agents SDK compactés.
 En `BM_SCOUT_PROVIDER=auto`, le worker utilise les seeds si elles existent, sinon OpenAI `web_search` si `OPENAI_API_KEY` est présent, sinon un fallback web public minimal. En `BM_SCOUT_PROVIDER=configured`, l'absence de `BM_SCOUT_REAL_SEEDS` échoue au lieu de retomber sur fixtures. Pour une demo fixture explicite : `BM_SCOUT_PROVIDER=demo`.
 SerpAPI pourra être ajouté ensuite comme nouveau provider derrière le même contrat `search_web`.
 

@@ -17,7 +17,7 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 - Workflow GitHub Actions `.github/workflows/bm-scout-agent-tasks.yml` pour cron/dispatch, à activer avec secrets.
 - Actions UI branchées sur une API serveur : valider, rejeter, enrichir, copier, DNC, lancer routines.
 - DNC hard gate côté qualité TS, côté worker offline et côté DB pour empêcher un message non bloqué sur une cible DNC.
-- Feedback memory locale : mauvais lead/secteur pénalisé, angle validé renforcé, message générique régénéré, DNC bloquant.
+- Feedback memory TS + worker provider : mauvais lead/secteur pénalisé, angle validé renforcé, message générique régénéré, DNC bloquant, contexte entreprise/segment chargé depuis Supabase.
 - Observé/Inféré/Incertain, email confidence, run steps provider et tool calls Agents SDK persistés via Supabase/RPC.
 - Rapport qualité qui distingue le harnais fixture de la readiness produit réelle.
 
@@ -26,7 +26,7 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 - Cron GitHub Actions versionné, mais pas encore prouvé par un run CI avec secrets.
 - Pas de preuve volume 15 Core / 100 Exploration en run réel.
 - Recherche marché réelle encore limitée : le worker peut utiliser OpenAI `web_search` ou un fallback web public avec job search minimal, mais les volumes PRD et la qualité des sources restent à prouver en run réel.
-- Feedback loop prouvée localement, pas encore validée sur un run réel Supabase à volume.
+- Feedback loop prouvée localement côté TS et worker Python, pas encore validée sur un run réel Supabase à volume.
 - `quality:readiness` échoue volontairement tant que ces preuves ne sont pas là.
 - RLS/auth restent internes et à durcir avant production.
 
@@ -88,7 +88,7 @@ cd services/agent-worker
 
 La persistance `--persist` passe par la RPC Supabase transactionnelle `scout_persist_mission_output`.
 Le chemin réel expose le `WebSearchTool` hébergé OpenAI dans l'orchestration Agents SDK, plus les tools métier `search_web`, `fetch_company_site`, `extract_company_signals`, `search_jobs`, `find_public_emails`, `dedupe_company`, `score_candidate`, `save_evidence`.
-SerpAPI pourra remplacer ou compléter `openai_web` plus tard sans changer le contrat métier du provider.
+SerpAPI pourra remplacer ou compléter `openai_web` plus tard sans changer le contrat métier du provider. OpenAI `web_search` est le provider réel par défaut utile en V1 ; SerpAPI reste pertinent si Arthur veut une SERP plus brute, contrôlable et comparable.
 
 ## Documentation
 

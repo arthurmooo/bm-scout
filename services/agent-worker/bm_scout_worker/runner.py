@@ -68,6 +68,7 @@ async def _run_with_agents_sdk(mode: ScoutMode, *, include_weak: bool, feedbacks
         mode,
         include_weak=include_weak,
         feedback_notes=[feedback.note for feedback in feedbacks],
+        feedback_events=feedbacks,
     )
     candidates = candidate_batch.leads
     provider_step = RunStep(

@@ -39,7 +39,7 @@ class SupabaseMemory:
         feedback_rows = self.get_json(
             "scout_feedback",
             {
-                "select": "id,company_id,kind,note,created_at",
+                "select": "id,company_id,kind,note,created_at,scout_companies(name,segment,website)",
                 "order": "created_at.desc",
                 "limit": str(limit),
             },
@@ -47,7 +47,7 @@ class SupabaseMemory:
         outcome_rows = self.get_json(
             "scout_outcomes",
             {
-                "select": "id,company_id,outcome,note,occurred_at",
+                "select": "id,company_id,outcome,note,occurred_at,scout_companies(name,segment,website)",
                 "order": "occurred_at.desc",
                 "limit": str(limit),
             },
@@ -57,24 +57,36 @@ class SupabaseMemory:
         return sorted(events, key=lambda event: event.created_at, reverse=True)[:limit]
 
     def _feedback_event(self, row: dict[str, Any]) -> FeedbackEvent:
+        company = self._company_context(row)
         return FeedbackEvent(
             id=str(row["id"]),
             lead_id=str(row.get("company_id") or "unknown"),
             kind=row["kind"],
             note=row["note"],
             created_at=row["created_at"],
+            company_name=company.get("name"),
+            segment=company.get("segment"),
+            website=company.get("website"),
         )
 
     def _outcome_event(self, row: dict[str, Any]) -> FeedbackEvent:
         outcome = str(row.get("outcome") or "")
         kind: FeedbackKind = "positive_outcome" if outcome in {"interested", "meeting_booked"} else "negative_outcome"
+        company = self._company_context(row)
         return FeedbackEvent(
             id=f"outcome-{row['id']}",
             lead_id=str(row.get("company_id") or "unknown"),
             kind=kind,
             note=str(row.get("note") or f"Outcome: {outcome}"),
             created_at=row["occurred_at"],
+            company_name=company.get("name"),
+            segment=company.get("segment"),
+            website=company.get("website"),
         )
+
+    def _company_context(self, row: dict[str, Any]) -> dict[str, Any]:
+        value = row.get("scout_companies") or row.get("company") or {}
+        return value if isinstance(value, dict) else {}
 
     def get_json(self, path: str, params: dict[str, str]) -> list[dict[str, Any]]:
         query = urllib.parse.urlencode(params)

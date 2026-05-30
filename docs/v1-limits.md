@@ -16,7 +16,7 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 
 - Le worker charge les feedbacks Supabase si l'env serveur existe ; sans env, il repasse en seed local pour developpement.
 - Le chemin reel Agents SDK expose le `WebSearchTool` OpenAI, un provider `openai_web`, un fallback web public, un job search public minimal et des tools métier. Ce n'est pas encore une recherche marché prouvée à volume PRD.
-- La feedback memory modifie bien scoring/message en local, mais doit encore être prouvée sur runs réels persistés.
+- La feedback memory modifie bien scoring/message en local côté TS et worker Python ; les feedbacks/outcomes Supabase chargent maintenant le contexte entreprise/segment/site, mais l'effet doit encore être prouvé sur runs réels persistés.
 - Les agents produisent des sorties structurees, mais la qualite commerciale finale reste a valider par Romu.
 - Les recherches OpenAI web/fallback public restent dependantes de la disponibilite des sources, des coûts, des rate limits et de la qualité des requêtes.
 - Les volumes PRD 15 Core / 100 Exploration sont des objectifs de routine, pas encore des preuves de production.
