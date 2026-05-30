@@ -46,6 +46,12 @@ export const coreCandidates: ScoutLead[] = [
         url: "https://www.cambonpartners.com/en/expertise",
         observedFact: "Le site cite Venture, Growth capital, LBO et M&A.",
         reliability: "high"
+      },
+      {
+        label: "Implantations",
+        url: "https://www.cambonpartners.com/en/about-us",
+        observedFact: "Le site officiel présente une organisation avec bureaux à Paris et Londres.",
+        reliability: "high"
       }
     ],
     outreach: {
@@ -140,6 +146,12 @@ export const coreCandidates: ScoutLead[] = [
         url: "https://www.inextenso.fr/",
         observedFact: "In Extenso se présente comme réseau d'expertise comptable et de conseil aux dirigeants.",
         reliability: "high"
+      },
+      {
+        label: "Services dirigeants",
+        url: "https://www.inextenso.fr/",
+        observedFact: "L'offre publique s'adresse aux dirigeants avec des missions récurrentes de conseil et suivi.",
+        reliability: "medium"
       }
     ],
     outreach: {
@@ -185,6 +197,12 @@ export const explorationCandidates: ScoutLead[] = [
         url: "https://formation.lefebvre-dalloz.fr/formations",
         observedFact: "Le catalogue public montre des programmes, sessions et inscriptions.",
         reliability: "medium"
+      },
+      {
+        label: "Catalogue formations",
+        url: "https://formation.lefebvre-dalloz.fr/formations",
+        observedFact: "Les pages de formation impliquent inscriptions, convocations et documents de session.",
+        reliability: "medium"
       }
     ],
     outreach: {
@@ -225,6 +243,12 @@ export const explorationCandidates: ScoutLead[] = [
         label: "Site officiel",
         url: "https://www.pagepersonnel.fr",
         observedFact: "PageGroup publie une activité de recrutement structurée avec offres et services B2B.",
+        reliability: "medium"
+      },
+      {
+        label: "Offres publiques",
+        url: "https://www.pagepersonnel.fr/jobs",
+        observedFact: "Les offres publiques suggèrent un flux continu de candidats, clients et suivis d'avancement.",
         reliability: "medium"
       }
     ],

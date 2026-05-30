@@ -178,6 +178,6 @@ def offline_output(mode: ScoutMode, include_weak: bool = False) -> MissionOutput
         leads=leads,
         rejected=rejected,
         lessons=learning_lessons(feedbacks, evaluated),
-        final_decision="ready",
-        qualitative_report="Run offline prêt pour démo : outputs sourcés, actionnables et QC négatif bloquant.",
+        final_decision="not_ready",
+        qualitative_report="Run offline utile pour harnais demo, insuffisant pour readiness produit.",
     )

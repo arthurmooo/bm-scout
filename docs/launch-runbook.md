@@ -1,6 +1,6 @@
 # Runbook de lancement - BM Scout V1
 
-Statut : V1 interne, pas encore ready tant que les preuves runtime serveur ne sont pas completees.
+Statut : `production_not_ready`. Socle utilisable pour demo interne, pas pour déclarer la V1 opérationnelle.
 
 ## Pre-requis
 
@@ -29,6 +29,7 @@ Migrations attendues :
 
 - `20260530161000_bm_scout_v1.sql`
 - `20260530150744_bm_scout_atomic_persist_and_feedback_memory.sql`
+- `20260530210927_agent_tasks_and_actions.sql`
 
 Verification cote Supabase :
 
@@ -40,7 +41,7 @@ where n.nspname = 'public'
 and proname = 'scout_persist_mission_output';
 ```
 
-La fonction doit exister et rester non `security definer`.
+La fonction doit exister. Les nouvelles tables `scout_agent_tasks` et `scout_action_events` doivent aussi être présentes.
 
 ## Lancer la console
 
@@ -62,6 +63,22 @@ Ce script doit retourner `status: pass` avec au moins :
 - un lead prioritaire ;
 - un rejet/QC ;
 - un apprentissage.
+
+## Scheduler local
+
+Planifier sans persister :
+
+```bash
+npm run agent:schedule
+```
+
+Mettre en file les routines supportées dans Supabase :
+
+```bash
+npm run agent:schedule:run
+```
+
+Limite actuelle : ce script crée les tâches, mais le cron production et le worker qui consomme automatiquement la queue restent à brancher.
 
 ## Lancer le worker
 
@@ -113,10 +130,12 @@ BM Scout peut etre utilise en demo interne si :
 - les messages restent en copier-coller manuel ;
 - Romu sait que la V1 n'envoie rien.
 
-BM Scout peut etre marque `ready` uniquement si :
+BM Scout peut etre marque au mieux `pilot_candidate` uniquement si :
 
 - `verify:supabase` passe avec la vraie env serveur ;
 - la CLI `--persist` a cree un run lisible dans Supabase ;
 - un run reel Agents SDK post-branchement feedback Supabase a produit 3 a 5 apprentissages exploitables ;
+- les routines `scout_agent_tasks` sont consommées par un runner reproductible ;
+- les providers réels ne se limitent plus au batch candidat structuré ;
 - `quality:readiness` passe ;
 - l'audit thermo-nuclear ne contient plus de P1 ouvert.

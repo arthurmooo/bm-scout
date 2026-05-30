@@ -6,7 +6,7 @@ import type { ScoutLead, ScoutRun } from "../src/domain/types";
 import { getScoutSnapshot } from "../src/server/scout-repository";
 
 type RunVerdict = "pass" | "fail";
-type ProductReadiness = "ready" | "not_ready";
+type ProductReadiness = "pilot_candidate" | "production_not_ready";
 
 interface EvaluatedRun {
   name: string;
@@ -34,7 +34,7 @@ const cliPersistEvidence = await loadCliPersistEvidence();
 const supabaseConsoleEvidence = await loadSupabaseConsoleEvidence();
 const readinessMode = process.argv.includes("--readiness");
 const productBlockers = buildProductBlockers(realRunnerEvidence, cliPersistEvidence, supabaseConsoleEvidence);
-const productReadiness: ProductReadiness = productBlockers.length === 0 ? "ready" : "not_ready";
+const productReadiness: ProductReadiness = productBlockers.length === 0 ? "pilot_candidate" : "production_not_ready";
 
 const report = renderReport(
   evaluatedRuns,
@@ -73,7 +73,7 @@ if (fixtureVerdict === "fail") {
   process.exit(1);
 }
 
-if (readinessMode && productReadiness !== "ready") {
+if (readinessMode && productReadiness !== "pilot_candidate") {
   console.error(report);
   process.exit(1);
 }
@@ -201,7 +201,7 @@ function renderReport(
   const lines = [
     "# Rapport qualite BM Scout - socle fixture",
     "",
-    `Decision produit BM Scout V1 : ${productReadiness === "ready" ? "pret" : "pas pret"}`,
+    `Decision produit BM Scout V1 : ${productReadiness}`,
     `Verdict socle fixture : ${fixtureVerdict === "pass" ? "ok" : "pas ok"}`,
     `Score socle fixture : ${globalScore}/100`,
     "",
@@ -265,7 +265,7 @@ function renderReport(
     "",
     "## Limites restantes",
     "",
-    "- Les fixtures locales restent utiles comme harnais rapide, mais ne suffisent pas seules a declarer le produit pret.",
+    "- Les fixtures locales restent utiles comme harnais rapide, mais ne suffisent jamais seules a declarer le produit pret.",
     "- Les runners OpenAI Agents SDK Core et Exploration sont verifies via artefacts reels quand les preuves sont presentes.",
     "- Supabase sert de memoire runtime pour runs, feedbacks, outcomes, do-not-contact, QC et learning.",
     "- La persistance worker passe par la RPC transactionnelle `scout_persist_mission_output`.",
@@ -425,6 +425,9 @@ function buildProductBlockers(
     (item) => item.mode === "exploration" && item.sourceFile.includes("supabase-persist") && item.verdict === "pass"
   );
   const hasLearningFromFeedback = realEvidence.some((item) => item.mode === "core" && item.learningUsesFeedback);
+  blockers.push("production_not_ready: le cron production n'est pas branche; seule l'abstraction scheduler/agent_tasks peut etre verifiee localement.");
+  blockers.push("production_not_ready: la recherche marche reelle par tools web/jobs/email n'est pas encore prouvee a volume PRD.");
+  blockers.push("production_not_ready: le worker Agents SDK consomme encore un batch candidates structure tant que les providers real ne remplacent pas les fixtures.");
 
   if (!hasCore || !hasExploration) {
     blockers.push("Runs OpenAI Agents SDK réels Core et Exploration incomplets.");

@@ -1,6 +1,7 @@
-import { createClient } from "@supabase/supabase-js";
 import { demoSnapshot } from "@/domain/scout-engine";
-import type { Evidence, LearningLesson, Persona, QualityGate, ScoutLead, ScoutRun, ScoutSnapshot } from "@/domain/types";
+import { buildBriefSummary, buildTasksFromRuns } from "@/domain/scheduler";
+import type { AgentTask, Evidence, LearningLesson, Persona, QualityGate, ScoutLead, ScoutRun, ScoutSnapshot } from "@/domain/types";
+import { createServerSupabaseClient } from "./supabase";
 
 export async function getScoutSnapshot(): Promise<ScoutSnapshot> {
   const client = createServerSupabaseClient();
@@ -50,34 +51,39 @@ export async function getScoutSnapshot(): Promise<ScoutSnapshot> {
     throw new Error(`Lecture Supabase BM Scout impossible: ${error.message}`);
   }
   if (!runs?.length) return demoSnapshot();
-  return buildSnapshotFromRows(runs as ScoutRunRow[]);
+
+  const { data: tasks, error: taskError } = await client
+    .from("scout_agent_tasks")
+    .select(
+      "id,type,status,title,summary,recommendation,payload,scheduled_for,started_at,completed_at,result_run_id,blocked_reason,error_message,created_at"
+    )
+    .order("scheduled_for", { ascending: false })
+    .limit(8);
+
+  if (taskError && taskError.code !== "PGRST205") {
+    throw new Error(`Lecture des tâches BM Scout impossible: ${taskError.message}`);
+  }
+
+  return buildSnapshotFromRows(runs as ScoutRunRow[], (tasks ?? []) as ScoutTaskRow[]);
 }
 
-function createServerSupabaseClient() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  if (!url || !serviceRoleKey) return null;
-  return createClient(url, serviceRoleKey, {
-    auth: {
-      persistSession: false,
-      autoRefreshToken: false
-    }
-  });
-}
-
-function buildSnapshotFromRows(rows: ScoutRunRow[]): ScoutSnapshot {
+function buildSnapshotFromRows(rows: ScoutRunRow[], taskRows: ScoutTaskRow[] = []): ScoutSnapshot {
   const runs = rows.map(mapRun);
   const allLeads = runs.flatMap((run) => run.leads);
   const rejected = runs.flatMap((run) => run.rejected);
   const ordered = [...allLeads].sort((a, b) => b.score - a.score);
   const lessons = rows.flatMap((row) => row.scout_learning_lessons ?? []).map(mapLesson).slice(0, 4);
+  const tasks = taskRows.length ? taskRows.map(mapTask) : buildTasksFromRuns(runs);
   return {
     primaryLead: ordered[0] ?? null,
     queue: ordered.slice(1, 5),
     exploration: allLeads.filter((lead) => lead.mode === "exploration").slice(0, 4),
     rejected,
     lessons,
-    runs
+    runs,
+    tasks,
+    brief: buildBriefSummary(tasks, runs),
+    readiness: "pilot_candidate"
   };
 }
 
@@ -143,10 +149,34 @@ function mapPersona(row: ScoutContactRow): Persona {
 
 function mapEvidence(row: ScoutEvidenceRow): Evidence {
   return {
+    id: row.id,
     label: row.label,
     url: row.url,
     observedFact: row.observed_fact,
     reliability: row.reliability
+  };
+}
+
+function mapTask(row: ScoutTaskRow): AgentTask {
+  return {
+    id: row.id,
+    type: row.type,
+    status: row.status,
+    title: row.title,
+    summary: row.summary,
+    recommendation: row.recommendation,
+    payload: {
+      coreWeeklyTarget: Number(row.payload?.coreWeeklyTarget ?? 15),
+      explorationScanTarget: Number(row.payload?.explorationScanTarget ?? 100),
+      explorationShortlistTarget: Number(row.payload?.explorationShortlistTarget ?? 12)
+    },
+    createdAt: row.created_at,
+    scheduledFor: row.scheduled_for,
+    startedAt: row.started_at ?? undefined,
+    completedAt: row.completed_at ?? undefined,
+    resultRunId: row.result_run_id ?? undefined,
+    blockedReason: row.blocked_reason ?? undefined,
+    errorMessage: row.error_message ?? undefined
   };
 }
 
@@ -223,6 +253,7 @@ interface ScoutContactRow {
 }
 
 interface ScoutEvidenceRow {
+  id: string;
   label: string;
   url: string;
   observed_fact: string;
@@ -254,4 +285,21 @@ interface ScoutLessonRow {
   recommendation: string;
   source: string;
   confidence: string | number;
+}
+
+interface ScoutTaskRow {
+  id: string;
+  type: AgentTask["type"];
+  status: AgentTask["status"];
+  title: string;
+  summary: string;
+  recommendation: string;
+  payload: Partial<AgentTask["payload"]> | null;
+  scheduled_for: string;
+  started_at: string | null;
+  completed_at: string | null;
+  result_run_id: string | null;
+  blocked_reason: string | null;
+  error_message: string | null;
+  created_at: string;
 }

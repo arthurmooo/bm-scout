@@ -1,31 +1,57 @@
-import type { FeedbackEvent, LearningLesson, ScoutLead } from "./types";
+import type { FeedbackEvent, LearningLesson, ScoutLead, StructuredInsights } from "./types";
 
 const genericTokens = ["comme la vôtre", "avec l'ia", "automatiser votre business", "solution clé en main", "plateforme saas"];
 const enrichmentGateCodes = new Set(["contact", "specificity"]);
+const generatedGateCodes = new Set(["evidence", "observed_evidence", "message_specificity", "do_not_contact"]);
 
 export function evaluateLead(lead: ScoutLead): ScoutLead {
+  const candidate = leadHasDoNotContact(lead) ? blockDoNotContact(lead) : lead;
+  const insights = candidate.insights ?? deriveStructuredInsights(candidate);
   const gates = [
-    ...lead.qualityGates,
+    ...candidate.qualityGates.filter((gate) => !generatedGateCodes.has(gate.code)),
     {
       code: "evidence",
-      passed: lead.evidence.length > 0 || lead.verdict === "reject",
-      reason: lead.evidence.length > 0 ? "Preuves présentes." : "Aucune preuve exploitable."
+      passed: candidate.evidence.length > 0 || candidate.verdict === "reject",
+      reason: candidate.evidence.length > 0 ? "Preuves présentes." : "Aucune preuve exploitable."
+    },
+    {
+      code: "observed_evidence",
+      passed: hasSourcedObservedInsights(candidate, insights) || candidate.verdict === "reject",
+      reason: hasSourcedObservedInsights(candidate, insights)
+        ? "Chaque insight observé est relié à une preuve."
+        : "Insight observé sans evidence_id exploitable."
     },
     {
       code: "message_specificity",
-      passed: isSpecificOutreach(lead),
-      reason: isSpecificOutreach(lead) ? "Message ou blocage suffisamment spécifique." : "Message générique ou non relié à un signal."
+      passed: isSpecificOutreach(candidate),
+      reason: isSpecificOutreach(candidate) ? "Message ou blocage suffisamment spécifique." : "Message générique ou non relié à un signal."
+    },
+    {
+      code: "do_not_contact",
+      passed: !leadHasDoNotContact(candidate),
+      reason: leadHasDoNotContact(candidate) ? "Contact, domaine ou entreprise marqué do-not-contact." : "Aucun blocage do-not-contact."
     }
   ];
   const failedGates = gates.filter((gate) => !gate.passed);
   const hasBlocker = failedGates.some((gate) => !enrichmentGateCodes.has(gate.code));
   const needsEnrichment = failedGates.length > 0 && !hasBlocker;
   return {
-    ...lead,
-    qualityDecision: hasBlocker ? "blocked" : needsEnrichment ? "needs_enrichment" : lead.qualityDecision,
-    verdict: hasBlocker && lead.verdict === "validate" ? "enrich" : lead.verdict,
+    ...candidate,
+    insights,
+    qualityDecision: hasBlocker ? "blocked" : needsEnrichment ? "needs_enrichment" : candidate.qualityDecision,
+    verdict: hasBlocker && candidate.verdict === "validate" ? "enrich" : candidate.verdict,
     qualityGates: gates
   };
+}
+
+export function markLeadDoNotContact(lead: ScoutLead, reason = "Do-not-contact issu de la mémoire Romu."): ScoutLead {
+  return blockDoNotContact({
+    ...lead,
+    personas: lead.personas.length
+      ? lead.personas.map((persona, index) => (index === 0 ? { ...persona, doNotContact: true } : persona))
+      : [{ role: "Contact non précisé", reason, contactConfidence: "uncertain", doNotContact: true }],
+    rejectionReason: reason
+  });
 }
 
 export function isSpecificOutreach(lead: ScoutLead): boolean {
@@ -43,6 +69,44 @@ export function isSpecificOutreach(lead: ScoutLead): boolean {
       .filter((word) => word.length > 5)
       .some((word) => body.includes(word))
   );
+}
+
+export function deriveStructuredInsights(lead: ScoutLead): StructuredInsights {
+  return {
+    observed: lead.observedSignals.map((signal, index) => ({
+      text: signal,
+      evidenceId: lead.evidence[index]?.id ?? lead.evidence[index]?.url ?? ""
+    })),
+    inferred: lead.painHypotheses,
+    uncertain: lead.personas.some((persona) => persona.contactConfidence !== "confirmed")
+      ? ["Décideur exact et email nominatif à confirmer avant toute relance."]
+      : []
+  };
+}
+
+function hasSourcedObservedInsights(lead: ScoutLead, insights: StructuredInsights): boolean {
+  if (!insights.observed.length) return false;
+  const evidenceKeys = new Set(lead.evidence.flatMap((proof) => [proof.id, proof.url]).filter(Boolean));
+  return insights.observed.every((observed) => observed.evidenceId.trim() && evidenceKeys.has(observed.evidenceId));
+}
+
+function leadHasDoNotContact(lead: ScoutLead): boolean {
+  return lead.personas.some((persona) => persona.doNotContact);
+}
+
+function blockDoNotContact(lead: ScoutLead): ScoutLead {
+  return {
+    ...lead,
+    verdict: "reject",
+    qualityDecision: "blocked",
+    outreach: {
+      coldEmail: "Brouillon bloqué : do-not-contact.",
+      followUp: "Brouillon bloqué : do-not-contact.",
+      linkedin: "Brouillon bloqué : do-not-contact."
+    },
+    rejectionReason: lead.rejectionReason ?? "Do-not-contact.",
+    nextAction: "Bloqué do-not-contact : aucune relance autorisée."
+  };
 }
 
 export function buildLearning(feedbacks: FeedbackEvent[], leads: ScoutLead[]): LearningLesson[] {

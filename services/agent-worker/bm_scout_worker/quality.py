@@ -20,6 +20,8 @@ def lead_blockers(lead: ScoutLead) -> list[str]:
     if lead.verdict == "reject":
         blockers.append(f"{lead.company}: lead rejeté encore présent dans la shortlist.")
         return blockers
+    if any(persona.do_not_contact for persona in lead.personas):
+        blockers.append(f"{lead.company}: do-not-contact encore présent dans la shortlist.")
     if not lead.evidence:
         blockers.append(f"{lead.company}: aucune source publique.")
     if not lead.observed_signals:

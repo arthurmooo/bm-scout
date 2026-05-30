@@ -61,6 +61,16 @@ def test_blocked_lead_cannot_remain_in_shortlist() -> None:
     assert "Blocked Core: lead bloqué encore présent dans la shortlist." in mission_blockers(output)
 
 
+def test_do_not_contact_cannot_remain_in_shortlist() -> None:
+    output = offline_output("core")
+    dnc = output.leads[0].model_copy(deep=True)
+    dnc.company = "DNC Core"
+    dnc.personas[0].do_not_contact = True
+    output.leads.append(dnc)
+
+    assert "DNC Core: do-not-contact encore présent dans la shortlist." in mission_blockers(output)
+
+
 def test_runner_writes_artifact(tmp_path) -> None:
     output = asyncio.run(run_bm_scout_mission("core", artifacts_dir=tmp_path))
 

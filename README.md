@@ -1,16 +1,28 @@
 # BM Scout
 
-Console interne premium de prospection agentique pour BM Automation.
+Console interne de prospection agentique pour BM Automation.
 
-BM Scout n'est pas un CRM ni un SaaS standard. La V1 prépare le travail commercial de Romu :
+Statut actuel : `production_not_ready`.
 
-- recherche Core BM et Exploration séparées ;
-- qualification, signaux observés, hypothèses prudentes et scores justifiés ;
-- fiches courtes et profondes ;
-- contacts/personas, email froid, relance, LinkedIn manuel ;
-- Quality Control anti-générique avant affichage ;
-- feedback Romu, apprentissage hebdomadaire et blocage do-not-contact ;
-- aucune action externe automatique.
+BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messages froids. Le produit vise un employé IA d'acquisition : il prépare le travail, filtre le bruit, source les signaux, bloque les risques et demande seulement les décisions commerciales sensibles à Romu.
+
+## Ce qui existe maintenant
+
+- Console Next.js centrée sur la prochaine décision Romu.
+- Schéma Supabase pour runs, leads, preuves, messages, feedbacks, outcomes, DNC, run steps, tasks et action events.
+- Worker Python OpenAI Agents SDK avec `Runner.run`, `trace`, agents spécialisés et outputs Pydantic.
+- Scheduler local reproductible qui crée les routines Core, Exploration, Daily Brief, Learning, DNC check et followup review.
+- Actions UI branchées sur une API serveur : valider, rejeter, enrichir, copier, DNC, lancer routines.
+- DNC hard gate côté qualité TS, côté worker offline et côté DB pour empêcher un message non bloqué sur une cible DNC.
+- Rapport qualité qui distingue le harnais fixture de la readiness produit réelle.
+
+## Ce qui n'est pas encore prêt
+
+- Pas de cron production branché.
+- Pas de preuve volume 15 Core / 100 Exploration en run réel.
+- Recherche marché réelle encore insuffisante : le worker réel consomme encore un batch structuré tant que les providers web/jobs/email ne remplacent pas les fixtures.
+- `quality:readiness` échoue volontairement tant que ces preuves ne sont pas là.
+- RLS/auth restent internes et à durcir avant production.
 
 ## Lancer
 
@@ -19,12 +31,21 @@ npm install
 npm run dev
 ```
 
-Variables :
+Variables serveur :
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL` optionnel, par défaut `gpt-5.5`
+
+## Scheduler local
+
+```bash
+npm run agent:schedule
+npm run agent:schedule:run
+```
+
+`agent:schedule` affiche le plan sans persistance. `agent:schedule:run` met des tâches en file dans Supabase si l'env serveur est configurée.
 
 ## Tests
 
@@ -38,9 +59,7 @@ npm run quality:readiness
 npm run worker:test
 ```
 
-`quality:runs` exécute le harnais fixture des 4 runs obligatoires : Core BM, Exploration, Feedback & Learning, QC négatif. Les sorties sont enregistrées dans `artifacts/quality-runs/latest-report.md`.
-
-`quality:readiness` est volontairement bloquant tant que la V1 reste `not_ready`. Aujourd'hui il échoue encore parce que la console Supabase serveur, la CLI `--persist` avec service role locale et le run réel Learning alimenté par Supabase restent à prouver.
+`quality:runs` valide seulement le socle fixture. `quality:readiness` doit rester bloquant tant que BM Scout est `production_not_ready`.
 
 ## Worker agentique
 
@@ -52,13 +71,13 @@ cd services/agent-worker
 ../../.venv/bin/python -m bm_scout_worker.cli --real --mode core --persist
 ```
 
-Le chemin réel utilise OpenAI Agents SDK avec `Runner.run`, `trace`, agents spécialisés, agents-as-tools, handoff QC, outputs Pydantic et guardrail de qualité. La persistance `--persist` passe par la RPC Supabase transactionnelle `scout_persist_mission_output`.
+La persistance `--persist` passe par la RPC Supabase transactionnelle `scout_persist_mission_output`.
 
-## Documentation de livraison
+## Documentation
 
-- `docs/architecture-v1.md` : architecture produit et technique.
-- `docs/launch-runbook.md` : installation, lancement, gates.
-- `docs/demo-scenario.md` : scénario de démonstration Romu.
-- `docs/v1-limits.md` : limites assumées de la V1.
-- `docs/prd-completion-audit.md` : couverture PRD et preuves manquantes.
-- `docs/thermo-nuclear-final-audit.md` : audit maintenabilité strict.
+- `docs/architecture-v1.md`
+- `docs/launch-runbook.md`
+- `docs/demo-scenario.md`
+- `docs/v1-limits.md`
+- `docs/prd-completion-audit.md`
+- `docs/thermo-nuclear-final-audit.md`

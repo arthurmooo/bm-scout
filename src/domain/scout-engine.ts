@@ -1,11 +1,13 @@
 import { coreCandidates, explorationCandidates, weakCandidates } from "./fixtures";
-import { buildLearning, evaluateLead } from "./quality";
+import { buildLearning, evaluateLead, markLeadDoNotContact } from "./quality";
+import { buildBriefSummary, buildTasksFromRuns } from "./scheduler";
 import type { FeedbackEvent, ScoutMode, ScoutRun, ScoutSnapshot } from "./types";
 
 export function runScoutMission(mode: ScoutMode, options: { includeWeak?: boolean; feedbacks?: FeedbackEvent[] } = {}): ScoutRun {
   const base = mode === "core" ? coreCandidates : explorationCandidates;
   const candidates = options.includeWeak ? [...base, ...weakCandidates] : base;
-  const evaluated = candidates.map(evaluateLead);
+  const dncLeadIds = new Set((options.feedbacks ?? []).filter((feedback) => feedback.kind === "do_not_contact").map((feedback) => feedback.leadId));
+  const evaluated = candidates.map((lead) => evaluateLead(dncLeadIds.has(lead.id) ? markLeadDoNotContact(lead) : lead));
   const leads = evaluated.filter((lead) => lead.verdict !== "reject" && lead.qualityDecision !== "blocked");
   const rejected = evaluated.filter((lead) => lead.verdict === "reject" || lead.qualityDecision === "blocked");
   return {
@@ -27,13 +29,17 @@ export function buildSnapshot(runs: ScoutRun[], feedbacks: FeedbackEvent[] = [])
   const allLeads = runs.flatMap((run) => run.leads);
   const rejected = runs.flatMap((run) => run.rejected);
   const ordered = [...allLeads].sort((a, b) => b.score - a.score);
+  const tasks = buildTasksFromRuns(runs);
   return {
     primaryLead: ordered[0] ?? null,
     queue: ordered.slice(1, 5),
     exploration: allLeads.filter((lead) => lead.mode === "exploration").slice(0, 4),
     rejected,
     lessons: buildLearning(feedbacks, [...allLeads, ...rejected]).slice(0, 4),
-    runs
+    runs,
+    tasks,
+    brief: buildBriefSummary(tasks, runs),
+    readiness: "demo_ready"
   };
 }
 

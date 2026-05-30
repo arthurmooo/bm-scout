@@ -144,6 +144,7 @@ a {
 .decision-area {
   padding: 32px;
   display: grid;
+  align-content: start;
   gap: 22px;
 }
 
@@ -269,10 +270,48 @@ a {
   cursor: pointer;
 }
 
+.button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.button-state {
+  color: inherit;
+  font-size: 11px;
+  font-weight: 760;
+}
+
 .button.primary {
   border-color: var(--deep);
   background: var(--deep);
   color: white;
+}
+
+.routine-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.deep-card {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.deep-card summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--deep);
+  cursor: pointer;
+  font-weight: 720;
+}
+
+.deep-card p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
 }
 
 .button.danger {
@@ -328,15 +367,51 @@ a {
 }
 
 .proof-list,
-.learning-list {
+.learning-list,
+.brief-list,
+.task-list {
   display: grid;
   gap: 12px;
 }
 
 .proof,
-.lesson {
+.lesson,
+.brief-group,
+.task-row {
   border-bottom: 1px solid var(--line);
   padding-bottom: 12px;
+}
+
+.brief-group strong,
+.task-row strong {
+  color: var(--deep);
+  font-size: 14px;
+}
+
+.brief-group p,
+.task-row p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.42;
+}
+
+.task-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.task-row span {
+  color: var(--gold);
+  font-weight: 760;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.task-row.blocked span,
+.task-row.failed span {
+  color: var(--red);
 }
 
 .proof a {

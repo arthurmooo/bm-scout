@@ -1,71 +1,46 @@
-# Audit de couverture PRD - BM Scout V1
+# Audit de couverture PRD - BM Scout
 
 Source : `PRD_BM_Scout_v1.docx`, version 1.0 du 30 mai 2026.
 
-Verdict courant : `ready_v1_internal`.
+Verdict courant : `production_not_ready`.
 
-## Couverture livree
+## Couverture actuelle
 
 | Exigence PRD | Etat | Preuve |
 | --- | --- | --- |
-| Console interne premium orientee Romu | Couvert | `app/page.tsx`, `src/ui/ScoutDashboard.tsx`, build Next OK, `verify:supabase` OK |
-| Separation Core BM / Exploration | Couvert | `src/domain/types.ts`, fixtures, worker schemas, rapport qualite |
-| Leads avec signaux, hypotheses, score justifie | Couvert sur fixtures + runs reels Core/Exploration | `quality:runs`, artefacts reels Core/Exploration |
-| Fiche courte et fiche profonde | Couvert sur modele et affichage | `ScoutLead.shortCard`, `ScoutLead.deepCard`, dashboard |
-| Messages email, relance, LinkedIn | Couvert en copier-coller | `OutreachPack`, QC anti-generique |
-| Aucun envoi autonome | Couvert | Aucun endpoint ou tool d'envoi ; README/runbook |
-| Feedback Romu | Couvert en schema + Supabase | `scout_feedback`, feedbacks persistés |
-| Outcomes | Couvert en schema + Supabase | `scout_outcomes`, outcomes persistés |
-| Do-not-contact | Couvert | `scout_do_not_contact`, fonction `scout_is_do_not_contact`, verification SQL |
-| Learning hebdo 3 a 5 apprentissages | Couvert | runs reels Supabase persist : 5 lessons Core, 5 lessons Exploration |
-| Agents specialises code-first | Couvert | `services/agent-worker/bm_scout_worker/agents.py` |
-| OpenAI Agents SDK avec Runner.run + trace | Couvert | `runner.py`, artefacts reels |
-| Outputs structures | Couvert | Pydantic schemas + TS types |
-| Guardrails QC | Couvert | Python guardrail + TS/Python tests |
-| Supabase memoire persistante | Couvert | migrations + RPC + CLI `--persist` + console serveur |
-| Observabilite traces/runs | Couvert V1 | traces OpenAI + `scout_runs`; couts/outils detailles hors V1 |
-| Dashboard < 6 blocs conceptuels | Couvert dans intention UI | `ScoutDashboard.tsx`, build OK |
-| Rapport qualite obligatoire | Couvert | `artifacts/quality-runs/latest-report.md`, `quality:readiness` OK |
-| Scenario demo | Couvert | `docs/demo-scenario.md` |
-| Documentation lancement | Couvert | `docs/launch-runbook.md` |
-| Liste limites V1 | Couvert | `docs/v1-limits.md` |
+| Console interne orientée décision Romu | Partiel | `src/ui/ScoutDashboard.tsx`, build OK |
+| Séparation Core / Exploration | Partiel | `ScoutMode`, fixtures, workflows locaux |
+| Proactivité réelle | Partiel | `scout_agent_tasks`, scheduler local, pas de cron branché |
+| 15 leads Core / semaine | Non prouvé | Objectif paramétré, pas de run réel à volume |
+| 100 comptes Exploration scannés | Non prouvé | Objectif paramétré, pas de run réel à volume |
+| Vraie recherche marché | Non conforme | Worker réel encore alimenté par batch structuré |
+| Fiches courtes/profondes | Partiel | Modèle et fixtures, pas encore toutes issues providers réels |
+| Observé / Inféré / Incertain | Partiel | Types TS + QC Observé/evidence, worker et DB à compléter |
+| Messages personnalisés | Partiel | QC fixture, pas de preuve provider réel à volume |
+| Aucun envoi automatique | Couvert | Pas d'endpoint d'envoi ; actions de copie seulement |
+| Do-not-contact hard gate | Couvert en socle | QC TS, worker offline, trigger DB, action DNC |
+| Feedback loop influente | Non prouvé | Feedback stocké/lu, effet scoring run suivant à implémenter |
+| Actions UI fonctionnelles | Partiel | API actions + traces, smoke Browser restant |
+| Run steps/tool calls auditables | Partiel | Table existante, persistance fine worker à compléter |
+| Supabase mémoire | Partiel | Schéma/RPC/actions, env runtime non vérifiée ici |
+| Documentation honnête | Couvert dans cette passe | README + docs en `production_not_ready` |
 
-## Requirements verifies
+## P0 corrigés partiellement
 
-1. Console Supabase serveur :
-   - preuve : `npm run verify:supabase` avec `SUPABASE_SERVICE_ROLE_KEY`.
-   - resultat : pass, Cambon prioritaire, 3 runs, 4 leads, 2 rejets, 4 lessons.
+- P0.1 Proactivité : table tasks, statuts, types de tâches, scheduler local et lancement manuel posés.
+- P0.4 Do-not-contact : gate déterministe ajouté côté TS, worker offline et DB.
+- P0.6 Actions UI : actions principales branchées à une API serveur et tracées.
+- P0.7 Observé/Inféré/Incertain : structure TS et gate Observé/evidence ajoutés.
 
-2. CLI `--persist` :
-   - preuve : `python -m bm_scout_worker.cli --offline --mode core --persist`.
-   - resultat : pass, trace `trace_bm_scout_core_offline` creee en Supabase via RPC.
+## P0 encore ouverts
 
-3. Learning Agent avec memoire Supabase :
-   - preuve : runs reels Agents SDK avec env Supabase serveur.
-   - resultat Core : trace `qc-candidates-json-romu-seed`, Eight bloque do-not-contact, 5 apprentissages issus feedback Romu.
-   - resultat Exploration : trace `qc-exploration-candidates-user-provided`, compte faible bloque, 5 apprentissages.
+- P0.2 Workflows Core/Exploration réels : les volumes PRD ne sont pas prouvés.
+- P0.3 Suppression de la dépendance fixtures : providers réels à brancher dans le worker.
+- P0.5 Feedback loop réelle : impact sur scoring/recommandations du run suivant à prouver.
+- P0.7 : porter la structure Observé/Inféré/Incertain dans le worker Pydantic et la DB.
 
-4. Quality readiness :
-   - preuve : `npm run quality:readiness`.
-   - resultat : pass, decision produit `pret`.
+## Décision
 
-## Limites assumées V1
+BM Scout ne doit pas être marqué `ready_v1_internal`.
 
-1. Volumes hebdo PRD 15 Core / scan 100 Exploration :
-   - preuve attendue : mission batch reelle avec ces volumes ou simulation controllée.
-   - etat : MVP teste sur petits batches realistes ; volume production a monitorer en usage reel.
-
-2. Sources web gratuites et emails publics :
-   - preuve attendue : tools de recherche web/fetch/email confidence ou documentation de limite.
-   - etat : V1 actuelle travaille sur batch structure/fixtures ; exploration web gratuite non industrialisee.
-
-## Decision
-
-BM Scout V1 peut etre marquee complete pour usage interne pilote.
-
-La decision ne couvre pas :
-
-- prospection autonome ;
-- envoi automatique ;
-- volume production sans monitoring ;
-- scraping web/email industrialise.
+Statut acceptable après cette passe : `production_not_ready`, avec socle plus proche d'un pilote interne mais encore insuffisant pour déclarer la V1 opérationnelle.

@@ -1,7 +1,6 @@
-"use client";
-
-import { Check, CircleDot, Clipboard, Compass, FileText, GraduationCap, Search, ShieldCheck, X } from "lucide-react";
-import type { ScoutLead, ScoutSnapshot } from "@/domain/types";
+import { Check, CircleDot, Clipboard, Compass, FileText, GraduationCap, Play, Search, ShieldCheck, X } from "lucide-react";
+import type { AgentTask, ScoutLead, ScoutSnapshot } from "@/domain/types";
+import { ScoutActionButton } from "./ScoutActionButton";
 
 const navItems = [
   { label: "Aujourd'hui", icon: CircleDot, active: true },
@@ -42,10 +41,11 @@ export function ScoutDashboard({ snapshot }: { snapshot: ScoutSnapshot }) {
             <div className="section-title">
               <div>
                 <h2>Prochaine meilleure action</h2>
-                <p className="quiet">Une décision claire, puis seulement les preuves utiles.</p>
+                <p className="quiet">Une décision claire, puis seulement les preuves utiles. Statut : {snapshot.readiness}.</p>
               </div>
             </div>
             {primary ? <PrimaryLead lead={primary} /> : <div className="primary-card">Aucun lead prêt à arbitrer.</div>}
+            <RoutineActions />
             <div className="section-title">
               <h2>Ensuite</h2>
               <span className="quiet">4 lignes maximum</span>
@@ -57,11 +57,13 @@ export function ScoutDashboard({ snapshot }: { snapshot: ScoutSnapshot }) {
             </div>
           </div>
           <aside className="side-panel">
+            <BriefBox snapshot={snapshot} />
+            <TaskBoard tasks={snapshot.tasks} />
             <section>
               <h2>Pourquoi maintenant</h2>
               <div className="proof-list">
-                {(primary?.evidence ?? []).slice(0, 3).map((proof) => (
-                  <div className="proof" key={proof.url}>
+                {(primary?.evidence ?? []).slice(0, 3).map((proof, index) => (
+                  <div className="proof" key={`${proof.url}-${proof.label}-${index}`}>
                     <a href={proof.url} target="_blank" rel="noreferrer">{proof.label}</a>
                     <p>{proof.observedFact}</p>
                   </div>
@@ -83,8 +85,8 @@ export function ScoutDashboard({ snapshot }: { snapshot: ScoutSnapshot }) {
           </aside>
         </section>
         <footer className="bottom-bar">
-          <span>Core BM terminé · Exploration filtrée · Learning mis à jour</span>
-          <span>Prochaine routine : lundi 08:15</span>
+          <span>{snapshot.brief.completed[0]}</span>
+          <span>{nextRoutineLabel(snapshot.tasks)}</span>
         </footer>
       </main>
     </div>
@@ -119,11 +121,18 @@ function PrimaryLead({ lead }: { lead: ScoutLead }) {
         </div>
       </div>
       <div className="action-row">
-        <button className="button primary" type="button"><Check size={17} /> Valider</button>
-        <button className="button" type="button"><Clipboard size={17} /> Enrichir</button>
-        <button className="button danger" type="button"><X size={17} /> Rejeter</button>
-        <button className="button" type="button"><FileText size={17} /> Fiche profonde</button>
+        <ScoutActionButton className="button primary" action="validate_lead" leadId={lead.id}><Check size={17} /> Valider</ScoutActionButton>
+        <ScoutActionButton className="button" action="request_enrichment" leadId={lead.id}><Clipboard size={17} /> Enrichir</ScoutActionButton>
+        <ScoutActionButton className="button danger" action="reject_lead" leadId={lead.id} reason="Rejet manuel Romu."><X size={17} /> Rejeter</ScoutActionButton>
+        <ScoutActionButton className="button" action="copy_email" leadId={lead.id} copyText={lead.outreach.coldEmail}><Clipboard size={17} /> Copier email</ScoutActionButton>
+        <ScoutActionButton className="button" action="copy_follow_up" leadId={lead.id} copyText={lead.outreach.followUp}><Clipboard size={17} /> Copier relance</ScoutActionButton>
+        <ScoutActionButton className="button" action="copy_linkedin" leadId={lead.id} copyText={lead.outreach.linkedin}><Clipboard size={17} /> Copier LinkedIn</ScoutActionButton>
+        <ScoutActionButton className="button danger" action="add_do_not_contact" leadId={lead.id} reason="Ajout manuel Romu depuis la console."><X size={17} /> DNC</ScoutActionButton>
       </div>
+      <details className="deep-card">
+        <summary><FileText size={17} /> Fiche profonde</summary>
+        <p>{lead.deepCard}</p>
+      </details>
     </article>
   );
 }
@@ -155,8 +164,88 @@ function QualityBox({ lead }: { lead: ScoutLead }) {
   );
 }
 
+function BriefBox({ snapshot }: { snapshot: ScoutSnapshot }) {
+  return (
+    <section>
+      <h2>Brief agentique</h2>
+      <div className="brief-list">
+        <BriefGroup label="Fait" items={snapshot.brief.completed} />
+        <BriefGroup label="Recommande" items={snapshot.brief.recommended} />
+        {snapshot.brief.blocked.length ? <BriefGroup label="Bloqué" items={snapshot.brief.blocked} /> : null}
+      </div>
+    </section>
+  );
+}
+
+function BriefGroup({ label, items }: { label: string; items: string[] }) {
+  return (
+    <div className="brief-group">
+      <strong>{label}</strong>
+      {items.slice(0, 3).map((item) => (
+        <p key={item}>{item}</p>
+      ))}
+    </div>
+  );
+}
+
+function TaskBoard({ tasks }: { tasks: AgentTask[] }) {
+  return (
+    <section>
+      <h2>Routines</h2>
+      <div className="task-list">
+        {tasks.slice(0, 6).map((task) => (
+          <div className={`task-row ${task.status}`} key={task.id}>
+            <div>
+              <strong>{task.title}</strong>
+              <p>{statusLabel(task.status)}</p>
+            </div>
+            <span>{taskTargetLabel(task)}</span>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function RoutineActions() {
+  return (
+    <div className="routine-actions" aria-label="Lancer une routine BM Scout">
+      <ScoutActionButton className="button" action="launch_core"><Play size={16} /> Core</ScoutActionButton>
+      <ScoutActionButton className="button" action="launch_exploration"><Play size={16} /> Exploration</ScoutActionButton>
+      <ScoutActionButton className="button" action="launch_daily_brief"><Play size={16} /> Daily Brief</ScoutActionButton>
+      <ScoutActionButton className="button" action="launch_learning_review"><Play size={16} /> Learning</ScoutActionButton>
+    </div>
+  );
+}
+
 function decisionCount(snapshot: ScoutSnapshot) {
   return Number(Boolean(snapshot.primaryLead)) + snapshot.queue.length + snapshot.exploration.length;
+}
+
+function nextRoutineLabel(tasks: AgentTask[]) {
+  const next = tasks.find((task) => task.status === "queued" || task.status === "running" || task.status === "blocked");
+  if (!next) return "Aucune routine en attente.";
+  return `${next.title} : ${statusLabel(next.status)}`;
+}
+
+function statusLabel(status: AgentTask["status"]) {
+  const labels: Record<AgentTask["status"], string> = {
+    queued: "En file",
+    running: "En cours",
+    blocked: "Bloqué",
+    completed: "Terminé",
+    failed: "Échec",
+    cancelled: "Annulé"
+  };
+  return labels[status];
+}
+
+function taskTargetLabel(task: AgentTask) {
+  if (task.type === "weekly_core_research") return String(task.payload.coreWeeklyTarget);
+  if (task.type === "weekly_exploration_scan") return String(task.payload.explorationScanTarget);
+  if (task.type === "daily_brief") return "brief";
+  if (task.type === "learning_review") return "learn";
+  return "gate";
 }
 
 function initials(company: string) {

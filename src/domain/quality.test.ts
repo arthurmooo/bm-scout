@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { weakCandidates } from "./fixtures";
 import { evaluateLead, isSpecificOutreach } from "./quality";
 import { runScoutMission, seedFeedbacks } from "./scout-engine";
+import type { ScoutLead } from "./types";
 
 describe("quality gates", () => {
   it("bloque un message generique et un lead hors ICP", () => {
@@ -31,5 +32,31 @@ describe("quality gates", () => {
 
     expect(run.lessons.length).toBeGreaterThanOrEqual(3);
     expect(run.lessons.some((lesson) => lesson.recommendation.toLowerCase().includes("do-not-contact"))).toBe(true);
+  });
+
+  it("bloque deterministiquement un lead marque do-not-contact avant generation de message", () => {
+    const run = runScoutMission("core", { feedbacks: seedFeedbacks() });
+    const blocked = run.rejected.find((lead) => lead.id === "core-eight-advisory");
+
+    expect(blocked?.qualityDecision).toBe("blocked");
+    expect(blocked?.outreach.coldEmail.toLowerCase()).toContain("do-not-contact");
+    expect(run.leads.some((lead) => lead.id === "core-eight-advisory")).toBe(false);
+  });
+
+  it("bloque un insight observe sans preuve reliee", () => {
+    const source = runScoutMission("core").leads[0];
+    const invalid: ScoutLead = {
+      ...source,
+      insights: {
+        observed: [{ text: "Signal sans preuve", evidenceId: "missing-evidence" }],
+        inferred: source.painHypotheses,
+        uncertain: []
+      }
+    };
+
+    const evaluated = evaluateLead(invalid);
+
+    expect(evaluated.qualityDecision).toBe("blocked");
+    expect(evaluated.qualityGates.find((gate) => gate.code === "observed_evidence")?.passed).toBe(false);
   });
 });
