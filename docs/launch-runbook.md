@@ -117,6 +117,8 @@ Variables recommandées :
 - `BM_SCOUT_SEARCH_QUERIES`
 - `BM_SCOUT_REAL_SEEDS`
 
+Le runner exécute Core/Exploration via le worker Python, puis Daily Brief, Learning Review, DNC check et followup review via une lecture déterministe du snapshot Supabase runtime. Ces routines non-worker se bloquent explicitement si aucun run persistant n'existe, afin de ne pas transformer les fixtures demo en preuve opérationnelle.
+
 Le workflow est versionné, mais BM Scout reste `production_not_ready` tant qu'aucune exécution GitHub Actions réelle avec secrets n'a prouvé les transitions `queued -> completed`.
 
 ## Lancer le worker

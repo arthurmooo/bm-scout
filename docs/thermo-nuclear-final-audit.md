@@ -26,6 +26,7 @@ Verdict : `production_not_ready`.
 
 - Les routines sont dans un module dédié, pas dispersées dans l'UI.
 - Les tâches `queued` peuvent maintenant passer par un runner `running -> completed/blocked/failed`.
+- Les routines Daily Brief, Learning Review, DNC check et followup review ne restent plus bloquées par défaut : elles lisent le runtime Supabase et refusent les fixtures comme preuve opérationnelle.
 - Le worker réel ne retombe plus silencieusement sur fixtures et expose `WebSearchTool` OpenAI plus 8 tools métier Agents SDK.
 - `search_jobs` produit maintenant des preuves recrutement publiques et des run steps au lieu d'être un no-op.
 - La mémoire feedback TS et worker pénalise les secteurs faibles, bloque les leads rejetés/DNC, renforce les angles validés et régénère les messages trop génériques.
@@ -50,6 +51,7 @@ Verdict : `production_not_ready`.
 - `npm run quality:readiness` échoue comme attendu en `production_not_ready`
 - `npm exec tsx -- scripts/run-agent-worker-evidence.ts --offline --mode=core` : pass, harnais d'artefact vérifié sans Supabase.
 - `npm run agent:tasks` échoue sans env Supabase avec un message explicite.
+- Tests runner TS : routines brief/learning/DNC/followup couvertes.
 - Import manager Agents SDK : 13 tools dont `WebSearchTool` et 8 tools métier.
 - `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 28 tests
 - Supabase interne : migration `bm_scout_structured_insights_email_confidence_steps` appliquée.

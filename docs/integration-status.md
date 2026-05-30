@@ -23,6 +23,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 - Module scheduler TS : `src/domain/scheduler.ts`.
 - Runner de queue : `src/server/agent-task-runner.ts` et `scripts/run-agent-task-queue.ts`.
+- Routines non-worker : Daily Brief, Learning Review, DNC check et followup review lisent le snapshot Supabase runtime, produisent un résumé actionnable ou se bloquent si aucun run persistant n'existe.
 - Cron GitHub Actions versionné : `.github/workflows/bm-scout-agent-tasks.yml`.
 - Tests scheduler avec routines Core, Exploration, Daily Brief, Learning, DNC, followup.
 - Migration Supabase `20260530210927_agent_tasks_and_actions.sql`.
@@ -53,7 +54,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 ## Réellement end-to-end aujourd'hui
 
 - Scheduler dry-run reproductible : `npm run agent:schedule`.
-- Runner queue reproductible : `npm run agent:tasks:offline` ou `npm run agent:tasks:real` avec env Supabase serveur.
+- Runner queue reproductible : `npm run agent:tasks:offline` ou `npm run agent:tasks:real` avec env Supabase serveur ; les routines brief/learning/DNC/followup ne s'appuient pas sur les fixtures demo.
 - Artefacts de run réel reproductibles : `npm run worker:real:core`, `npm run worker:real:exploration`, puis variantes `:persist` avec env Supabase.
 - Actions API persistantes si `NEXT_PUBLIC_SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` existent.
 - DNC bloque côté TS, worker offline et trigger Supabase.
@@ -63,7 +64,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 ## Vérifications exécutées
 
-- `npm run test` : 19 tests pass.
+- `npm run test` : 24 tests pass.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.

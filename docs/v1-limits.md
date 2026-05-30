@@ -27,7 +27,7 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 - La persistance worker passe par RPC transactionnelle, mais doit etre reverifiee dans chaque env avant demo.
 - La console lit Supabase cote serveur si `SUPABASE_SERVICE_ROLE_KEY` existe, sinon affiche les fixtures demo.
 - Le dedoublonnage avance et l'historique multi-semaines complet ne sont pas encore industrialises.
-- `scout_agent_tasks` et `scout_action_events` existent pour proactivite/actions. Un runner de queue et un cron GitHub Actions existent, mais le cron n'est pas encore prouvé avec secrets.
+- `scout_agent_tasks` et `scout_action_events` existent pour proactivite/actions. Un runner de queue existe pour Core, Exploration, Daily Brief, Learning, DNC check et followup review. Le cron GitHub Actions existe, mais n'est pas encore prouvé avec secrets.
 
 ## Limites conformite
 

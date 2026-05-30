@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
-import type { AgentTaskStatus, AgentTaskType, RoutineConfig } from "../domain/types";
+import type { AgentTaskStatus, AgentTaskType, RoutineConfig, ScoutLead, ScoutSnapshot } from "../domain/types";
 import { createServerSupabaseClient } from "./supabase";
 
 export interface QueuedAgentTask {
@@ -171,6 +171,7 @@ export interface WorkerCliOptions {
   artifactsDir?: string;
   evidenceDir?: string;
   includeWeak?: boolean;
+  loadSnapshot?: () => Promise<ScoutSnapshot | null>;
 }
 
 export interface WorkerCliEvidenceResult {
@@ -191,10 +192,16 @@ export function createCliAgentTaskExecutor(options: WorkerCliOptions = { real: f
         return runWorkerCli("exploration", options);
       }
       if (task.type === "daily_brief") {
-        return {
-          status: "completed",
-          summary: "Daily Brief généré depuis les runs et tâches persistés. Aucun envoi automatique."
-        };
+        return executeDailyBrief(options);
+      }
+      if (task.type === "learning_review") {
+        return executeLearningReview(options);
+      }
+      if (task.type === "dnc_check") {
+        return executeDncCheck(options);
+      }
+      if (task.type === "followup_review") {
+        return executeFollowupReview(options);
       }
       return {
         status: "blocked",
@@ -203,6 +210,118 @@ export function createCliAgentTaskExecutor(options: WorkerCliOptions = { real: f
       };
     }
   };
+}
+
+async function executeDailyBrief(options: WorkerCliOptions): Promise<AgentTaskExecution> {
+  const snapshot = await loadRuntimeSnapshot(options);
+  if (!snapshot) return blockedNoRuntime("Daily Brief");
+
+  const primary = snapshot.primaryLead;
+  const completedTasks = snapshot.tasks.filter((task) => task.status === "completed").length;
+  const blockedItems = snapshot.brief.blocked.length + snapshot.rejected.length;
+  return {
+    status: "completed",
+    summary: [
+      `Daily Brief généré depuis ${snapshot.runs.length} run(s) persisté(s).`,
+      primary ? `Priorité Romu : ${primary.company} (${primary.score}/100) - ${primary.nextAction}` : "Aucune priorité validable.",
+      `${completedTasks} tâche(s) déjà complétée(s), ${blockedItems} point(s) bloqué(s) à traiter.`,
+      "Aucun envoi automatique."
+    ].join(" ")
+  };
+}
+
+async function executeLearningReview(options: WorkerCliOptions): Promise<AgentTaskExecution> {
+  const snapshot = await loadRuntimeSnapshot(options);
+  if (!snapshot) return blockedNoRuntime("Learning Review");
+
+  const lessons = snapshot.lessons.slice(0, 5);
+  if (lessons.length < 3) {
+    return {
+      status: "blocked",
+      summary: "Learning Review bloquée : pas assez d'apprentissages persistés.",
+      blockedReason: "Moins de 3 apprentissages disponibles depuis les runs/feedbacks Supabase."
+    };
+  }
+
+  return {
+    status: "completed",
+    summary: `Learning Review générée : ${lessons.length} apprentissage(s) exploitables. Prochaine règle : ${lessons[0].recommendation}`
+  };
+}
+
+async function executeDncCheck(options: WorkerCliOptions): Promise<AgentTaskExecution> {
+  const snapshot = await loadRuntimeSnapshot(options);
+  if (!snapshot) return blockedNoRuntime("Contrôle do-not-contact");
+
+  const activeViolations = activeLeads(snapshot).filter((lead) => leadHasDncContact(lead));
+  if (activeViolations.length) {
+    return {
+      status: "blocked",
+      summary: `Contrôle DNC bloqué : ${activeViolations.length} lead(s) actif(s) contiennent un contact do-not-contact.`,
+      blockedReason: `DNC actif dans la shortlist : ${activeViolations.map((lead) => lead.company).join(", ")}.`
+    };
+  }
+
+  const blockedDnc = snapshot.rejected.filter((lead) => leadHasDncContact(lead)).length;
+  return {
+    status: "completed",
+    summary: `Contrôle DNC terminé : ${blockedDnc} lead(s) DNC restent bloqués, aucune relance active ne cible un DNC.`
+  };
+}
+
+async function executeFollowupReview(options: WorkerCliOptions): Promise<AgentTaskExecution> {
+  const snapshot = await loadRuntimeSnapshot(options);
+  if (!snapshot) return blockedNoRuntime("Revue relances");
+
+  const followups = activeLeads(snapshot).filter(
+    (lead) =>
+      lead.mode === "core" &&
+      lead.qualityDecision === "pass" &&
+      !leadHasDncContact(lead) &&
+      !lead.outreach.followUp.toLowerCase().includes("brouillon blo")
+  );
+
+  return {
+    status: "completed",
+    summary: followups.length
+      ? `Revue relances terminée : ${followups.length} relance(s) copiables après validation Romu (${followups
+          .slice(0, 3)
+          .map((lead) => lead.company)
+          .join(", ")}). Aucun envoi automatique.`
+      : "Revue relances terminée : aucune relance autorisée à copier pour l'instant. Aucun envoi automatique."
+  };
+}
+
+async function loadRuntimeSnapshot(options: WorkerCliOptions): Promise<ScoutSnapshot | null> {
+  if (options.loadSnapshot) return options.loadSnapshot();
+
+  const client = createServerSupabaseClient();
+  if (!client) return null;
+  const { data, error } = await client.from("scout_runs").select("id").eq("status", "succeeded").limit(1);
+  if (error) throw new Error(`Vérification runs Supabase impossible: ${error.message}`);
+  if (!data?.length) return null;
+  const { getScoutSnapshot } = await import("./scout-repository");
+  return getScoutSnapshot();
+}
+
+function blockedNoRuntime(label: string): AgentTaskExecution {
+  return {
+    status: "blocked",
+    summary: `${label} bloqué : aucun run Supabase persistant disponible.`,
+    blockedReason: "La routine refuse de s'appuyer sur les fixtures demo pour produire une décision opérationnelle."
+  };
+}
+
+function activeLeads(snapshot: ScoutSnapshot): ScoutLead[] {
+  return [
+    ...[snapshot.primaryLead].flatMap((lead) => (lead ? [lead] : [])),
+    ...snapshot.queue,
+    ...snapshot.exploration
+  ];
+}
+
+function leadHasDncContact(lead: ScoutLead): boolean {
+  return lead.personas.some((persona) => persona.doNotContact);
 }
 
 async function executeTask(
