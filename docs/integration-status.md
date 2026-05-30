@@ -27,6 +27,8 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Cron GitHub Actions versionné : `.github/workflows/bm-scout-agent-tasks.yml`.
 - Tests scheduler avec routines Core, Exploration, Daily Brief, Learning, DNC, followup.
 - Migration Supabase `20260530210927_agent_tasks_and_actions.sql`.
+- Migration Supabase `20260530232128_restrict_internal_rls_policies.sql` : suppression des policies `using (true)` et restriction aux rôles internes `app_metadata`.
+- Migration Supabase `20260530232456_close_security_definer_rpc_exposure.sql` : fermeture des fonctions `SECURITY DEFINER` exposées en RPC publique.
 - API `POST /api/scout/actions`.
 - Actions UI : valider, enrichir, rejeter, copier email/relance/LinkedIn, DNC, lancer routines.
 - Actions feedback/outcome : bon lead, mauvais lead, bon angle, message trop générique, RDV pris, positif/négatif, mauvais timing, mauvais interlocuteur, douleur confirmée/non confirmée. Ces actions écrivent `scout_feedback` ou `scout_outcomes`, pas seulement `scout_action_events`.
@@ -65,7 +67,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 ## Vérifications exécutées
 
-- `npm run test` : 28 tests pass.
+- `npm run test` : 32 tests pass.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.
@@ -78,7 +80,8 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - `npm exec tsx -- scripts/run-agent-worker-evidence.ts --offline --mode=core` : pass, artefact `latest-offline-core.json` écrit.
 - `npm run test:e2e` : pass, smoke Playwright sur `http://localhost:3030` ; statut `production_not_ready`, actions feedback/outcome/routines visibles, bouton feedback hydraté, screenshot locale `artifacts/browser-smoke/playwright-dashboard-feedback-actions.png`.
 - Browser intégré : smoke manuel sur `http://localhost:3030`, clic feedback `Bon lead` testé ; sans env Supabase serveur, l'action passe en état `Erreur` comme attendu au lieu de prétendre être persistée.
-- Supabase interne `Interne_Agentic_prospection` : migrations `agent_tasks_and_actions` et `bm_scout_structured_insights_email_confidence_steps` appliquées.
+- Supabase interne `Interne_Agentic_prospection` : migrations `agent_tasks_and_actions`, `bm_scout_structured_insights_email_confidence_steps`, `scout_feedback_outcome_actions`, `restrict_internal_rls_policies` et `close_security_definer_rpc_exposure` appliquées.
+- Supabase advisor sécurité : 0 lint après durcissement RLS/RPC.
 
 ## Prochaine tranche P0
 
@@ -87,3 +90,4 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 3. Prouver les volumes PRD 15 Core / 100 Exploration avec artefacts réels.
 4. Prouver la feedback loop sur scoring, messages et recommandations dans un run réel Supabase.
 5. Exécuter le cron GitHub Actions avec secrets et vérifier les transitions `queued -> completed`.
+6. Brancher Auth UI Romu/Arthur avec claim `app_metadata.bm_scout_role` avant exposition hors service role serveur.

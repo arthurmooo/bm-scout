@@ -29,6 +29,7 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 - La console lit Supabase cote serveur si `SUPABASE_SERVICE_ROLE_KEY` existe, sinon affiche les fixtures demo.
 - Le dedoublonnage avance et l'historique multi-semaines complet ne sont pas encore industrialises.
 - `scout_agent_tasks` et `scout_action_events` existent pour proactivite/actions. Un runner de queue existe pour Core, Exploration, Daily Brief, Learning, DNC check et followup review. Le cron GitHub Actions existe, mais n'est pas encore prouvé avec secrets.
+- RLS est resserrée côté Supabase avec roles internes via `app_metadata`, mais l'auth UI Romu/Arthur et l'attribution des claims restent à brancher avant usage hors routes serveur.
 
 ## Limites conformite
 
@@ -38,6 +39,7 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 - La V1 ne remplace pas une validation juridique.
 - La prospection B2B francophone doit rester limitee, sourcee et respectueuse des oppositions.
 - Les donnees sensibles client doivent rester anonymisees.
+- La clé `service_role` reste strictement serveur/worker ; aucun composant client ne doit la référencer.
 
 ## Limites UI
 

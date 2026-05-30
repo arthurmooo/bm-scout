@@ -175,7 +175,8 @@ Tables V1 recommandees :
 Regles :
 
 - RLS activee sur toutes les tables `public` ;
-- UI lit via utilisateur authentifie ou routes serveur ;
+- policies `authenticated` reservees aux comptes internes via `app_metadata.bm_scout_role`, `app_metadata.bm_scout_roles` ou `app_metadata.bm_scout_access` ;
+- UI lit via utilisateur authentifie interne ou routes serveur ;
 - ecriture worker via service role uniquement cote serveur/worker ;
 - `do_not_contact` bloque toute relance et tout nouveau message ;
 - `source_evidence` doit relier chaque fait utilise a une source ;

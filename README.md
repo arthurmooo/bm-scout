@@ -21,6 +21,7 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 - DNC hard gate côté qualité TS, côté worker offline et côté DB pour empêcher un message non bloqué sur une cible DNC.
 - Feedback memory TS + worker provider : mauvais lead/secteur pénalisé, angle validé renforcé, message générique régénéré, DNC bloquant, contexte entreprise/segment chargé depuis Supabase.
 - Observé/Inféré/Incertain, email confidence, run steps provider et tool calls Agents SDK persistés via Supabase/RPC.
+- RLS Supabase durcie : policies `authenticated` restreintes aux rôles internes via `app_metadata`, service role réservée au serveur/worker, advisor sécurité Supabase sans lint après migration.
 - Rapport qualité qui distingue le harnais fixture de la readiness produit réelle.
 
 ## Ce qui n'est pas encore prêt
@@ -30,7 +31,7 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 - Recherche marché réelle encore limitée : le worker peut utiliser OpenAI `web_search` ou un fallback web public avec job search minimal, mais les volumes PRD et la qualité des sources restent à prouver en run réel.
 - Feedback loop prouvée localement côté TS et worker Python, pas encore validée sur un run réel Supabase à volume.
 - `quality:readiness` échoue volontairement tant que ces preuves ne sont pas là.
-- RLS/auth restent internes et à durcir avant production.
+- Auth Romu/Arthur reste à brancher dans l'UI ; les policies Supabase attendent déjà `app_metadata.bm_scout_role` ou `app_metadata.bm_scout_roles`.
 
 ## Lancer
 

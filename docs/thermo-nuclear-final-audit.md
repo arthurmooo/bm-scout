@@ -54,9 +54,10 @@ Verdict : `production_not_ready`.
 - `npm run agent:tasks` échoue sans env Supabase avec un message explicite.
 - Tests runner TS : routines brief/learning/DNC/followup couvertes.
 - Tests actions TS : feedback bon angle, message générique, outcome RDV et DNC vers mémoire couverts.
+- Tests sécurité Supabase : policies RLS internes, absence de service role côté client, fermeture RPC security definer.
 - Import manager Agents SDK : 13 tools dont `WebSearchTool` et 8 tools métier.
 - `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 28 tests
-- Supabase interne : migration `bm_scout_structured_insights_email_confidence_steps` appliquée.
+- Supabase interne : migrations feedback/outcome et RLS appliquées ; advisor sécurité à 0 lint.
 
 ## Décision
 

@@ -23,6 +23,7 @@ Verdict courant : `production_not_ready`.
 | Actions UI fonctionnelles | Partiel | API actions + traces + feedback/outcomes + centre à valider, smoke Playwright + Browser intégré passés en mode local ; persistance réelle dépend encore de l'env Supabase |
 | Run steps/tool calls auditables | Partiel | RPC écrit run start/lead saved/worker steps ; provider + function tools Agents SDK poussent des étapes compactées ; scripts `worker:real:*` produisent les artefacts readiness |
 | Supabase mémoire | Partiel | Schéma/RPC/actions, env runtime non vérifiée ici |
+| RLS / sécurité interne | Partiel | Policies Supabase restreintes par `app_metadata`, service role serveur, advisor sécurité à 0 lint ; Auth UI Romu/Arthur non branchée |
 | Documentation honnête | Couvert dans cette passe | README + docs en `production_not_ready` |
 
 ## P0 corrigés partiellement
@@ -33,6 +34,7 @@ Verdict courant : `production_not_ready`.
 - P0.5 Feedback loop : mémoire locale causale ajoutée côté TS et worker provider pour rejet, pénalité secteur, bonus angle, anti-générique et DNC.
 - P0.6 Actions UI : actions principales, feedbacks Romu, outcomes, copie, DNC et routines branchées à une API serveur et tracées.
 - P0.7 Observé/Inféré/Incertain : contrat TS + worker Pydantic + DB/RPC ajoutés.
+- P1.6 RLS/sécurité : policies `authenticated` resserrées, fonctions RPC security definer non publiques, advisors sécurité repassés à 0 lint.
 
 ## P0 encore ouverts
 
