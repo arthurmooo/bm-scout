@@ -1,0 +1,38 @@
+{
+  "name": "bm-scout",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:e2e": "playwright test",
+    "quality:runs": "tsx scripts/run-quality-runs.ts",
+    "worker:install": ".venv/bin/python -m pip install -e \"services/agent-worker[dev]\"",
+    "worker:test": "cd services/agent-worker && ../../.venv/bin/python -m pytest",
+    "worker:offline": "cd services/agent-worker && ../../.venv/bin/python -m bm_scout_worker.cli --offline --mode core"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.87.0",
+    "lucide-react": "^0.561.0",
+    "next": "^16.2.4",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
+    "zod": "^4.1.13"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@types/node": "^24.10.1",
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "eslint": "^9.39.1",
+    "eslint-config-next": "^16.2.4",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.15"
+  }
+}
