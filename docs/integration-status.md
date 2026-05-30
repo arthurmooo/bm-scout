@@ -4,15 +4,18 @@ Date : 2026-05-30
 
 ## Verdict PM actuel
 
-BM Scout V1 n'est pas pret.
+BM Scout V1 est pret pour une V1 interne pilotee par Romu.
 
-Le socle demo est executable, Supabase est initialise, et des runs OpenAI Agents SDK reels Core + Exploration ont ete executes. Le produit reste toutefois pas pret tant que la console lue via Supabase, la persistance CLI directe et le run reel Learning avec memoire Supabase ne sont pas prouves.
+La readiness ne signifie pas prospection autonome ni industrialisation de volume. Elle signifie que le scope PRD V1 est executable et verifie : console Romu, memoire Supabase, worker OpenAI Agents SDK, runs Core/Exploration, feedback learning, do-not-contact, QC negatif, rapport qualite et documentation de lancement.
 
-- runs E2E encore partiellement bases sur fixtures locales pour Feedback/Learning ;
-- boucle feedback Supabase -> Learning Agent codee, pas encore validee en run reel avec env serveur locale ;
-- persistance worker deplacee vers RPC atomique, mais CLI `--persist` pas encore executee avec service role key locale ;
-- audit thermo-nuclear final repasse, blockers code majeurs corriges, preuves runtime serveur ouvertes ;
-- repo GitHub dedie publie, mise a jour a pousser apres les changements de cette tranche.
+Preuves runtime ajoutees le 30 mai 2026 :
+
+- `npm run verify:supabase` passe avec env serveur et lit Supabase ;
+- CLI `--persist` executee avec service role via RPC atomique ;
+- run reel Agents SDK Core + Supabase persist : `qc-candidates-json-romu-seed` ;
+- run reel Agents SDK Exploration + Supabase persist : `qc-exploration-candidates-user-provided` ;
+- Learning Agent utilise les feedbacks/outcomes Supabase et bloque le do-not-contact ;
+- `npm run quality:readiness` passe avec preuves runtime.
 
 ## Sous-threads
 
@@ -26,11 +29,12 @@ Complete :
 - Runs E2E qualite agentique ;
 - Audit thermo-nuclear baseline.
 
-Restent a corriger apres integration :
+Restent hors scope V1 :
 
-- preuves runtime serveur restantes ;
-- validation E2E reelle SDK + Supabase + console ;
-- decision finale pret / pas pret.
+- volume hebdo production 15 Core / scan 100 Exploration a monitorer en usage reel ;
+- recherche web/email gratuite a industrialiser ;
+- monitoring couts/tokens/outils a enrichir ;
+- validation humaine Romu obligatoire avant tout envoi.
 
 ## Decisions integrees
 
@@ -48,7 +52,7 @@ Restent a corriger apres integration :
 - Fallback console durci : une erreur Supabase configuree remonte au lieu de repasser silencieusement en demo.
 - Persistance worker remplacee par la RPC transactionnelle `scout_persist_mission_output`.
 - Worker reel branche sur `scout_feedback` et `scout_outcomes` quand l'env Supabase serveur existe.
-- `quality:readiness` separe du harnais fixture et echoue tant que le produit reste `not_ready`.
+- `quality:readiness` separe du harnais fixture et passe seulement si les preuves runtime existent.
 - Documentation de livraison completee : runbook, scenario demo, limites V1, audit de couverture PRD.
 
 ## Deja implemente
@@ -65,6 +69,8 @@ Restent a corriger apres integration :
 - migration appliquee au projet Supabase `Interne_Agentic_prospection` ;
 - run Core de verification persiste dans Supabase ;
 - run Core reel Agents SDK persiste dans Supabase ;
+- run Core reel Agents SDK post-feedback Supabase persiste dans Supabase ;
+- run Exploration reel Agents SDK post-feedback Supabase persiste dans Supabase ;
 - feedbacks/outcomes Romu simules persistés dans Supabase ;
 - worker Python installable ;
 - CLI offline worker ;
@@ -76,21 +82,23 @@ Restent a corriger apres integration :
 - `quality:runs` consomme les fixtures TS ;
 - worker offline consomme les fixtures Python ;
 - Supabase est lisible par `src/server/scout-repository.ts` si `SUPABASE_SERVICE_ROLE_KEY` est disponible côté serveur, sinon fallback demo ;
-- la console n'a pas encore ete verifiee avec lecture Supabase serveur ;
-- la boucle feedback Supabase -> Learning Agent est codee, mais le dernier run reel OpenAI a ete execute avant ce branchement ;
-- la persistance Supabase worker n'a pas encore ete executee directement via `--persist` avec service role depuis la CLI ; la RPC a ete smoke-testee via Supabase.
+- les volumes production ne sont pas encore prouves sur 15 Core / 100 Exploration ;
+- les recherches web gratuites et emails publics restent semi-structurees ;
+- le fallback demo reste volontaire pour developpement local sans env serveur.
 
 ## Verifications actuelles
 
 Valide :
 
-- `npm run quality:runs` : socle fixture OK, produit pas pret ;
+- `npm run quality:runs` : socle fixture OK ;
 - `npm run worker:install` : OK ;
 - `npm run worker:test` : 7 tests offline/memory OK ;
-- `npm run verify:supabase` : bloque correctement si l'env serveur manque ;
+- `npm run verify:supabase` : OK avec env serveur, Cambon prioritaire, 3 runs, 4 leads, 2 rejets, 4 lessons ;
 - `npm run worker:offline` : CLI offline OK ;
+- CLI `--offline --mode core --persist` : OK, trace `trace_bm_scout_core_offline` persistée ;
 - import Agents SDK : manager cree avec 4 tools et 1 handoff QC.
 - Navigateur : smoke local `http://localhost:3020` OK en mode demo fallback, desktop/mobile captures, actions primaires visibles, aucun warning/error console.
+- Navigateur : smoke local `http://localhost:3021` OK avec Supabase serveur, Cambon/Dalloz/Learning/actions visibles, aucun warning/error console. Captures : `artifacts/browser-smoke/supabase-playwright-desktop.png`, `artifacts/browser-smoke/supabase-playwright-mobile.png`.
 - Supabase : 13 tables `scout_*`, RLS activee partout ;
 - Supabase : RPC `scout_persist_mission_output(jsonb)` appliquee ;
 - Supabase : smoke RPC `rpc-smoke-atomic-20260530` -> 1 run succeeded, 1 company, 1 preuve, 3 messages, 1 QC, 1 lesson ;
@@ -101,17 +109,18 @@ Valide :
 - Artefact reel : `artifacts/agent-worker-real/latest-real-core.json`.
 - Artefact reel : `artifacts/agent-worker-real/latest-real-exploration.json`.
 - Supabase reel : trace `qual-core-cambon-eight-001`, Cambon `pass`, Eight `blocked`, DNC company `true`.
+- OpenAI Agents SDK reel + Supabase feedback/persist : trace `qc-candidates-json-romu-seed`, Cambon retenu, Eight bloqué do-not-contact, 5 lessons.
+- OpenAI Agents SDK reel + Exploration + Supabase persist : trace `qc-exploration-candidates-user-provided`, Dalloz retenu, Studio Yoga bloqué, 5 lessons.
+- `npm run quality:readiness` : OK avec preuves runtime.
 
-A relancer avant livraison :
+A relancer en routine avant demo :
 
 - `npm run typecheck` ;
 - `npm run test` ;
 - `npm run lint` ;
 - `npm run build` ;
-- `npm run quality:readiness` doit echouer tant que la V1 reste `not_ready` ;
+- `npm run quality:readiness` avec env serveur ;
 - smoke browser console branchee Supabase serveur ;
-- worker `--persist` avec Supabase depuis la CLI quand `SUPABASE_SERVICE_ROLE_KEY` est disponible ;
-- console Next.js lue réellement via Supabase avec variable serveur ;
 - audit thermo-nuclear final : `docs/thermo-nuclear-final-audit.md`.
 
 ## GitHub
@@ -137,8 +146,7 @@ Dernier etat publie sur la branche `main` du repo dedie.
 
 ## Prochaine tranche
 
-1. Tester la console branchée Supabase avec env serveur.
-2. Executer `--persist` depuis la CLI si une service role key est disponible localement.
-3. Relancer un run reel Agents SDK avec feedbacks/outcomes Supabase injectés.
-4. Repasser l'audit final apres preuves runtime serveur.
-5. Mettre a jour le repo dedie apres correction des blockers.
+1. Repasser les tests complets.
+2. Tester la console Navigateur branchée Supabase serveur.
+3. Repasser l'audit thermo-nuclear final sans P1.
+4. Mettre a jour le repo dedie apres validation finale.

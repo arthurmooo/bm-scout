@@ -2,105 +2,109 @@
 
 Date : 2026-05-30
 
-Verdict : pas pret.
+Verdict : pret V1 interne.
 
-Cet audit a ete repasse apres integration du worker Agents SDK, de Supabase, des runs reels Core/Exploration, des feedbacks Romu persistés, du durcissement du fallback console, de la RPC de persistance atomique et du gate `quality:readiness`.
+Cet audit a ete repasse apres les preuves runtime finales : console Supabase serveur, CLI `--persist`, runs reels OpenAI Agents SDK post-feedback Supabase, et gate `quality:readiness`.
 
-## Findings corriges depuis le dernier audit
+## Findings corriges
 
-### Persistance Supabase worker rendue atomique
+### Persistance Supabase worker atomique
 
 Fichiers :
 
-- `supabase/migrations/20260530145828_bm_scout_atomic_persist_and_feedback_memory.sql`
+- `supabase/migrations/20260530150744_bm_scout_atomic_persist_and_feedback_memory.sql`
 - `services/agent-worker/bm_scout_worker/memory.py`
 
-Avant :
-
-`SupabaseMemory.persist_output()` inserait `scout_runs` en `succeeded`, puis chaque enfant via des appels REST sequentiels. Un echec intermediaire pouvait laisser un run partiel lisible par Romu.
-
-Apres :
-
-Le worker appelle `rpc/scout_persist_mission_output`. La fonction Postgres insere le run en `running`, persiste companies, contacts, preuves, scores, fiches, messages, QC et lessons dans une seule transaction, puis passe le run en `succeeded` a la fin. Si la fonction echoue, la transaction est rollback.
+Avant, le worker pouvait laisser un run partiel si une ecriture enfant echouait. Maintenant, `SupabaseMemory.persist_output()` appelle `rpc/scout_persist_mission_output`, qui persiste run, companies, contacts, preuves, scores, fiches, messages, QC et lessons dans une transaction.
 
 Preuves :
 
-- tests worker : `test_supabase_memory_persists_output_through_atomic_rpc` ;
-- Supabase : RPC appliquee sur le projet interne ;
-- Supabase : smoke `rpc-smoke-atomic-20260530` a produit 1 run `succeeded`, 1 company, 1 preuve, 3 messages, 1 rapport QC, 1 lesson.
+- test `test_supabase_memory_persists_output_through_atomic_rpc` ;
+- smoke SQL `rpc-smoke-atomic-20260530` ;
+- CLI `--persist` : trace `trace_bm_scout_core_offline` en `succeeded`.
 
-### Boucle feedback Supabase -> worker branchee
+### Boucle feedback Supabase -> Agents SDK prouvee
 
 Fichiers :
 
 - `services/agent-worker/bm_scout_worker/memory.py`
 - `services/agent-worker/bm_scout_worker/runner.py`
-- `services/agent-worker/tests/test_worker_offline.py`
 
-Avant :
-
-Le run reel Agents SDK construisait le prompt avec `seed_feedbacks()` meme quand Supabase contenait des feedbacks Romu et outcomes.
-
-Apres :
-
-Quand `SUPABASE_URL` ou `NEXT_PUBLIC_SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` existent, le worker charge `scout_feedback` et `scout_outcomes`, transforme les outcomes en feedback events, puis injecte cette memoire dans le prompt Agents SDK. Sans env serveur, le seed local reste le fallback de developpement.
+Le worker charge `scout_feedback` et `scout_outcomes` quand `NEXT_PUBLIC_SUPABASE_URL` ou `SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` existent, puis injecte ces events dans le prompt Agents SDK.
 
 Preuves :
 
-- tests worker : `test_supabase_memory_loads_feedback_and_outcomes` ;
-- Supabase : 7 feedbacks Romu et 2 outcomes persistés ;
-- code : `_run_with_agents_sdk(..., feedbacks=feedbacks)` ne lit plus directement `seed_feedbacks()`.
+- Supabase : 7 feedbacks Romu, 2 outcomes ;
+- Core reel persiste : `qc-candidates-json-romu-seed`, Eight bloque do-not-contact, 5 lessons ;
+- Exploration reelle persiste : `qc-exploration-candidates-user-provided`, compte faible bloque, 5 lessons.
 
-### Gate readiness separe du harnais fixture
+### Readiness gate rendu factuel
 
 Fichiers :
 
-- `package.json`
 - `scripts/run-quality-runs.ts`
+- `scripts/verify-supabase-runtime.ts`
 
-Avant :
+Le gate ne se contente plus des fixtures. Il verifie :
 
-`quality:runs` sortait un exit code 0 si les fixtures etaient bonnes, meme avec `productReadiness = not_ready`.
+- artefacts Core/Exploration reels pass ;
+- artefacts reels avec Supabase persist ;
+- lessons 3 a 5 avec feedback Romu et do-not-contact ;
+- CLI `--persist` ;
+- traces visibles par la console Supabase serveur.
 
-Apres :
+Preuve :
 
-`quality:runs` reste le harnais fixture. `quality:readiness` active `--readiness` et echoue tant que `productReadiness !== "ready"`. Le JSON indique aussi `readinessMode`.
+- `npm run quality:readiness` passe avec env serveur.
 
-## Findings restants
-
-### P1 - Console Supabase non verifiee en runtime serveur
+### Console Romu verifiee avec Supabase serveur
 
 Fichiers :
 
 - `src/server/scout-repository.ts`
-- `app/page.tsx`
+- `src/ui/ScoutDashboard.tsx`
 
-Le code de lecture Supabase est en place et le fallback silencieux a ete supprime pour les erreurs de requete. Il manque encore une execution Next avec `SUPABASE_SERVICE_ROLE_KEY` locale pour prouver que la console Romu lit vraiment les runs Supabase au lieu de `demoSnapshot()`.
+Preuves :
 
-### P1 - CLI `--persist` non executee avec service role locale
+- `npm run verify:supabase` : Cambon prioritaire, 3 runs, 4 leads, 2 rejets, 4 lessons ;
+- Navigateur sur `http://localhost:3021` avec env Supabase serveur : Cambon, Dalloz, Learning et actions Romu visibles ;
+- aucun warning/error console dans le navigateur ;
+- captures : `artifacts/browser-smoke/supabase-playwright-desktop.png`, `artifacts/browser-smoke/supabase-playwright-mobile.png`.
 
-Fichiers :
+### Packaging worker durci
 
-- `services/agent-worker/bm_scout_worker/cli.py`
-- `services/agent-worker/bm_scout_worker/runner.py`
-- `services/agent-worker/bm_scout_worker/memory.py`
+Fichier :
 
-Le chemin code est corrige et teste par mock. La RPC est appliquee et smoke-testee via Supabase. Il manque encore l'execution CLI directe avec `--persist` dans l'environnement local serveur, car aucune `SUPABASE_SERVICE_ROLE_KEY` n'est disponible dans l'environnement actuel.
+- `services/agent-worker/pyproject.toml`
 
-### P1 - Learning Supabase -> Agents SDK non valide en run reel avec env serveur locale
+Le packaging declare explicitement `packages = ["bm_scout_worker"]`. Cela evite que des dossiers d'artefacts generes dans `services/agent-worker` cassent `pip install -e`.
 
-Le worker lit maintenant Supabase si l'env existe, mais le dernier run reel OpenAI Agents SDK a ete execute avant ce changement. Il faut relancer un run reel avec env Supabase serveur locale pour prouver que les feedbacks persistés changent effectivement les recommandations du Learning Agent.
+Preuve :
 
-## Hypotheses challengees
+- `npm run worker:install` passe apres generation d'artefacts.
 
-- Plus petit delta : les corrections restent concentrees sur RPC, memory worker, runner et quality script.
-- Abstraction inutile : la RPC remplace une orchestration REST fragile par une frontiere claire `persist mission output`.
-- Spaghetti : le worker a moins de logique de persistance detaillee qu'avant ; le detail est dans la couche DB.
-- Boundary leak : la memoire Supabase est maintenant lue par le worker quand l'env serveur existe.
-- Bug maintenabilite : le risque de run partiel `succeeded` est traite par transaction.
+## Challenge thermo-nuclear
+
+- Plus petit delta : les corrections sont concentrees dans le worker, le gate qualite et la doc. Pas de refonte UI ou schema inutile.
+- Simpler design : la RPC atomique supprime la sequence REST fragile au lieu d'ajouter des retries.
+- Abstraction inutile : `SupabaseMemory` garde une frontiere utile et testable ; pas de couche repository Python supplementaire.
+- Branch/spaghetti growth : `quality:readiness` ajoute des preuves explicites, mais garde les helpers localises dans un script de verification.
+- Boundary leak : la service role reste cote serveur/worker ; aucune exposition client.
+- Hidden bug : le recoupement des traces entre artefacts et console Supabase evite un faux ready base uniquement sur fichiers locaux.
+
+## Findings restants
+
+Aucun P1 bloquant pour la V1 interne.
+
+Risques non bloquants :
+
+- `scripts/run-quality-runs.ts` approche 450 lignes. Il reste sous le seuil critique et regroupe un harnais unique ; si le gate grossit encore, extraire `runtime-evidence.ts`.
+- Les preuves de volume 15 Core / 100 Exploration ne sont pas encore des runs production continus.
+- Le sourcing web/email gratuit reste semi-structure.
+- La qualite commerciale finale reste une responsabilite Romu avant envoi.
 
 ## Decision
 
-BM Scout V1 reste `not_ready`.
+BM Scout V1 peut etre marque `ready` pour usage interne pilote.
 
-Les blockers code majeurs de l'audit precedent sont corriges, mais les preuves runtime serveur manquent encore : console branchée Supabase, CLI `--persist` avec service role locale, et run reel Learning alimente par feedbacks Supabase.
+La decision ne couvre pas une industrialisation outbound autonome ni un volume production sans monitoring.

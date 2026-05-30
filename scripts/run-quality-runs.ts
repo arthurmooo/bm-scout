@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { runScoutMission, seedFeedbacks } from "../src/domain/scout-engine";
 import type { ScoutLead, ScoutRun } from "../src/domain/types";
+import { getScoutSnapshot } from "../src/server/scout-repository";
 
 type RunVerdict = "pass" | "fail";
 type ProductReadiness = "ready" | "not_ready";
@@ -29,19 +30,21 @@ const globalScore = Math.round(
 );
 const fixtureVerdict: RunVerdict = globalBlockers.length === 0 && globalScore >= 85 ? "pass" : "fail";
 const realRunnerEvidence = await loadRealRunnerEvidence();
+const cliPersistEvidence = await loadCliPersistEvidence();
+const supabaseConsoleEvidence = await loadSupabaseConsoleEvidence();
 const readinessMode = process.argv.includes("--readiness");
-const productBlockers = [
-  ...(realRunnerEvidence.length >= 2 && realRunnerEvidence.every((item) => item.verdict === "pass")
-    ? []
-    : ["Runs OpenAI Agents SDK réels Core et Exploration incomplets."]),
-  "Supabase n'est pas encore lue par la console en environnement serveur vérifié.",
-  "La boucle feedback Supabase -> Learning Agent est codée, mais pas encore validée par un run réel avec env Supabase serveur locale.",
-  "La persistance CLI `--persist` utilise maintenant la RPC atomique, mais n'a pas encore été exécutée avec une service role key locale.",
-  "Audit thermo-nuclear final repassé : les blockers structurels code sont corrigés, les preuves runtime serveur restent ouvertes."
-];
+const productBlockers = buildProductBlockers(realRunnerEvidence, cliPersistEvidence, supabaseConsoleEvidence);
 const productReadiness: ProductReadiness = productBlockers.length === 0 ? "ready" : "not_ready";
 
-const report = renderReport(evaluatedRuns, globalScore, fixtureVerdict, globalBlockers, realRunnerEvidence);
+const report = renderReport(
+  evaluatedRuns,
+  globalScore,
+  fixtureVerdict,
+  globalBlockers,
+  realRunnerEvidence,
+  cliPersistEvidence,
+  supabaseConsoleEvidence
+);
 const artifactsDir = join(process.cwd(), "artifacts", "quality-runs");
 await mkdir(artifactsDir, { recursive: true });
 await writeFile(join(artifactsDir, "latest-report.md"), report, "utf8");
@@ -54,6 +57,8 @@ await writeFile(
       productReadiness,
       productBlockers,
       realRunnerEvidence,
+      cliPersistEvidence,
+      supabaseConsoleEvidence,
       readinessMode,
       runs: evaluatedRuns
     },
@@ -189,16 +194,20 @@ function renderReport(
   globalScore: number,
   fixtureVerdict: RunVerdict,
   blockers: string[],
-  realEvidence: RealRunnerEvidence[]
+  realEvidence: RealRunnerEvidence[],
+  persistEvidence: CliPersistEvidence | null,
+  consoleEvidence: SupabaseConsoleEvidence
 ): string {
   const lines = [
     "# Rapport qualite BM Scout - socle fixture",
     "",
-    "Decision produit BM Scout V1 : pas pret",
+    `Decision produit BM Scout V1 : ${productReadiness === "ready" ? "pret" : "pas pret"}`,
     `Verdict socle fixture : ${fixtureVerdict === "pass" ? "ok" : "pas ok"}`,
     `Score socle fixture : ${globalScore}/100`,
     "",
-    "Ce rapport valide uniquement les fixtures locales et le harnais de QC. Il ne valide pas la readiness produit.",
+    readinessMode
+      ? "Ce rapport valide le socle fixture et les preuves runtime disponibles."
+      : "Ce rapport valide uniquement les fixtures locales et affiche les preuves runtime disponibles.",
     "",
     "## Blockers produit restants",
     "",
@@ -207,8 +216,20 @@ function renderReport(
     "## Evidence runner reel",
     "",
     ...(realEvidence.length
-      ? realEvidence.map((item) => `- ${item.name} : ${item.verdict}; trace : ${item.traceId}; leads retenus : ${item.keptCount}; rejetes : ${item.rejectedCount}`)
+      ? realEvidence.map(
+          (item) =>
+            `- ${item.name} : ${item.verdict}; trace : ${item.traceId}; leads retenus : ${item.keptCount}; rejetes : ${item.rejectedCount}; lessons : ${item.lessonCount}; feedback learning : ${item.learningUsesFeedback ? "oui" : "non"}`
+        )
       : ["- Aucun artefact réel détecté dans `artifacts/agent-worker-real/`."]),
+    "",
+    "## Evidence Supabase runtime",
+    "",
+    persistEvidence
+      ? `- CLI --persist : ${persistEvidence.verdict}; trace : ${persistEvidence.traceId}; artefact : ${persistEvidence.sourceFile}`
+      : "- CLI --persist : aucune preuve locale.",
+    `- Console serveur Supabase : ${consoleEvidence.verdict}; runs : ${consoleEvidence.runCount}; leads : ${consoleEvidence.leadCount}; rejetes : ${consoleEvidence.rejectedCount}; lessons : ${consoleEvidence.lessonCount}`,
+    consoleEvidence.traces.length ? `- Traces console : ${consoleEvidence.traces.join(", ")}` : "- Traces console : aucune.",
+    ...(consoleEvidence.error ? [`- Erreur console : ${consoleEvidence.error}`] : []),
     "",
     "## Synthese des runs",
     "",
@@ -244,11 +265,10 @@ function renderReport(
     "",
     "## Limites restantes",
     "",
-    "- Ce rapport utilise encore les fixtures locales du socle executable.",
-    "- Les runners OpenAI Agents SDK Core et Exploration sont verifies, et Supabase stocke des feedbacks/outcomes simules.",
-    "- La boucle feedback Supabase -> Learning Agent est branchée dans le worker réel quand l'env Supabase serveur est disponible.",
+    "- Les fixtures locales restent utiles comme harnais rapide, mais ne suffisent pas seules a declarer le produit pret.",
+    "- Les runners OpenAI Agents SDK Core et Exploration sont verifies via artefacts reels quand les preuves sont presentes.",
+    "- Supabase sert de memoire runtime pour runs, feedbacks, outcomes, do-not-contact, QC et learning.",
     "- La persistance worker passe par la RPC transactionnelle `scout_persist_mission_output`.",
-    "- La console doit encore etre verifiee en lecture Supabase avec une cle serveur locale.",
     "- La validation humaine d'Arthur/Romu reste obligatoire sur les messages et la qualite commerciale."
   ];
   return lines.join("\n");
@@ -258,12 +278,19 @@ interface RealRunnerEvidence {
   name: string;
   verdict: RunVerdict;
   traceId: string;
+  mode: "core" | "exploration";
   keptCount: number;
   rejectedCount: number;
+  lessonCount: number;
+  finalDecision: "ready" | "not_ready";
+  sourceFile: string;
+  learningUsesFeedback: boolean;
 }
 
 async function loadRealRunnerEvidence(): Promise<RealRunnerEvidence[]> {
   const targets = [
+    { name: "Core reel Supabase persist", file: "latest-real-core-supabase-persist.json" },
+    { name: "Exploration reelle Supabase persist", file: "latest-real-exploration-supabase-persist.json" },
     { name: "Core reel", file: "latest-real-core.json" },
     { name: "Exploration reelle", file: "latest-real-exploration.json" }
   ];
@@ -273,16 +300,153 @@ async function loadRealRunnerEvidence(): Promise<RealRunnerEvidence[]> {
     if (!existsSync(path)) continue;
     const payload = JSON.parse(await readFile(path, "utf8")) as {
       verdict?: RunVerdict;
-      output?: { trace_id?: string; kept_count?: number; rejected_count?: number };
+      output?: {
+        trace_id?: string;
+        mode?: "core" | "exploration";
+        kept_count?: number;
+        rejected_count?: number;
+        lessons?: { lesson?: string; recommendation?: string; source?: string }[];
+        final_decision?: "ready" | "not_ready";
+      };
     };
     if (!payload.output?.trace_id) continue;
+    const lessons = payload.output.lessons ?? [];
+    const lessonCount = lessons.length;
     evidence.push({
       name: target.name,
       verdict: payload.verdict === "pass" ? "pass" : "fail",
       traceId: payload.output.trace_id,
+      mode: payload.output.mode ?? (target.name.toLowerCase().includes("exploration") ? "exploration" : "core"),
       keptCount: payload.output.kept_count ?? 0,
-      rejectedCount: payload.output.rejected_count ?? 0
+      rejectedCount: payload.output.rejected_count ?? 0,
+      lessonCount,
+      finalDecision: payload.output.final_decision ?? "not_ready",
+      sourceFile: target.file,
+      learningUsesFeedback: learningUsesFeedback(lessons)
     });
   }
   return evidence;
+}
+
+function learningUsesFeedback(lessons: { lesson?: string; recommendation?: string; source?: string }[]): boolean {
+  if (lessons.length < 3 || lessons.length > 5) return false;
+  const text = lessons
+    .flatMap((lesson) => [lesson.lesson, lesson.recommendation, lesson.source])
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return text.includes("feedback romu") && text.includes("do-not-contact");
+}
+
+interface CliPersistEvidence {
+  verdict: RunVerdict;
+  traceId: string;
+  sourceFile: string;
+}
+
+async function loadCliPersistEvidence(): Promise<CliPersistEvidence | null> {
+  const sourceFile = "latest-cli-persist-offline.json";
+  const path = join(process.cwd(), "artifacts", "agent-worker-real", sourceFile);
+  if (!existsSync(path)) return null;
+  const payload = JSON.parse(await readFile(path, "utf8")) as {
+    verdict?: RunVerdict;
+    output?: { trace_id?: string };
+  };
+  if (!payload.output?.trace_id) return null;
+  return {
+    verdict: payload.verdict === "pass" ? "pass" : "fail",
+    traceId: payload.output.trace_id,
+    sourceFile
+  };
+}
+
+interface SupabaseConsoleEvidence {
+  verdict: RunVerdict;
+  runCount: number;
+  leadCount: number;
+  rejectedCount: number;
+  lessonCount: number;
+  traces: string[];
+  error?: string;
+}
+
+async function loadSupabaseConsoleEvidence(): Promise<SupabaseConsoleEvidence> {
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    return {
+      verdict: "fail",
+      runCount: 0,
+      leadCount: 0,
+      rejectedCount: 0,
+      lessonCount: 0,
+      traces: [],
+      error: "NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY manquante"
+    };
+  }
+
+  try {
+    const snapshot = await getScoutSnapshot();
+    const leadCount = snapshot.runs.reduce((sum, run) => sum + run.leads.length, 0);
+    const rejectedCount = snapshot.runs.reduce((sum, run) => sum + run.rejected.length, 0);
+    const lessonCount = snapshot.lessons.length;
+    const pass = snapshot.runs.length > 0 && Boolean(snapshot.primaryLead) && leadCount > 0 && rejectedCount > 0 && lessonCount >= 3;
+    return {
+      verdict: pass ? "pass" : "fail",
+      runCount: snapshot.runs.length,
+      leadCount,
+      rejectedCount,
+      lessonCount,
+      traces: snapshot.runs.map((run) => run.traceId)
+    };
+  } catch (error) {
+    return {
+      verdict: "fail",
+      runCount: 0,
+      leadCount: 0,
+      rejectedCount: 0,
+      lessonCount: 0,
+      traces: [],
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+function buildProductBlockers(
+  realEvidence: RealRunnerEvidence[],
+  persistEvidence: CliPersistEvidence | null,
+  consoleEvidence: SupabaseConsoleEvidence
+): string[] {
+  const blockers: string[] = [];
+  const hasCore = realEvidence.some((item) => item.mode === "core" && item.verdict === "pass" && item.finalDecision === "ready");
+  const hasExploration = realEvidence.some(
+    (item) => item.mode === "exploration" && item.verdict === "pass" && item.finalDecision === "ready"
+  );
+  const hasSupabaseCore = realEvidence.some((item) => item.mode === "core" && item.sourceFile.includes("supabase-persist") && item.verdict === "pass");
+  const hasSupabaseExploration = realEvidence.some(
+    (item) => item.mode === "exploration" && item.sourceFile.includes("supabase-persist") && item.verdict === "pass"
+  );
+  const hasLearningFromFeedback = realEvidence.some((item) => item.mode === "core" && item.learningUsesFeedback);
+
+  if (!hasCore || !hasExploration) {
+    blockers.push("Runs OpenAI Agents SDK réels Core et Exploration incomplets.");
+  }
+  if (!hasSupabaseCore || !hasSupabaseExploration) {
+    blockers.push("Runs Agents SDK réels non prouvés avec persistance Supabase.");
+  }
+  if (!hasLearningFromFeedback) {
+    blockers.push("Learning Agent non prouvé avec feedbacks/outcomes Supabase et do-not-contact.");
+  }
+  for (const evidence of realEvidence.filter((item) => item.sourceFile.includes("supabase-persist"))) {
+    if (!consoleEvidence.traces.includes(evidence.traceId)) {
+      blockers.push(`Run ${evidence.traceId} absent de la console Supabase serveur.`);
+    }
+  }
+  if (!persistEvidence || persistEvidence.verdict !== "pass") {
+    blockers.push("CLI `--persist` non prouvée avec la RPC Supabase.");
+  } else if (!consoleEvidence.traces.includes(persistEvidence.traceId)) {
+    blockers.push(`Run CLI --persist ${persistEvidence.traceId} absent de la console Supabase serveur.`);
+  }
+  if (consoleEvidence.verdict !== "pass") {
+    blockers.push(`Console Supabase serveur non prouvée${consoleEvidence.error ? ` : ${consoleEvidence.error}` : "."}`);
+  }
+  return blockers;
 }

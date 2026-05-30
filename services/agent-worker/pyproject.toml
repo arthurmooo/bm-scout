@@ -16,6 +16,9 @@ dev = [
 [project.scripts]
 bm-scout-worker = "bm_scout_worker.cli:main"
 
+[tool.setuptools]
+packages = ["bm_scout_worker"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

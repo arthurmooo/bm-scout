@@ -14,15 +14,15 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 
 ## Limites agentiques
 
-- Les runs reels Core et Exploration ont ete executes, mais le run reel Learning post-branchement Supabase reste a refaire.
-- Le worker charge les feedbacks Supabase si l'env serveur existe ; sans env, il repasse en seed local.
+- Les runs reels Core et Exploration post-branchement Supabase ont ete executes et persistés.
+- Le worker charge les feedbacks Supabase si l'env serveur existe ; sans env, il repasse en seed local pour developpement.
 - Les agents produisent des sorties structurees, mais la qualite commerciale finale reste a valider par Romu.
 - Les recherches web gratuites ou publiques restent dependantes de la disponibilite des sources.
 
 ## Limites data
 
 - Supabase stocke runs, companies, contacts, preuves, scores, fiches, messages, feedbacks, outcomes, do-not-contact et lessons.
-- La persistance worker passe par RPC transactionnelle, mais la CLI `--persist` n'a pas encore ete executee avec une service role key locale.
+- La persistance worker passe par RPC transactionnelle et la CLI `--persist` a ete executee avec service role locale.
 - La console lit Supabase cote serveur si `SUPABASE_SERVICE_ROLE_KEY` existe, sinon affiche les fixtures demo.
 - Le dedoublonnage avance et l'historique multi-semaines complet ne sont pas encore industrialises.
 
@@ -40,7 +40,7 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 - Les logs techniques restent dans Supabase/tracing, pas dans la vue Romu.
 - Les fiches profondes existent pour les leads prioritaires, pas pour tout le scan Exploration.
 
-## Non-negociables avant readiness
+## Non-negociables de maintenance readiness
 
 - `npm run verify:supabase` passe avec l'env serveur.
 - `--persist` cree un run lisible en Supabase via la RPC.
