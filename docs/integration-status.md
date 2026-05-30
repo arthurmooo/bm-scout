@@ -128,7 +128,7 @@ Publication propre effectuee :
 3. branche `main` poussee ;
 4. repo garde prive tant que le worker et Supabase ne sont pas finalises.
 
-Dernier commit publie : `42b51fa`.
+Dernier etat publie sur la branche `main` du repo dedie.
 
 ## Prochaine tranche
 
