@@ -26,3 +26,12 @@ test("la console expose les decisions Romu et les actions feedback", async ({ pa
     fullPage: false
   });
 });
+
+test("la page login expose le garde interne Supabase sans claims client", async ({ page }) => {
+  await page.goto("/login");
+
+  await expect(page.getByRole("heading", { name: "Accès interne" })).toBeVisible();
+  await expect(page.getByLabel("Email interne")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Envoyer le lien" })).toBeVisible();
+  await expect(page.getByText("Mode démo local actif")).toBeVisible();
+});

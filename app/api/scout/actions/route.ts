@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { recordScoutAction } from "@/server/scout-actions";
+import { getInternalAuthState } from "@/server/supabase-auth";
 
 const actionSchema = z.object({
   action: z.enum([
@@ -38,6 +39,14 @@ const actionSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  const auth = await getInternalAuthState();
+  if (auth.mode === "unauthenticated") {
+    return NextResponse.json({ ok: false, message: "Connexion interne requise." }, { status: 401 });
+  }
+  if (auth.mode === "forbidden") {
+    return NextResponse.json({ ok: false, message: auth.reason }, { status: 403 });
+  }
+
   const parsed = actionSchema.safeParse(await request.json());
   if (!parsed.success) {
     return NextResponse.json({ ok: false, message: "Action invalide.", issues: parsed.error.issues }, { status: 400 });

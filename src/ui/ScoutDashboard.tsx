@@ -10,7 +10,7 @@ const navItems = [
   { label: "Qualité", icon: ShieldCheck }
 ];
 
-export function ScoutDashboard({ snapshot }: { snapshot: ScoutSnapshot }) {
+export function ScoutDashboard({ snapshot, accessLabel }: { snapshot: ScoutSnapshot; accessLabel?: string }) {
   const primary = snapshot.primaryLead;
   return (
     <div className="app-shell">
@@ -31,9 +31,17 @@ export function ScoutDashboard({ snapshot }: { snapshot: ScoutSnapshot }) {
       <main className="main">
         <header className="topbar">
           <h1>BM Scout</h1>
-          <div className="topbar-status">
-            <span className="status-dot" />
-            {decisionCount(snapshot)} décisions attendent Romu
+          <div className="topbar-right">
+            <div className="topbar-status">
+              <span className="status-dot" />
+              {decisionCount(snapshot)} décisions attendent Romu
+            </div>
+            {accessLabel ? (
+              <form className="logout-form" action="/auth/logout" method="post">
+                <span>{accessLabel}</span>
+                <button type="submit">Déconnexion</button>
+              </form>
+            ) : null}
           </div>
         </header>
         <section className="content">

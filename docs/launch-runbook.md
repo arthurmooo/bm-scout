@@ -9,7 +9,9 @@ Statut : `production_not_ready`. Socle utilisable pour demo interne, pas pour d�
 - Projet Supabase interne `Interne_Agentic_prospection`.
 - Variables serveur :
   - `NEXT_PUBLIC_SUPABASE_URL`
+  - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` pour Supabase Auth SSR, ou `NEXT_PUBLIC_SUPABASE_ANON_KEY` legacy si aucune publishable key n'est encore disponible
   - `SUPABASE_SERVICE_ROLE_KEY`
+  - `BM_SCOUT_AUTH_MODE=internal` hors démo ; `BM_SCOUT_AUTH_MODE=demo` seulement pour test local/fixtures
   - `OPENAI_API_KEY`
   - `OPENAI_MODEL` optionnel, par defaut `gpt-5.5`
   - `OPENAI_SEARCH_MODEL` optionnel pour la recherche web OpenAI
@@ -19,6 +21,27 @@ Statut : `production_not_ready`. Socle utilisable pour demo interne, pas pour d�
   - `BM_SCOUT_PROVIDER=demo` seulement pour forcer explicitement les fixtures
 
 Ne jamais exposer `SUPABASE_SERVICE_ROLE_KEY` dans le navigateur. Elle sert uniquement au worker et au rendu serveur.
+
+## Auth interne
+
+BM Scout utilise Supabase Auth SSR pour l'accès console :
+
+- `/login` envoie un magic link Supabase avec `shouldCreateUser: false`.
+- `/auth/callback` échange le code contre une session cookie.
+- le proxy Next rafraîchit les cookies via `getClaims()`.
+- la home et `POST /api/scout/actions` acceptent seulement les comptes dont `app_metadata` contient `bm_scout_role`, `bm_scout_roles` ou `bm_scout_access`.
+
+Les claims attendus sont par exemple :
+
+```json
+{
+  "app_metadata": {
+    "bm_scout_roles": ["arthur", "romu"]
+  }
+}
+```
+
+Ne pas mettre ces rôles dans `user_metadata` : c'est modifiable par l'utilisateur et ignoré par le code.
 
 ## Installation
 
@@ -55,7 +78,7 @@ La fonction doit exister. Les nouvelles tables `scout_agent_tasks` et `scout_act
 npm run dev
 ```
 
-Sans variables Supabase serveur, la console affiche les fixtures demo. Avec variables serveur, elle lit `scout_runs` et relations `scout_*`.
+Sans variables Supabase serveur, la console affiche les fixtures demo. Avec variables serveur, elle lit `scout_runs` et relations `scout_*`. Si `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` existe ou si `BM_SCOUT_AUTH_MODE=internal` est configuré, la console demande aussi une session Supabase interne.
 
 Verification runtime :
 
@@ -195,4 +218,5 @@ BM Scout peut etre marque au mieux `pilot_candidate` uniquement si :
 - les routines `scout_agent_tasks` sont consommées par un runner reproductible et par un cron GitHub Actions réellement vert ;
 - les providers réels ne se limitent plus aux seeds configurées et prouvent un volume Core/Exploration suffisant ;
 - `quality:readiness` passe ;
+- un compte Romu/Arthur réel passe le login et un compte sans `app_metadata` est bloqué ;
 - l'audit thermo-nuclear ne contient plus de P1 ouvert.

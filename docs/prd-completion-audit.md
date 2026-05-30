@@ -23,7 +23,7 @@ Verdict courant : `production_not_ready`.
 | Actions UI fonctionnelles | Partiel | API actions + traces + feedback/outcomes + centre à valider, smoke Playwright + Browser intégré passés en mode local ; persistance réelle dépend encore de l'env Supabase |
 | Run steps/tool calls auditables | Partiel | RPC écrit run start/lead saved/worker steps ; provider + function tools Agents SDK poussent des étapes compactées ; scripts `worker:real:*` produisent les artefacts readiness |
 | Supabase mémoire | Partiel | Schéma/RPC/actions, env runtime non vérifiée ici |
-| RLS / sécurité interne | Partiel | Policies Supabase restreintes par `app_metadata`, service role serveur, advisor sécurité à 0 lint ; Auth UI Romu/Arthur non branchée |
+| RLS / sécurité interne | Partiel | Policies Supabase restreintes par `app_metadata`, service role serveur, advisor sécurité à 0 lint ; Auth SSR UI/API branchée, claims réels Romu/Arthur encore à poser et vérifier dans Supabase |
 | Documentation honnête | Couvert dans cette passe | README + docs en `production_not_ready` |
 
 ## P0 corrigés partiellement
@@ -35,6 +35,7 @@ Verdict courant : `production_not_ready`.
 - P0.6 Actions UI : actions principales, feedbacks Romu, outcomes, copie, DNC et routines branchées à une API serveur et tracées.
 - P0.7 Observé/Inféré/Incertain : contrat TS + worker Pydantic + DB/RPC ajoutés.
 - P1.6 RLS/sécurité : policies `authenticated` resserrées, fonctions RPC security definer non publiques, advisors sécurité repassés à 0 lint.
+- P1.6 Auth interne : page login, callback/logout, proxy cookie Supabase et garde API ajoutés ; les décisions d'accès ignorent `user_metadata`.
 
 ## P0 encore ouverts
 
@@ -43,6 +44,7 @@ Verdict courant : `production_not_ready`.
 - P0.3 Suppression de la dépendance fixtures : provider OpenAI web/fallback public branché, search autonome à volume restant à prouver.
 - P0.5 Feedback loop réelle : impact causal prouvé localement dans TS et le worker Python, à prouver avec feedbacks/outcomes Supabase réels à volume.
 - P0.7 : socle full-stack ajouté, à valider sur runs réels persistés.
+- P1.6 : parcours magic link à vérifier avec les vrais comptes Supabase et leurs `app_metadata`.
 
 ## Décision
 

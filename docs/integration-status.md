@@ -6,7 +6,7 @@ Date : 2026-05-31
 
 Statut : `production_not_ready`.
 
-Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la démo en socle plus pilotable : tâches proactives, traces d'actions, DNC hard gate, feedback memory causale, Observé/Inféré/Incertain full-stack et dashboard moins fictif. Ce n'est pas encore un employé IA complet : la recherche web OpenAI/fallback public existe, mais les volumes PRD et le cron production restent à prouver.
+Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la démo en socle plus pilotable : tâches proactives, traces d'actions, DNC hard gate, feedback memory causale, Observé/Inféré/Incertain full-stack, auth interne SSR et dashboard moins fictif. Ce n'est pas encore un employé IA complet : la recherche web OpenAI/fallback public existe, mais les volumes PRD et le cron production restent à prouver.
 
 ## Décisions reprises de l'audit
 
@@ -18,6 +18,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Bloquer le DNC avant copie/message, pas seulement dans une table décorative.
 - Faire influencer le run suivant par les feedbacks Romu, pas seulement produire une synthèse ou enrichir un prompt.
 - Stocker Observé/Inféré/Incertain et les statuts d'email dans Supabase.
+- Ne plus exposer la console hors démo sans Auth Supabase et claims internes `app_metadata`.
 
 ## Implémenté dans cette passe
 
@@ -44,6 +45,8 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Recorder Agents SDK : les function tools poussent maintenant leurs entrées/sorties compactées dans `run_steps` pendant `Runner.run`.
 - Migration Supabase `20260530214847_bm_scout_structured_insights_email_confidence_steps.sql` appliquée au projet interne.
 - Documentation et rapport qualité repassés en statut honnête.
+- Auth Supabase SSR : `@supabase/ssr`, page login magic link, callback/logout, proxy de refresh cookie et garde serveur sur la home/API actions.
+- Policy applicative : les décisions d'accès lisent uniquement `app_metadata` (`bm_scout_role`, `bm_scout_roles`, `bm_scout_access`) et ignorent les metadata modifiables utilisateur.
 
 ## Encore fixture/demo
 
@@ -59,7 +62,8 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Scheduler dry-run reproductible : `npm run agent:schedule`.
 - Runner queue reproductible : `npm run agent:tasks:offline` ou `npm run agent:tasks:real` avec env Supabase serveur ; les routines brief/learning/DNC/followup ne s'appuient pas sur les fixtures demo.
 - Artefacts de run réel reproductibles : `npm run worker:real:core`, `npm run worker:real:exploration`, puis variantes `:persist` avec env Supabase.
-- Actions API persistantes si `NEXT_PUBLIC_SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` existent.
+- Actions API persistantes si `NEXT_PUBLIC_SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` existent ; si Auth SSR est configurée, l'API exige aussi un compte interne BM Scout.
+- Auth interne : home protégée en mode `BM_SCOUT_AUTH_MODE=internal`, login magic link Supabase, fallback démo seulement si l'auth publique est absente ou explicitement forcée.
 - DNC bloque côté TS, worker offline et trigger Supabase.
 - Feedback Romu influence le scoring et les messages dans le moteur TS et le worker provider testés.
 - Run steps et email confidence sont écrits par le worker/RPC quand `--persist` est exécuté.
@@ -67,7 +71,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 ## Vérifications exécutées
 
-- `npm run test` : 32 tests pass.
+- `npm run test` : 36 tests pass, dont policy Auth BM Scout.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.
@@ -78,8 +82,9 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - `npm run agent:schedule` : pass, 6 routines planifiées.
 - `npm run agent:tasks` sans env serveur : fail attendu avec message env Supabase requis.
 - `npm exec tsx -- scripts/run-agent-worker-evidence.ts --offline --mode=core` : pass, artefact `latest-offline-core.json` écrit.
-- `npm run test:e2e` : pass, smoke Playwright sur `http://localhost:3030` ; statut `production_not_ready`, actions feedback/outcome/routines visibles, bouton feedback hydraté, screenshot locale `artifacts/browser-smoke/playwright-dashboard-feedback-actions.png`.
-- Browser intégré : smoke manuel sur `http://localhost:3030`, clic feedback `Bon lead` testé ; sans env Supabase serveur, l'action passe en état `Erreur` comme attendu au lieu de prétendre être persistée.
+- `npm run test:e2e` : pass, 2 scénarios Playwright ; le smoke force `BM_SCOUT_AUTH_MODE=demo`, vérifie dashboard/actions et page login interne.
+- Browser intégré : pass sur `http://127.0.0.1:3030` ; login interne visible, dashboard `production_not_ready` visible, clic feedback `Bon lead` passe en état `Erreur` attendu sans env Supabase serveur.
+- `npm audit --omit=dev` : fail modéré connu via `next -> postcss <8.5.10`; `npm audit fix --force` propose un downgrade Next cassant vers 9.x, donc non appliqué dans cette passe.
 - Supabase interne `Interne_Agentic_prospection` : migrations `agent_tasks_and_actions`, `bm_scout_structured_insights_email_confidence_steps`, `scout_feedback_outcome_actions`, `restrict_internal_rls_policies` et `close_security_definer_rpc_exposure` appliquées.
 - Supabase advisor sécurité : 0 lint après durcissement RLS/RPC.
 
@@ -90,4 +95,4 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 3. Prouver les volumes PRD 15 Core / 100 Exploration avec artefacts réels.
 4. Prouver la feedback loop sur scoring, messages et recommandations dans un run réel Supabase.
 5. Exécuter le cron GitHub Actions avec secrets et vérifier les transitions `queued -> completed`.
-6. Brancher Auth UI Romu/Arthur avec claim `app_metadata.bm_scout_role` avant exposition hors service role serveur.
+6. Affecter les claims Supabase réels aux comptes Romu/Arthur et valider le parcours magic link sur le projet interne.

@@ -13,9 +13,9 @@ export default defineConfig({
     screenshot: "only-on-failure"
   },
   webServer: {
-    command: "npm run dev -- --hostname 0.0.0.0 --port 3030",
+    command: "BM_SCOUT_AUTH_MODE=demo npm run dev -- --hostname 0.0.0.0 --port 3030",
     url: "http://localhost:3030",
-    reuseExistingServer: true,
+    reuseExistingServer: false,
     timeout: 30_000
   },
   projects: [

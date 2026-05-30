@@ -22,6 +22,7 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 - Feedback memory TS + worker provider : mauvais lead/secteur pénalisé, angle validé renforcé, message générique régénéré, DNC bloquant, contexte entreprise/segment chargé depuis Supabase.
 - Observé/Inféré/Incertain, email confidence, run steps provider et tool calls Agents SDK persistés via Supabase/RPC.
 - RLS Supabase durcie : policies `authenticated` restreintes aux rôles internes via `app_metadata`, service role réservée au serveur/worker, advisor sécurité Supabase sans lint après migration.
+- Auth interne Supabase SSR branchée : login magic link, refresh cookies via proxy Next, API actions bloquée si l'utilisateur n'a pas de claim `app_metadata` BM Scout. Le mode démo local reste explicite via `BM_SCOUT_AUTH_MODE=demo`.
 - Rapport qualité qui distingue le harnais fixture de la readiness produit réelle.
 
 ## Ce qui n'est pas encore prêt
@@ -31,7 +32,7 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 - Recherche marché réelle encore limitée : le worker peut utiliser OpenAI `web_search` ou un fallback web public avec job search minimal, mais les volumes PRD et la qualité des sources restent à prouver en run réel.
 - Feedback loop prouvée localement côté TS et worker Python, pas encore validée sur un run réel Supabase à volume.
 - `quality:readiness` échoue volontairement tant que ces preuves ne sont pas là.
-- Auth Romu/Arthur reste à brancher dans l'UI ; les policies Supabase attendent déjà `app_metadata.bm_scout_role` ou `app_metadata.bm_scout_roles`.
+- Attribution réelle des comptes Romu/Arthur dans Supabase Auth à faire dans le dashboard projet : `app_metadata.bm_scout_role`, `app_metadata.bm_scout_roles` ou `app_metadata.bm_scout_access`.
 
 ## Lancer
 
@@ -43,7 +44,9 @@ npm run dev
 Variables serveur :
 
 - `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` recommandé pour Auth SSR, ou `NEXT_PUBLIC_SUPABASE_ANON_KEY` legacy.
 - `SUPABASE_SERVICE_ROLE_KEY`
+- `BM_SCOUT_AUTH_MODE=internal|auto|demo` ; utiliser `internal` hors démo, `demo` seulement en local/test.
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL` optionnel, par défaut `gpt-5.5`
 - `OPENAI_SEARCH_MODEL` optionnel pour la découverte web OpenAI, par défaut `OPENAI_MODEL`
