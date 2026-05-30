@@ -132,6 +132,43 @@ def test_open_web_provider_builds_candidates_without_seed(monkeypatch) -> None:
     assert any(step.step == "fetch_company_site" for step in provider.run_steps)
 
 
+def test_open_web_provider_adds_job_search_evidence(monkeypatch) -> None:
+    monkeypatch.setenv("BM_SCOUT_CORE_TARGET", "1")
+    monkeypatch.setenv("BM_SCOUT_FETCH_LIMIT", "1")
+    provider = OpenWebResearchProvider(["conseil M&A France"])
+
+    def fake_search(query: str, _region: str, _limit: int) -> list[SearchResult]:
+        if "recrutement" in query.lower() or "careers" in query.lower():
+            return [
+                SearchResult(
+                    title="HelloWork - offres d'emploi",
+                    url="https://duckduckgo.com/y.js?ad_domain=hellowork.com&u3=https%3A%2F%2Fwww.bing.com%2Faclick",
+                    snippet="Annonce emploi sponsorisée sans lien prouvé avec PwC.",
+                ),
+                SearchResult(
+                    title="PwC recrute - Transaction Services",
+                    url="https://www.pwc.fr/fr/carrieres/offres/transaction-services.html",
+                    snippet="Offre d'emploi publique mentionnant transaction services, reporting et coordination client.",
+                )
+            ]
+        return [
+            SearchResult(
+                title="Conseil en Deals - PwC",
+                url="https://www.pwc.fr/fr/expertises/transactions.html",
+                snippet="Deals",
+            )
+        ]
+
+    provider.search_web = fake_search
+    provider.fetch_company_site = lambda _url: "M&A transaction reporting document client team"
+
+    lead = provider.build_candidates("core")[0]
+
+    assert any(item.label == "Recrutement public" for item in lead.evidence)
+    assert any("recrutement publique" in signal for signal in lead.observed_signals)
+    assert any(step.step == "search_jobs" and step.payload["job_count"] == 1 for step in provider.run_steps)
+
+
 def test_auto_provider_prefers_openai_web_when_key_is_present(monkeypatch) -> None:
     monkeypatch.delenv("BM_SCOUT_PROVIDER", raising=False)
     monkeypatch.delenv("BM_SCOUT_REAL_SEEDS", raising=False)
@@ -158,6 +195,7 @@ def test_configured_provider_builds_candidates_from_public_seed() -> None:
         "dedupe_company",
         "fetch_company_site",
         "extract_company_signals",
+        "search_jobs",
         "find_public_emails",
         "save_evidence",
         "score_candidate",
@@ -231,6 +269,7 @@ def test_parse_search_queries_and_duckduckgo_results() -> None:
     html = """
       <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.pwc.fr%2Ffr%2Fexpertises%2Ftransactions.html">Conseil en Deals - PwC</a>
       <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.linkedin.com%2Fposts%2Fx">LinkedIn</a>
+      <a rel="nofollow" href="https://duckduckgo.com/y.js?ad_domain=hellowork.com">Annonce emploi</a>
     """
     results = parse_duckduckgo_lite_results(html, 5)
 

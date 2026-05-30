@@ -27,6 +27,7 @@ Verdict : `production_not_ready`.
 - Les routines sont dans un module dédié, pas dispersées dans l'UI.
 - Les tâches `queued` peuvent maintenant passer par un runner `running -> completed/blocked/failed`.
 - Le worker réel ne retombe plus silencieusement sur fixtures et expose `WebSearchTool` OpenAI plus 8 tools métier Agents SDK.
+- `search_jobs` produit maintenant des preuves recrutement publiques et des run steps au lieu d'être un no-op.
 - La mémoire feedback locale pénalise les secteurs faibles, bloque les leads rejetés, renforce les angles validés et régénère les messages trop génériques.
 - Observé/Inféré/Incertain et email confidence sont maintenant portés par TS, worker Pydantic, DB et RPC.
 - Le RPC écrit des run steps minimaux (`mission_start`, `lead_persisted`, steps worker, `mission_complete`).
@@ -47,7 +48,7 @@ Verdict : `production_not_ready`.
 - `npm run quality:readiness` échoue comme attendu en `production_not_ready`
 - `npm run agent:tasks` échoue sans env Supabase avec un message explicite.
 - Import manager Agents SDK : 13 tools dont `WebSearchTool` et 8 tools métier.
-- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 21 tests
+- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 22 tests
 - Supabase interne : migration `bm_scout_structured_insights_email_confidence_steps` appliquée.
 
 ## Décision

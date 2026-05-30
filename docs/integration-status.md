@@ -32,6 +32,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - QC TS : DNC déterministe et Observé relié à une preuve.
 - Worker offline : DNC interdit en shortlist.
 - Worker réel : provider `auto` avec seeds, OpenAI `web_search` ou fallback web public, plus `WebSearchTool` hébergé OpenAI et 8 tools métier Agents SDK.
+- `search_jobs` n'est plus décoratif : le provider web cherche des sources recrutement publiques, les transforme en preuves et les trace dans `run_steps`.
 - Mémoire feedback TS : rejet lead, pénalité secteur, bonus angle validé, régénération anti-générique.
 - Worker Pydantic : contrat Observé/Inféré/Incertain, email confidence, run steps.
 - Migration Supabase `20260530214847_bm_scout_structured_insights_email_confidence_steps.sql` appliquée au projet interne.
@@ -42,7 +43,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - `quality:runs` reste un harnais fixture.
 - `demoSnapshot()` reste le fallback sans env Supabase serveur.
 - Le worker réel peut découvrir des candidats sans seeds via OpenAI `web_search` ou fallback web public, mais ce n'est pas encore prouvé à volume PRD ni enrichi par SerpAPI.
-- Les providers `search_web`, `fetch_company_site`, `search_jobs`, `find_public_emails`, `dedupe_company` existent, mais `search_jobs` reste minimal et la robustesse search dépend encore des sources publiques.
+- Les providers `search_web`, `fetch_company_site`, `search_jobs`, `find_public_emails`, `dedupe_company` existent ; `search_jobs` reste minimal et la robustesse search dépend encore des sources publiques.
 - Les volumes 15 Core / 100 Exploration sont paramétrés mais non prouvés en run réel.
 - Le feedback influence le moteur local et les tests, mais il n'est pas encore prouvé sur un run réel Supabase à volume.
 
@@ -64,7 +65,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - `npm run build` : pass.
 - `npm run quality:runs` : pass fixture, décision produit `production_not_ready`.
 - `npm run quality:readiness` : fail attendu, décision produit `production_not_ready`.
-- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 21 tests pass.
+- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 22 tests pass.
 - Import Agents SDK manager : 13 tools disponibles, dont `WebSearchTool` et 8 tools métier provider.
 - `npm run agent:schedule` : pass, 6 routines planifiées.
 - `npm run agent:tasks` sans env serveur : fail attendu avec message env Supabase requis.

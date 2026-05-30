@@ -11,6 +11,7 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 - Console Next.js centrée sur la prochaine décision Romu.
 - Schéma Supabase pour runs, leads, preuves, messages, feedbacks, outcomes, DNC, run steps, tasks et action events.
 - Worker Python OpenAI Agents SDK avec `Runner.run`, `trace`, agents spécialisés et outputs Pydantic.
+- Recherche métier provider : découverte web, fetch site, extraction signaux, job search public, emails publics, déduplication et scoring.
 - Scheduler local reproductible qui crée les routines Core, Exploration, Daily Brief, Learning, DNC check et followup review.
 - Runner de queue `scout_agent_tasks` qui passe les tâches `queued -> running -> completed/blocked/failed`.
 - Workflow GitHub Actions `.github/workflows/bm-scout-agent-tasks.yml` pour cron/dispatch, à activer avec secrets.
@@ -24,7 +25,7 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 
 - Cron GitHub Actions versionné, mais pas encore prouvé par un run CI avec secrets.
 - Pas de preuve volume 15 Core / 100 Exploration en run réel.
-- Recherche marché réelle encore limitée : le worker peut utiliser OpenAI `web_search` ou un fallback web public, mais les volumes PRD et la qualité des sources restent à prouver en run réel.
+- Recherche marché réelle encore limitée : le worker peut utiliser OpenAI `web_search` ou un fallback web public avec job search minimal, mais les volumes PRD et la qualité des sources restent à prouver en run réel.
 - Feedback loop prouvée localement, pas encore validée sur un run réel Supabase à volume.
 - `quality:readiness` échoue volontairement tant que ces preuves ne sont pas là.
 - RLS/auth restent internes et à durcir avant production.

@@ -130,6 +130,10 @@ class ConfiguredWebResearchProvider:
             signals = self.extract_company_signals(page)
             self.record_step("extract_company_signals", {"company": seed.company, "signal_count": len(signals), "signals": signals[:3]})
             domain = normalized_domain(seed.website)
+            job_results = self.search_jobs(seed.company, domain, seed.region)
+            self.record_step("search_jobs", {"company": seed.company, "domain": domain, "job_count": len(job_results), "urls": [result.url for result in job_results[:3]]})
+            job_evidence = job_results_to_evidence(job_results)
+            signals = unique_items([*signals, *job_results_to_signals(job_results)])
             emails = self.find_public_emails(seed.company, domain, [page])
             self.record_step("find_public_emails", {"company": seed.company, "domain": domain, "email_count": len(emails)})
             evidence = self.save_evidence(
@@ -141,6 +145,7 @@ class ConfiguredWebResearchProvider:
                         reliability="medium",
                     )
                 ]
+                + job_evidence
             )
             self.record_step("save_evidence", {"company": seed.company, "evidence_count": len(evidence)})
             score = self.score_candidate(seed, evidence, feedback_notes or [])
@@ -296,6 +301,22 @@ class OpenWebResearchProvider(ConfiguredWebResearchProvider):
             return []
         return parse_duckduckgo_lite_results(body, limit)
 
+    def search_jobs(self, company_name: str, domain: str, region: str) -> list[SearchResult]:
+        results: list[SearchResult] = []
+        seen: set[str] = set()
+        for query in job_search_queries(company_name, domain, region):
+            for result in self.search_web(query, region, 8):
+                if not is_candidate_url(result.url) or not is_job_result(result) or not is_company_related_result(result, company_name, domain):
+                    continue
+                key = normalized_url(result.url)
+                if key in seen:
+                    continue
+                seen.add(key)
+                results.append(result)
+                if len(results) >= 3:
+                    return results
+        return results
+
 
 class OpenAIWebResearchProvider(OpenWebResearchProvider):
     @classmethod
@@ -389,7 +410,16 @@ def parse_company_seeds(value: str) -> list[CompanySeed]:
         return []
     if value.strip().startswith("["):
         payload = json.loads(value)
-        return [CompanySeed(company=item["company"], website=item["website"], segment=item.get("segment", "M&A / finance ops"), region=item.get("region", "fr")) for item in payload]
+        return [
+            CompanySeed(
+                company=item["company"],
+                website=item["website"],
+                segment=item.get("segment", "M&A / finance ops"),
+                region=item.get("region", "fr"),
+                source_url=item.get("source_url"),
+            )
+            for item in payload
+        ]
     seeds = []
     for item in value.split(";"):
         parts = [part.strip() for part in item.split("|")]
@@ -531,9 +561,76 @@ def is_candidate_url(url: str) -> bool:
         return False
     domain = parsed.netloc.lower()
     path = parsed.path.lower()
-    blocked_domains = ("linkedin.com", "facebook.com", "youtube.com", "wikipedia.org")
-    blocked_paths = ("/blog", "/news", "/actualite", "/classement", "/jobs", "/recrutement")
+    blocked_domains = ("linkedin.com", "facebook.com", "youtube.com", "wikipedia.org", "duckduckgo.com", "bing.com", "google.com")
+    blocked_paths = ("/blog", "/news", "/actualite", "/classement")
     return not any(blocked in domain for blocked in blocked_domains) and not any(blocked in path for blocked in blocked_paths)
+
+
+def job_search_queries(company_name: str, domain: str, region: str) -> list[str]:
+    scoped_query = f"site:{domain} recrutement OR careers OR jobs" if domain else f'"{company_name}" recrutement careers jobs'
+    return [
+        scoped_query,
+        f'"{company_name}" recrutement finance operations reporting {region}',
+        f'"{company_name}" careers transaction services operations {region}',
+    ]
+
+
+def is_job_result(result: SearchResult) -> bool:
+    text = f"{result.title} {result.url} {result.snippet}".lower()
+    job_terms = (
+        "career",
+        "careers",
+        "job",
+        "jobs",
+        "emploi",
+        "offre d'emploi",
+        "offres d'emploi",
+        "recrutement",
+        "recrute",
+        "hiring",
+        "talent acquisition",
+    )
+    return any(term in text for term in job_terms)
+
+
+def is_company_related_result(result: SearchResult, company_name: str, domain: str) -> bool:
+    result_domain = normalized_domain(result.url)
+    if domain and (result_domain == domain or result_domain.endswith(f".{domain}")):
+        return True
+    text = f"{result.title} {result.url} {result.snippet}".lower()
+    tokens = [token for token in re.split(r"[^a-z0-9]+", company_name.lower()) if len(token) >= 3]
+    return bool(tokens) and any(token in text for token in tokens)
+
+
+def job_results_to_evidence(results: list[SearchResult]) -> list[Evidence]:
+    return [
+        Evidence(
+            label="Recrutement public",
+            url=result.url,
+            observed_fact=f"Source recrutement publique détectée : {result.snippet or result.title}",
+            reliability="medium",
+        )
+        for result in results[:2]
+    ]
+
+
+def job_results_to_signals(results: list[SearchResult]) -> list[str]:
+    return [
+        "Une source de recrutement publique suggère des besoins opérationnels ou de coordination à confirmer."
+        for _result in results[:1]
+    ]
+
+
+def unique_items(items: list[str]) -> list[str]:
+    seen: set[str] = set()
+    values: list[str] = []
+    for item in items:
+        key = item.strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        values.append(item)
+    return values
 
 
 def seed_from_search_result(result: SearchResult, query: str) -> CompanySeed | None:
@@ -569,6 +666,11 @@ def infer_segment(title: str, url: str, query: str) -> str:
 def origin_from_url(url: str) -> str:
     parsed = urlparse(url)
     return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def normalized_url(url: str) -> str:
+    parsed = urlparse(url)
+    return f"{parsed.scheme}://{parsed.netloc.lower()}{parsed.path.rstrip('/')}"
 
 
 def to_scout_lead(

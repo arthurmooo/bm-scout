@@ -13,7 +13,7 @@ Verdict courant : `production_not_ready`.
 | Proactivité réelle | Partiel | `scout_agent_tasks` appliqué Supabase, scheduler local, runner queue, cron GitHub Actions versionné mais non prouvé |
 | 15 leads Core / semaine | Non prouvé | Objectif paramétré, pas de run réel à volume |
 | 100 comptes Exploration scannés | Non prouvé | Objectif paramétré, pas de run réel à volume |
-| Vraie recherche marché | Partiel | Provider OpenAI `web_search` + fallback web public + tools métier, pas encore prouvé à volume |
+| Vraie recherche marché | Partiel | Provider OpenAI `web_search` + fallback web public + job search minimal + tools métier, pas encore prouvé à volume |
 | Fiches courtes/profondes | Partiel | Modèle et fixtures, pas encore toutes issues providers réels |
 | Observé / Inféré / Incertain | Couvert en socle | Types TS, worker Pydantic, QC Observé/evidence, colonne `structured_insights` Supabase |
 | Messages personnalisés | Partiel | QC fixture, pas de preuve provider réel à volume |
