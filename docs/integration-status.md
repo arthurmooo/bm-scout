@@ -90,6 +90,7 @@ Valide :
 - `npm run verify:supabase` : bloque correctement si l'env serveur manque ;
 - `npm run worker:offline` : CLI offline OK ;
 - import Agents SDK : manager cree avec 4 tools et 1 handoff QC.
+- Navigateur : smoke local `http://localhost:3020` OK en mode demo fallback, desktop/mobile captures, actions primaires visibles, aucun warning/error console.
 - Supabase : 13 tables `scout_*`, RLS activee partout ;
 - Supabase : RPC `scout_persist_mission_output(jsonb)` appliquee ;
 - Supabase : smoke RPC `rpc-smoke-atomic-20260530` -> 1 run succeeded, 1 company, 1 preuve, 3 messages, 1 QC, 1 lesson ;
@@ -108,7 +109,7 @@ A relancer avant livraison :
 - `npm run lint` ;
 - `npm run build` ;
 - `npm run quality:readiness` doit echouer tant que la V1 reste `not_ready` ;
-- smoke browser desktop/mobile ;
+- smoke browser console branchee Supabase serveur ;
 - worker `--persist` avec Supabase depuis la CLI quand `SUPABASE_SERVICE_ROLE_KEY` est disponible ;
 - console Next.js lue réellement via Supabase avec variable serveur ;
 - audit thermo-nuclear final : `docs/thermo-nuclear-final-audit.md`.
