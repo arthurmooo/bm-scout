@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .fixtures import offline_output, seed_feedbacks
 from .memory import SupabaseConfig, SupabaseMemory
-from .providers import build_candidate_batch
+from .providers import build_candidate_batch_with_steps
 from .schemas import FeedbackEvent, MissionOutput, RunStep, ScoutMode
 
 
@@ -63,11 +63,12 @@ async def _run_with_agents_sdk(mode: ScoutMode, *, include_weak: bool, feedbacks
 
     model = os.getenv("OPENAI_MODEL", "gpt-5.5")
     manager = build_manager_agent(model)
-    candidates = build_candidate_batch(
+    candidate_batch = build_candidate_batch_with_steps(
         mode,
         include_weak=include_weak,
         feedback_notes=[feedback.note for feedback in feedbacks],
     )
+    candidates = candidate_batch.leads
     provider_step = RunStep(
         agent_name="bm_scout_provider",
         step="candidate_batch",
@@ -109,5 +110,5 @@ Contraintes de sortie :
         result = await Runner.run(manager, prompt, max_turns=8)
     final_output = result.final_output
     output = final_output if isinstance(final_output, MissionOutput) else MissionOutput.model_validate(final_output)
-    output.run_steps = [provider_step, *output.run_steps]
+    output.run_steps = [provider_step, *candidate_batch.run_steps, *output.run_steps]
     return output

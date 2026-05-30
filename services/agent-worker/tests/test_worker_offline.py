@@ -112,6 +112,14 @@ def test_configured_provider_builds_candidates_from_public_seed() -> None:
     assert leads[0].quality_gates[0].code == "provider_real"
     assert leads[0].insights is not None
     assert leads[0].insights.observed[0].evidence_id == "https://example.com"
+    assert {step.step for step in provider.run_steps} >= {
+        "dedupe_company",
+        "fetch_company_site",
+        "extract_company_signals",
+        "find_public_emails",
+        "save_evidence",
+        "score_candidate",
+    }
 
 
 def test_public_email_is_marked_to_verify_with_source() -> None:

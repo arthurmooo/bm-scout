@@ -11,7 +11,7 @@ from typing import Protocol
 from urllib.parse import urlparse
 
 from .fixtures import candidate_leads
-from .schemas import Evidence, OutreachPack, Persona, QualityGate, ScoutLead, ScoutMode, StructuredInsights
+from .schemas import Evidence, OutreachPack, Persona, QualityGate, RunStep, ScoutLead, ScoutMode, StructuredInsights
 
 
 @dataclass(frozen=True)
@@ -27,6 +27,12 @@ class SearchResult:
     title: str
     url: str
     snippet: str
+
+
+@dataclass(frozen=True)
+class CandidateBatch:
+    leads: list[ScoutLead]
+    run_steps: list[RunStep]
 
 
 class ResearchProvider(Protocol):
@@ -95,6 +101,7 @@ class ConfiguredWebResearchProvider:
                 "BM_SCOUT_REAL_SEEDS requis en mode réel. Utilise BM_SCOUT_PROVIDER=demo uniquement pour une démo explicite."
             )
         self.seeds = seeds
+        self.run_steps: list[RunStep] = []
 
     @classmethod
     def from_env(cls) -> "ConfiguredWebResearchProvider":
@@ -103,15 +110,24 @@ class ConfiguredWebResearchProvider:
     def build_candidates(self, mode: ScoutMode, include_weak: bool = False, feedback_notes: list[str] | None = None) -> list[ScoutLead]:
         candidates: list[ScoutLead] = []
         seen_keys: set[str] = set()
+        self.run_steps = []
         for seed in self.seeds:
             dedupe_key = self.dedupe_company(seed)
             if dedupe_key in seen_keys:
+                self.record_step(
+                    "dedupe_company",
+                    {"company": seed.company, "website": seed.website, "dedupe_key": dedupe_key, "decision": "skipped_duplicate"},
+                )
                 continue
             seen_keys.add(dedupe_key)
+            self.record_step("dedupe_company", {"company": seed.company, "website": seed.website, "dedupe_key": dedupe_key, "decision": "kept"})
             page = self.fetch_company_site(seed.website)
+            self.record_step("fetch_company_site", {"company": seed.company, "url": seed.website, "chars": len(page), "failed": page.startswith("Fetch failed")})
             signals = self.extract_company_signals(page)
+            self.record_step("extract_company_signals", {"company": seed.company, "signal_count": len(signals), "signals": signals[:3]})
             domain = normalized_domain(seed.website)
             emails = self.find_public_emails(seed.company, domain, [page])
+            self.record_step("find_public_emails", {"company": seed.company, "domain": domain, "email_count": len(emails)})
             evidence = self.save_evidence(
                 [
                     Evidence(
@@ -122,9 +138,21 @@ class ConfiguredWebResearchProvider:
                     )
                 ]
             )
+            self.record_step("save_evidence", {"company": seed.company, "evidence_count": len(evidence)})
             score = self.score_candidate(seed, evidence, feedback_notes or [])
+            self.record_step("score_candidate", {"company": seed.company, "score": score, "feedback_notes_count": len(feedback_notes or [])})
             candidates.append(to_scout_lead(seed, mode, score, signals, evidence, emails))
         return candidates
+
+    def record_step(self, step: str, payload: dict[str, object]) -> None:
+        self.run_steps.append(
+            RunStep(
+                agent_name="bm_scout_provider",
+                step=step,
+                event_type="tool_call",
+                payload=payload,
+            )
+        )
 
     def search_web(self, query: str, region: str, limit: int) -> list[SearchResult]:
         terms = query.lower().split()
@@ -206,11 +234,32 @@ def build_candidate_batch(
     include_weak: bool,
     feedback_notes: list[str],
 ) -> list[ScoutLead]:
+    return build_candidate_batch_with_steps(mode, include_weak=include_weak, feedback_notes=feedback_notes).leads
+
+
+def build_candidate_batch_with_steps(
+    mode: ScoutMode,
+    *,
+    include_weak: bool,
+    feedback_notes: list[str],
+) -> CandidateBatch:
     provider = provider_from_env()
     if isinstance(provider, DemoFixtureProvider):
-        return provider.build_candidates(mode, include_weak=include_weak)
+        leads = provider.build_candidates(mode, include_weak=include_weak)
+        return CandidateBatch(
+            leads=leads,
+            run_steps=[
+                RunStep(
+                    agent_name="bm_scout_provider",
+                    step="demo_fixture_batch",
+                    event_type="fixture_mode",
+                    payload={"mode": mode, "candidate_count": len(leads)},
+                )
+            ],
+        )
     if isinstance(provider, ConfiguredWebResearchProvider):
-        return provider.build_candidates(mode, include_weak=include_weak, feedback_notes=feedback_notes)
+        leads = provider.build_candidates(mode, include_weak=include_weak, feedback_notes=feedback_notes)
+        return CandidateBatch(leads=leads, run_steps=provider.run_steps)
     raise RuntimeError("Provider BM Scout inconnu.")
 
 

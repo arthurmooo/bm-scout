@@ -23,6 +23,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 - Module scheduler TS : `src/domain/scheduler.ts`.
 - Runner de queue : `src/server/agent-task-runner.ts` et `scripts/run-agent-task-queue.ts`.
+- Cron GitHub Actions versionné : `.github/workflows/bm-scout-agent-tasks.yml`.
 - Tests scheduler avec routines Core, Exploration, Daily Brief, Learning, DNC, followup.
 - Migration Supabase `20260530210927_agent_tasks_and_actions.sql`.
 - API `POST /api/scout/actions`.
@@ -76,4 +77,4 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 2. Remplacer le provider configuré par une vraie source search web/jobs scalable.
 3. Prouver les volumes PRD 15 Core / 100 Exploration avec artefacts réels.
 4. Prouver la feedback loop sur scoring et recommandations dans un run réel Supabase.
-5. Brancher le runner à Vercel Cron, GitHub Actions ou Supabase Cron.
+5. Exécuter le cron GitHub Actions avec secrets et vérifier les transitions `queued -> completed`.

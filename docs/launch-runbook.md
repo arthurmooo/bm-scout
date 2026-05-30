@@ -96,6 +96,23 @@ npm run agent:tasks:real
 
 Limite actuelle : le runner est reproductible, mais le cron production reste à brancher. `agent:tasks:real` lance le worker OpenAI Agents SDK et requiert `OPENAI_API_KEY`.
 
+## Cron GitHub Actions
+
+Le workflow `.github/workflows/bm-scout-agent-tasks.yml` planifie `agent:schedule:run` puis `agent:tasks:real` les jours ouvrés à 07:15 UTC, avec déclenchement manuel possible en mode `real` ou `offline`.
+
+Secrets requis :
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `OPENAI_API_KEY`
+
+Variables recommandées :
+
+- `OPENAI_MODEL`
+- `BM_SCOUT_REAL_SEEDS`
+
+Le workflow est versionné, mais BM Scout reste `production_not_ready` tant qu'aucune exécution GitHub Actions réelle avec secrets n'a prouvé les transitions `queued -> completed`.
+
 ## Lancer le worker
 
 Mode offline :
@@ -154,7 +171,7 @@ BM Scout peut etre marque au mieux `pilot_candidate` uniquement si :
 - la CLI `--persist` a cree un run lisible dans Supabase ;
 - un run reel Agents SDK post-branchement feedback Supabase a produit 3 a 5 apprentissages exploitables ;
 - les feedbacks/outcomes Supabase changent réellement le scoring, l'angle ou la shortlist suivante ;
-- les routines `scout_agent_tasks` sont consommées par un runner reproductible et par un cron ;
+- les routines `scout_agent_tasks` sont consommées par un runner reproductible et par un cron GitHub Actions réellement vert ;
 - les providers réels ne se limitent plus aux seeds configurées ;
 - `quality:readiness` passe ;
 - l'audit thermo-nuclear ne contient plus de P1 ouvert.

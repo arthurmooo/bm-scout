@@ -10,9 +10,9 @@ Verdict : `production_not_ready`.
    - Risque : le produit ressemble encore à une démo agentique bien formée.
    - Remède : remplacer le provider configuré par une vraie source search web/jobs scalable et prouver les volumes PRD.
 
-2. Le runner consomme une queue, mais aucun cron ne le déclenche encore.
-   - Risque : proactivité exécutable, mais pas encore autonome en production.
-   - Remède : brancher `agent:tasks:real` à Vercel Cron, GitHub Actions ou Supabase Cron et vérifier les transitions sur le projet interne.
+2. Le runner consomme une queue et un cron GitHub Actions est versionné, mais aucune exécution CI avec secrets n'est encore prouvée.
+   - Risque : proactivité configurable, mais pas encore démontrée en production.
+   - Remède : exécuter le workflow avec secrets et vérifier les transitions sur le projet interne.
 
 3. La feedback loop causale existe localement, mais elle n'est pas encore prouvée en run réel Supabase à volume.
    - Risque : le moteur local change bien le scoring/message, mais le pilote réel peut rester sous-exercé.
@@ -30,6 +30,8 @@ Verdict : `production_not_ready`.
 - La mémoire feedback locale pénalise les secteurs faibles, bloque les leads rejetés, renforce les angles validés et régénère les messages trop génériques.
 - Observé/Inféré/Incertain et email confidence sont maintenant portés par TS, worker Pydantic, DB et RPC.
 - Le RPC écrit des run steps minimaux (`mission_start`, `lead_persisted`, steps worker, `mission_complete`).
+- Le provider réel ajoute des run steps outil-par-outil pour déduplication, fetch, extraction, email discovery, evidence save et scoring.
+- Un workflow GitHub Actions cron/dispatch existe pour consommer `scout_agent_tasks`.
 - Les actions Romu passent par une route serveur et une table d'événements.
 - Le DNC est un gate déterministe côté TS, worker offline et DB.
 - `quality:readiness` ne peut plus transformer des fixtures en claim de readiness.
@@ -50,4 +52,4 @@ Verdict : `production_not_ready`.
 
 ## Décision
 
-Ne pas approuver comme V1 prête. La branche est acceptable comme étape de correction P0/P1, mais doit encore brancher le cron, les providers de recherche réelle autonome, les volumes PRD, les run steps outil par outil et la preuve feedback loop sur données Supabase réelles.
+Ne pas approuver comme V1 prête. La branche est acceptable comme étape de correction P0/P1, mais doit encore prouver le cron GitHub Actions avec secrets, les providers de recherche réelle autonome, les volumes PRD et la feedback loop sur données Supabase réelles.

@@ -10,7 +10,7 @@ Verdict courant : `production_not_ready`.
 | --- | --- | --- |
 | Console interne orientée décision Romu | Partiel | `src/ui/ScoutDashboard.tsx`, build OK |
 | Séparation Core / Exploration | Partiel | `ScoutMode`, fixtures, workflows locaux |
-| Proactivité réelle | Partiel | `scout_agent_tasks` appliqué Supabase, scheduler local, runner queue, pas de cron branché |
+| Proactivité réelle | Partiel | `scout_agent_tasks` appliqué Supabase, scheduler local, runner queue, cron GitHub Actions versionné mais non prouvé |
 | 15 leads Core / semaine | Non prouvé | Objectif paramétré, pas de run réel à volume |
 | 100 comptes Exploration scannés | Non prouvé | Objectif paramétré, pas de run réel à volume |
 | Vraie recherche marché | Partiel | Provider configuré + tools métier, pas encore search autonome à volume |
@@ -27,7 +27,7 @@ Verdict courant : `production_not_ready`.
 
 ## P0 corrigés partiellement
 
-- P0.1 Proactivité : table tasks, statuts, types de tâches, scheduler local, lancement manuel et runner de queue posés.
+- P0.1 Proactivité : table tasks, statuts, types de tâches, scheduler local, lancement manuel, runner de queue et workflow cron GitHub Actions posés.
 - P0.4 Do-not-contact : gate déterministe ajouté côté TS, worker offline et DB.
 - P0.5 Feedback loop : mémoire locale causale ajoutée pour rejet, pénalité secteur, bonus angle et anti-générique.
 - P0.6 Actions UI : actions principales branchées à une API serveur et tracées.
@@ -35,7 +35,7 @@ Verdict courant : `production_not_ready`.
 
 ## P0 encore ouverts
 
-- P0.1 : runner non encore branché à un cron production ; exécution `agent:tasks` avec service role à tester.
+- P0.1 : cron GitHub Actions non encore exécuté avec secrets ; transitions production à tester.
 - P0.2 Workflows Core/Exploration réels : les volumes PRD ne sont pas prouvés.
 - P0.3 Suppression de la dépendance fixtures : provider réel configuré branché, search web autonome à volume restant.
 - P0.5 Feedback loop réelle : impact causal prouvé localement, à prouver avec feedbacks/outcomes Supabase réels.

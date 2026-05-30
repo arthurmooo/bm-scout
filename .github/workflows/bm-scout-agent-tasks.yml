@@ -1,0 +1,47 @@
+name: BM Scout agent tasks
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Queue mode"
+        required: true
+        default: "real"
+        type: choice
+        options:
+          - real
+          - offline
+  schedule:
+    - cron: "15 7 * * 1-5"
+
+jobs:
+  consume-agent-tasks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.5' }}
+      BM_SCOUT_REAL_SEEDS: ${{ vars.BM_SCOUT_REAL_SEEDS }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - run: python -m venv .venv
+      - run: .venv/bin/python -m pip install -e "services/agent-worker[dev]"
+      - name: Enqueue scheduled routines
+        run: npm run agent:schedule:run
+      - name: Consume task queue
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.mode }}" = "offline" ]; then
+            npm run agent:tasks:offline
+          else
+            npm run agent:tasks:real
+          fi
