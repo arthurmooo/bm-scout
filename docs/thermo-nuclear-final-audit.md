@@ -33,6 +33,7 @@ Verdict : `production_not_ready`.
 - Le RPC écrit des run steps minimaux (`mission_start`, `lead_persisted`, steps worker, `mission_complete`).
 - Le provider réel ajoute des run steps outil-par-outil pour déduplication, fetch, extraction, email discovery, evidence save et scoring.
 - Les function tools Agents SDK enregistrent leurs entrées/sorties compactées pendant `Runner.run`.
+- Les scripts `worker:real:*` et le runner de queue écrivent maintenant les artefacts `latest-real-*.json` attendus par `quality:readiness`.
 - Un workflow GitHub Actions cron/dispatch existe pour consommer `scout_agent_tasks`.
 - Les actions Romu passent par une route serveur et une table d'événements.
 - Le DNC est un gate déterministe côté TS, worker offline et DB.
@@ -47,6 +48,7 @@ Verdict : `production_not_ready`.
 - `npm run build`
 - `npm run quality:runs`
 - `npm run quality:readiness` échoue comme attendu en `production_not_ready`
+- `npm exec tsx -- scripts/run-agent-worker-evidence.ts --offline --mode=core` : pass, harnais d'artefact vérifié sans Supabase.
 - `npm run agent:tasks` échoue sans env Supabase avec un message explicite.
 - Import manager Agents SDK : 13 tools dont `WebSearchTool` et 8 tools métier.
 - `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 28 tests

@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
 import type { AgentTaskStatus, AgentTaskType, RoutineConfig } from "../domain/types";
@@ -163,7 +164,24 @@ export function createSupabaseAgentTaskRepository(): AgentTaskRepository | null 
   };
 }
 
-export function createCliAgentTaskExecutor(options: { real: boolean; persist?: boolean; pythonPath?: string } = { real: false }): AgentTaskExecutor {
+export interface WorkerCliOptions {
+  real: boolean;
+  persist?: boolean;
+  pythonPath?: string;
+  artifactsDir?: string;
+  evidenceDir?: string;
+  includeWeak?: boolean;
+}
+
+export interface WorkerCliEvidenceResult {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+  parsed: WorkerCliOutput | null;
+  evidenceFile?: string;
+}
+
+export function createCliAgentTaskExecutor(options: WorkerCliOptions = { real: false }): AgentTaskExecutor {
   return {
     async execute(task) {
       if (task.type === "weekly_core_research") {
@@ -214,11 +232,12 @@ async function executeTask(
   }
 }
 
-async function runWorkerCli(
+export async function runWorkerCliForEvidence(
   mode: "core" | "exploration",
-  options: { real: boolean; persist?: boolean; pythonPath?: string }
-): Promise<AgentTaskExecution> {
+  options: WorkerCliOptions
+): Promise<WorkerCliEvidenceResult> {
   const pythonPath = options.pythonPath ?? defaultPythonPath();
+  const artifactsDir = options.artifactsDir ?? "artifacts/agent-worker-real";
   const args = [
     "-m",
     "bm_scout_worker.cli",
@@ -226,11 +245,24 @@ async function runWorkerCli(
     mode,
     options.real ? "--real" : "--offline",
     "--artifacts-dir",
-    "artifacts/agent-worker-real"
+    artifactsDir
   ];
+  if (options.includeWeak) args.push("--include-weak");
   if (options.persist !== false) args.push("--persist");
 
   const result = await runProcess(pythonPath, args);
+  const parsed = parseWorkerOutput(result.stdout);
+  const evidenceFile = parsed ? await writeWorkerEvidence(mode, options, parsed) : undefined;
+
+  return {
+    ...result,
+    parsed,
+    evidenceFile
+  };
+}
+
+async function runWorkerCli(mode: "core" | "exploration", options: WorkerCliOptions): Promise<AgentTaskExecution> {
+  const result = await runWorkerCliForEvidence(mode, options);
   if (result.code !== 0) {
     return {
       status: "failed",
@@ -239,8 +271,7 @@ async function runWorkerCli(
     };
   }
 
-  const parsed = parseWorkerOutput(result.stdout);
-  if (!parsed || parsed.verdict !== "pass") {
+  if (!result.parsed || result.parsed.verdict !== "pass") {
     return {
       status: "failed",
       summary: `Worker ${mode} sans verdict pass.`,
@@ -250,9 +281,28 @@ async function runWorkerCli(
 
   return {
     status: "completed",
-    summary: `Worker ${mode} terminé : ${parsed.output.kept_count} retenus, ${parsed.output.rejected_count} rejetés.`,
-    traceId: parsed.output.trace_id
+    summary: `Worker ${mode} terminé : ${result.parsed.output.kept_count} retenus, ${result.parsed.output.rejected_count} rejetés.`,
+    traceId: result.parsed.output.trace_id
   };
+}
+
+export function workerEvidenceFileName(mode: "core" | "exploration", options: Pick<WorkerCliOptions, "real" | "persist">): string {
+  if (!options.real && options.persist !== false) return "latest-cli-persist-offline.json";
+  if (options.real && options.persist !== false) return `latest-real-${mode}-supabase-persist.json`;
+  if (options.real) return `latest-real-${mode}.json`;
+  return `latest-offline-${mode}.json`;
+}
+
+async function writeWorkerEvidence(
+  mode: "core" | "exploration",
+  options: WorkerCliOptions,
+  parsed: WorkerCliOutput
+): Promise<string> {
+  const evidenceDir = options.evidenceDir ?? join(process.cwd(), "artifacts", "agent-worker-real");
+  const fileName = workerEvidenceFileName(mode, options);
+  await mkdir(evidenceDir, { recursive: true });
+  await writeFile(join(evidenceDir, fileName), `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
+  return fileName;
 }
 
 function defaultPythonPath(): string {
@@ -294,9 +344,13 @@ async function checked<T extends { error: { message: string } | null }>(request:
 
 interface WorkerCliOutput {
   verdict: "pass" | "fail";
+  blockers?: string[];
   output: {
     trace_id: string;
+    mode?: "core" | "exploration";
     kept_count: number;
     rejected_count: number;
+    final_decision?: "ready" | "not_ready";
+    lessons?: { lesson?: string; recommendation?: string; source?: string }[];
   };
 }

@@ -33,6 +33,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Worker offline : DNC interdit en shortlist.
 - Worker réel : provider `auto` avec seeds, OpenAI `web_search` ou fallback web public, plus `WebSearchTool` hébergé OpenAI et 8 tools métier Agents SDK.
 - `search_jobs` n'est plus décoratif : le provider web cherche des sources recrutement publiques, les transforme en preuves et les trace dans `run_steps`.
+- Scripts `worker:real:*` : exécution reproductible Core/Exploration réelle, avec artefacts `latest-real-*.json` consommés par `quality:readiness`.
 - Mémoire feedback TS : rejet lead, pénalité secteur, bonus angle validé, régénération anti-générique.
 - Mémoire feedback worker : chargement feedbacks/outcomes Supabase avec contexte entreprise/segment/site, blocage DNC/rejets, pénalités segments faibles, bonus angles validés et régénération anti-générique dans le provider Python.
 - Worker Pydantic : contrat Observé/Inféré/Incertain, email confidence, run steps.
@@ -53,6 +54,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 - Scheduler dry-run reproductible : `npm run agent:schedule`.
 - Runner queue reproductible : `npm run agent:tasks:offline` ou `npm run agent:tasks:real` avec env Supabase serveur.
+- Artefacts de run réel reproductibles : `npm run worker:real:core`, `npm run worker:real:exploration`, puis variantes `:persist` avec env Supabase.
 - Actions API persistantes si `NEXT_PUBLIC_SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` existent.
 - DNC bloque côté TS, worker offline et trigger Supabase.
 - Feedback Romu influence le scoring et les messages dans le moteur TS et le worker provider testés.
@@ -61,7 +63,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 ## Vérifications exécutées
 
-- `npm run test` : 18 tests pass.
+- `npm run test` : 19 tests pass.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.
@@ -71,6 +73,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Import Agents SDK manager : 13 tools disponibles, dont `WebSearchTool` et 8 tools métier provider.
 - `npm run agent:schedule` : pass, 6 routines planifiées.
 - `npm run agent:tasks` sans env serveur : fail attendu avec message env Supabase requis.
+- `npm exec tsx -- scripts/run-agent-worker-evidence.ts --offline --mode=core` : pass, artefact `latest-offline-core.json` écrit.
 - Browser local : smoke Playwright OK sur `http://localhost:3030` ; statut `production_not_ready`, actions, Approval Center et DNC visibles ; screenshot locale `artifacts/browser-smoke/playwright-dashboard-production-not-ready.png`.
 - Supabase interne `Interne_Agentic_prospection` : migrations `agent_tasks_and_actions` et `bm_scout_structured_insights_email_confidence_steps` appliquées.
 

@@ -21,7 +21,12 @@
     "verify:supabase": "tsx scripts/verify-supabase-runtime.ts",
     "worker:install": ".venv/bin/python -m pip install -e \"services/agent-worker[dev]\"",
     "worker:test": "cd services/agent-worker && ../../.venv/bin/python -m pytest",
-    "worker:offline": "cd services/agent-worker && ../../.venv/bin/python -m bm_scout_worker.cli --offline --mode core"
+    "worker:offline": "cd services/agent-worker && ../../.venv/bin/python -m bm_scout_worker.cli --offline --mode core",
+    "worker:real:core": "tsx scripts/run-agent-worker-evidence.ts --real --mode=core",
+    "worker:real:exploration": "tsx scripts/run-agent-worker-evidence.ts --real --mode=exploration",
+    "worker:real:core:persist": "tsx scripts/run-agent-worker-evidence.ts --real --mode=core --persist",
+    "worker:real:exploration:persist": "tsx scripts/run-agent-worker-evidence.ts --real --mode=exploration --persist",
+    "worker:persist:offline": "tsx scripts/run-agent-worker-evidence.ts --offline --mode=core --persist"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.87.0",

@@ -130,10 +130,10 @@ npm run worker:offline
 Mode reel sans persistance :
 
 ```bash
-cd services/agent-worker
 export BM_SCOUT_PROVIDER=openai_web
 export BM_SCOUT_SEARCH_QUERIES='["conseil M&A transaction services France","cabinet corporate finance fusion acquisition France"]'
-../../.venv/bin/python -m bm_scout_worker.cli --real --mode core
+npm run worker:real:core
+npm run worker:real:exploration
 ```
 
 Mode reel avec seeds contrôlées :
@@ -149,10 +149,11 @@ export BM_SCOUT_REAL_SEEDS='[{"company":"Cambon Partners","website":"https://www
 Mode reel avec persistance Supabase :
 
 ```bash
-cd services/agent-worker
-../../.venv/bin/python -m bm_scout_worker.cli --real --mode core --persist
+npm run worker:real:core:persist
+npm run worker:real:exploration:persist
 ```
 
+Les scripts `worker:real:*` lancent la CLI Python et écrivent les artefacts de preuve `artifacts/agent-worker-real/latest-real-*.json` lus par `quality:readiness`. Le runner `agent:tasks:real` écrit les mêmes artefacts quand il consomme les routines `scout_agent_tasks`.
 Le worker lit `scout_feedback` et `scout_outcomes` si les variables Supabase serveur sont presentes, avec le contexte `scout_companies(name, segment, website)` quand la relation PostgREST est disponible. La persistance passe par la RPC transactionnelle `scout_persist_mission_output`, qui écrit aussi les insights structurés, l'email confidence, les run steps provider et les tool calls Agents SDK compactés.
 En `BM_SCOUT_PROVIDER=auto`, le worker utilise les seeds si elles existent, sinon OpenAI `web_search` si `OPENAI_API_KEY` est présent, sinon un fallback web public minimal. En `BM_SCOUT_PROVIDER=configured`, l'absence de `BM_SCOUT_REAL_SEEDS` échoue au lieu de retomber sur fixtures. Pour une demo fixture explicite : `BM_SCOUT_PROVIDER=demo`.
 SerpAPI pourra être ajouté ensuite comme nouveau provider derrière le même contrat `search_web`.

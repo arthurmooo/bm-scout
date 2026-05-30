@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentTaskExecution, AgentTaskExecutor, AgentTaskRepository, QueuedAgentTask } from "./agent-task-runner";
-import { processAgentTaskQueue } from "./agent-task-runner";
+import { processAgentTaskQueue, workerEvidenceFileName } from "./agent-task-runner";
 
 describe("agent task runner", () => {
   it("consomme une tache queued et la passe en completed avec le run persiste", async () => {
@@ -56,6 +56,14 @@ describe("agent task runner", () => {
 
     expect(result.ok).toBe(false);
     expect(repo.transitions).toEqual(["running:task-exploration", "failed:task-exploration:worker indisponible"]);
+  });
+
+  it("nomme les artefacts attendus par quality:readiness", () => {
+    expect(workerEvidenceFileName("core", { real: true, persist: false })).toBe("latest-real-core.json");
+    expect(workerEvidenceFileName("exploration", { real: true, persist: true })).toBe(
+      "latest-real-exploration-supabase-persist.json"
+    );
+    expect(workerEvidenceFileName("core", { real: false, persist: true })).toBe("latest-cli-persist-offline.json");
   });
 });
 

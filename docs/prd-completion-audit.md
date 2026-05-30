@@ -21,13 +21,14 @@ Verdict courant : `production_not_ready`.
 | Do-not-contact hard gate | Couvert en socle | QC TS, worker offline, trigger DB, action DNC |
 | Feedback loop influente | Partiel | Effet scoring/message prouvé par tests locaux TS + worker provider, pas encore par run réel Supabase à volume |
 | Actions UI fonctionnelles | Partiel | API actions + traces, centre à valider, smoke Browser à relancer après cette passe |
-| Run steps/tool calls auditables | Partiel | RPC écrit run start/lead saved/worker steps ; provider + function tools Agents SDK poussent des étapes compactées |
+| Run steps/tool calls auditables | Partiel | RPC écrit run start/lead saved/worker steps ; provider + function tools Agents SDK poussent des étapes compactées ; scripts `worker:real:*` produisent les artefacts readiness |
 | Supabase mémoire | Partiel | Schéma/RPC/actions, env runtime non vérifiée ici |
 | Documentation honnête | Couvert dans cette passe | README + docs en `production_not_ready` |
 
 ## P0 corrigés partiellement
 
 - P0.1 Proactivité : table tasks, statuts, types de tâches, scheduler local, lancement manuel, runner de queue et workflow cron GitHub Actions posés.
+- P0.2/P0.3 Preuve runs réels : harnais `worker:real:*` ajouté pour produire les artefacts `latest-real-*.json` sans passer par fixtures.
 - P0.4 Do-not-contact : gate déterministe ajouté côté TS, worker offline et DB.
 - P0.5 Feedback loop : mémoire locale causale ajoutée côté TS et worker provider pour rejet, pénalité secteur, bonus angle, anti-générique et DNC.
 - P0.6 Actions UI : actions principales branchées à une API serveur et tracées.

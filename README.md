@@ -81,6 +81,10 @@ npm run worker:test
 ```bash
 npm run worker:install
 npm run worker:offline
+npm run worker:real:core
+npm run worker:real:exploration
+npm run worker:real:core:persist
+npm run worker:real:exploration:persist
 cd services/agent-worker
 ../../.venv/bin/python -m bm_scout_worker.cli --real --mode core
 ../../.venv/bin/python -m bm_scout_worker.cli --real --mode core --persist
@@ -88,6 +92,7 @@ cd services/agent-worker
 
 La persistance `--persist` passe par la RPC Supabase transactionnelle `scout_persist_mission_output`.
 Le chemin réel expose le `WebSearchTool` hébergé OpenAI dans l'orchestration Agents SDK, plus les tools métier `search_web`, `fetch_company_site`, `extract_company_signals`, `search_jobs`, `find_public_emails`, `dedupe_company`, `score_candidate`, `save_evidence`.
+Les scripts `worker:real:*` écrivent les artefacts `artifacts/agent-worker-real/latest-real-*.json` consommés par `quality:readiness`.
 SerpAPI pourra remplacer ou compléter `openai_web` plus tard sans changer le contrat métier du provider. OpenAI `web_search` est le provider réel par défaut utile en V1 ; SerpAPI reste pertinent si Arthur veut une SERP plus brute, contrôlable et comparable.
 
 ## Documentation
