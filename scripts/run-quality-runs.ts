@@ -5,6 +5,7 @@ import { runScoutMission, seedFeedbacks } from "../src/domain/scout-engine";
 import type { ScoutLead, ScoutRun } from "../src/domain/types";
 
 type RunVerdict = "pass" | "fail";
+type ProductReadiness = "ready" | "not_ready";
 
 interface EvaluatedRun {
   name: string;
@@ -28,16 +29,17 @@ const globalScore = Math.round(
 );
 const fixtureVerdict: RunVerdict = globalBlockers.length === 0 && globalScore >= 85 ? "pass" : "fail";
 const realRunnerEvidence = await loadRealRunnerEvidence();
-const productReadiness = "not_ready";
+const readinessMode = process.argv.includes("--readiness");
 const productBlockers = [
   ...(realRunnerEvidence.length >= 2 && realRunnerEvidence.every((item) => item.verdict === "pass")
     ? []
     : ["Runs OpenAI Agents SDK réels Core et Exploration incomplets."]),
   "Supabase n'est pas encore lue par la console en environnement serveur vérifié.",
-  "La boucle feedback Supabase -> Learning Agent n'est pas encore lue automatiquement par le worker.",
-  "La persistance CLI `--persist` n'a pas encore été vérifiée avec une service role key locale.",
-  "Audit thermo-nuclear final repassé avec blockers structurels ouverts."
+  "La boucle feedback Supabase -> Learning Agent est codée, mais pas encore validée par un run réel avec env Supabase serveur locale.",
+  "La persistance CLI `--persist` utilise maintenant la RPC atomique, mais n'a pas encore été exécutée avec une service role key locale.",
+  "Audit thermo-nuclear final repassé : les blockers structurels code sont corrigés, les preuves runtime serveur restent ouvertes."
 ];
+const productReadiness: ProductReadiness = productBlockers.length === 0 ? "ready" : "not_ready";
 
 const report = renderReport(evaluatedRuns, globalScore, fixtureVerdict, globalBlockers, realRunnerEvidence);
 const artifactsDir = join(process.cwd(), "artifacts", "quality-runs");
@@ -45,11 +47,28 @@ await mkdir(artifactsDir, { recursive: true });
 await writeFile(join(artifactsDir, "latest-report.md"), report, "utf8");
 await writeFile(
   join(artifactsDir, "latest-report.json"),
-  JSON.stringify({ globalScore, fixtureVerdict, productReadiness, productBlockers, realRunnerEvidence, runs: evaluatedRuns }, null, 2),
+  JSON.stringify(
+    {
+      globalScore,
+      fixtureVerdict,
+      productReadiness,
+      productBlockers,
+      realRunnerEvidence,
+      readinessMode,
+      runs: evaluatedRuns
+    },
+    null,
+    2
+  ),
   "utf8"
 );
 
 if (fixtureVerdict === "fail") {
+  console.error(report);
+  process.exit(1);
+}
+
+if (readinessMode && productReadiness !== "ready") {
   console.error(report);
   process.exit(1);
 }
@@ -227,7 +246,8 @@ function renderReport(
     "",
     "- Ce rapport utilise encore les fixtures locales du socle executable.",
     "- Les runners OpenAI Agents SDK Core et Exploration sont verifies, et Supabase stocke des feedbacks/outcomes simules.",
-    "- La boucle feedback Supabase -> Learning Agent doit encore remplacer le payload de feedback simulé du worker.",
+    "- La boucle feedback Supabase -> Learning Agent est branchée dans le worker réel quand l'env Supabase serveur est disponible.",
+    "- La persistance worker passe par la RPC transactionnelle `scout_persist_mission_output`.",
     "- La console doit encore etre verifiee en lecture Supabase avec une cle serveur locale.",
     "- La validation humaine d'Arthur/Romu reste obligatoire sur les messages et la qualite commerciale."
   ];

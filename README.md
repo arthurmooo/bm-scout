@@ -34,6 +34,22 @@ npm run typecheck
 npm run lint
 npm run build
 npm run quality:runs
+npm run quality:readiness
+npm run worker:test
 ```
 
-`quality:runs` exécute les 4 runs obligatoires : Core BM, Exploration, Feedback & Learning, QC négatif. Les sorties sont enregistrées dans `artifacts/quality-runs/latest-report.md`.
+`quality:runs` exécute le harnais fixture des 4 runs obligatoires : Core BM, Exploration, Feedback & Learning, QC négatif. Les sorties sont enregistrées dans `artifacts/quality-runs/latest-report.md`.
+
+`quality:readiness` est volontairement bloquant tant que la V1 reste `not_ready`. Aujourd'hui il échoue encore parce que la console Supabase serveur, la CLI `--persist` avec service role locale et le run réel Learning alimenté par Supabase restent à prouver.
+
+## Worker agentique
+
+```bash
+npm run worker:install
+npm run worker:offline
+cd services/agent-worker
+../../.venv/bin/python -m bm_scout_worker.cli --real --mode core
+../../.venv/bin/python -m bm_scout_worker.cli --real --mode core --persist
+```
+
+Le chemin réel utilise OpenAI Agents SDK avec `Runner.run`, `trace`, agents spécialisés, agents-as-tools, handoff QC, outputs Pydantic et guardrail de qualité. La persistance `--persist` passe par la RPC Supabase transactionnelle `scout_persist_mission_output`.

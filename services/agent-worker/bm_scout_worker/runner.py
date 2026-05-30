@@ -5,7 +5,7 @@ from pathlib import Path
 
 from .fixtures import candidate_leads, offline_output, seed_feedbacks
 from .memory import SupabaseConfig, SupabaseMemory
-from .schemas import MissionOutput, ScoutMode
+from .schemas import FeedbackEvent, MissionOutput, ScoutMode
 
 
 async def run_bm_scout_mission(
@@ -16,16 +16,19 @@ async def run_bm_scout_mission(
     persist: bool = False,
     artifacts_dir: Path | None = None,
 ) -> MissionOutput:
+    config = SupabaseConfig.from_env()
+    memory = SupabaseMemory(config) if config else None
+
     if real:
-        output = await _run_with_agents_sdk(mode, include_weak=include_weak)
+        feedbacks = memory.load_feedback_events() if memory else seed_feedbacks()
+        output = await _run_with_agents_sdk(mode, include_weak=include_weak, feedbacks=feedbacks)
     else:
         output = offline_output(mode, include_weak=include_weak)
 
     if persist:
-        config = SupabaseConfig.from_env()
-        if config is None:
+        if memory is None:
             raise RuntimeError("Persistance demandée mais SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY manque.")
-        SupabaseMemory(config).persist_output(output)
+        memory.persist_output(output)
 
     if artifacts_dir:
         artifacts_dir.mkdir(parents=True, exist_ok=True)
@@ -34,7 +37,7 @@ async def run_bm_scout_mission(
     return output
 
 
-async def _run_with_agents_sdk(mode: ScoutMode, *, include_weak: bool) -> MissionOutput:
+async def _run_with_agents_sdk(mode: ScoutMode, *, include_weak: bool, feedbacks: list[FeedbackEvent]) -> MissionOutput:
     if not os.getenv("OPENAI_API_KEY"):
         raise RuntimeError("OPENAI_API_KEY requis pour --real. Utilise --offline pour les tests sans appel modèle.")
 
@@ -47,7 +50,7 @@ async def _run_with_agents_sdk(mode: ScoutMode, *, include_weak: bool) -> Missio
     candidates_json = "[" + ",".join(
         lead.model_dump_json() for lead in candidate_leads(mode, include_weak=include_weak)
     ) + "]"
-    feedback_json = "[" + ",".join(feedback.model_dump_json() for feedback in seed_feedbacks()) + "]"
+    feedback_json = "[" + ",".join(feedback.model_dump_json() for feedback in feedbacks) + "]"
     prompt = f"""
 Mission BM Scout V1.
 Mode: {mode}
@@ -58,7 +61,7 @@ Batch structuré à analyser. Tu dois partir de ces données, les vérifier qual
 Candidates JSON:
 {candidates_json}
 
-Feedbacks Romu simulés:
+Feedbacks Romu disponibles depuis la mémoire Supabase si configurée, sinon depuis le seed local:
 {feedback_json}
 
 Produis une mission complète conforme au PRD BM Scout :

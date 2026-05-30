@@ -3,11 +3,12 @@ from __future__ import annotations
 import json
 import os
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from typing import Any
 
-from .schemas import MissionOutput, ScoutLead
+from .schemas import FeedbackEvent, FeedbackKind, MissionOutput
 
 
 @dataclass(frozen=True)
@@ -29,155 +30,75 @@ class SupabaseMemory:
         self.config = config
 
     def persist_output(self, output: MissionOutput) -> None:
-        run = self.insert(
-            "scout_runs",
-            {
-                "mode": output.mode,
-                "status": "succeeded",
-                "trace_id": output.trace_id,
-                "structured_output": output.model_dump(mode="json"),
-                "scanned_count": output.scanned_count,
-                "kept_count": output.kept_count,
-                "rejected_count": output.rejected_count,
-            },
-        )
-        run_id = run["id"]
-        for lead in [*output.leads, *output.rejected]:
-            company = self._persist_company(lead, run_id)
-            self._persist_children(lead, company["id"], run_id)
-        for lesson in output.lessons:
-            self.insert(
-                "scout_learning_lessons",
-                {
-                    "lesson": lesson.lesson,
-                    "recommendation": lesson.recommendation,
-                    "source": "run_review",
-                    "confidence": lesson.confidence,
-                    "source_run_id": run_id,
-                },
-            )
-
-    def _persist_company(self, lead: ScoutLead, run_id: str) -> dict[str, Any]:
-        return self.insert(
-            "scout_companies",
-            {
-                "external_id": lead.id,
-                "name": lead.company,
-                "website": lead.website,
-                "mode": lead.mode,
-                "segment": lead.segment,
-                "score": lead.score,
-                "verdict": lead.verdict,
-                "quality_decision": lead.quality_decision,
-                "observed_signals": lead.observed_signals,
-                "pain_hypotheses": lead.pain_hypotheses,
-                "score_justification": lead.score_justification,
-                "next_action": lead.next_action,
-                "rejection_reason": lead.rejection_reason,
-                "latest_run_id": run_id,
-            },
+        self.post_json(
+            "rpc/scout_persist_mission_output",
+            {"payload": output.model_dump(mode="json")},
         )
 
-    def _persist_children(self, lead: ScoutLead, company_id: str, run_id: str) -> None:
-        contact_ids: list[str] = []
-        for persona in lead.personas:
-            contact = self.insert(
-                "scout_contacts",
-                {
-                    "company_id": company_id,
-                    "name": persona.name,
-                    "role": persona.role,
-                    "reason": persona.reason,
-                    "confidence": persona.contact_confidence,
-                    "do_not_contact": persona.do_not_contact,
-                    "created_by_run_id": run_id,
-                },
-            )
-            contact_ids.append(contact["id"])
-        for proof in lead.evidence:
-            self.insert(
-                "scout_evidence",
-                {
-                    "company_id": company_id,
-                    "label": proof.label,
-                    "url": proof.url,
-                    "observed_fact": proof.observed_fact,
-                    "reliability": proof.reliability,
-                    "source_terms_risk": "unknown",
-                    "created_by_run_id": run_id,
-                },
-            )
-        score = self.insert(
-            "scout_scores",
+    def load_feedback_events(self, limit: int = 20) -> list[FeedbackEvent]:
+        feedback_rows = self.get_json(
+            "scout_feedback",
             {
-                "company_id": company_id,
-                "score": lead.score,
-                "verdict": lead.verdict,
-                "breakdown": {"mode": lead.mode, "segment": lead.segment},
-                "justification": lead.score_justification,
-                "created_by_run_id": run_id,
+                "select": "id,company_id,kind,note,created_at",
+                "order": "created_at.desc",
+                "limit": str(limit),
             },
         )
-        brief = self.insert(
-            "scout_briefs",
+        outcome_rows = self.get_json(
+            "scout_outcomes",
             {
-                "company_id": company_id,
-                "short_card": lead.short_card,
-                "deep_card": lead.deep_card,
-                "facts": lead.observed_signals,
-                "hypotheses": lead.pain_hypotheses,
-                "created_by_run_id": run_id,
+                "select": "id,company_id,outcome,note,occurred_at",
+                "order": "occurred_at.desc",
+                "limit": str(limit),
             },
         )
-        _ = score
-        for channel, body in (
-            ("email", lead.outreach.cold_email),
-            ("follow_up", lead.outreach.follow_up),
-            ("linkedin", lead.outreach.linkedin),
-        ):
-            self.insert(
-                "scout_messages",
-                {
-                    "company_id": company_id,
-                    "contact_id": contact_ids[0] if contact_ids else None,
-                    "brief_id": brief["id"],
-                    "channel": channel,
-                    "body": body,
-                    "status": "blocked" if "Brouillon blo" in body else "proposed",
-                    "created_by_run_id": run_id,
-                },
-            )
-        self.insert(
-            "scout_quality_reports",
-            {
-                "run_id": run_id,
-                "company_id": company_id,
-                "decision": lead.quality_decision,
-                "gates": [gate.model_dump(mode="json") for gate in lead.quality_gates],
-                "reason": lead.rejection_reason or lead.next_action,
-                "blocker_code": next((gate.code for gate in lead.quality_gates if not gate.passed), None),
-            },
+        events = [self._feedback_event(row) for row in feedback_rows]
+        events.extend(self._outcome_event(row) for row in outcome_rows)
+        return sorted(events, key=lambda event: event.created_at, reverse=True)[:limit]
+
+    def _feedback_event(self, row: dict[str, Any]) -> FeedbackEvent:
+        return FeedbackEvent(
+            id=str(row["id"]),
+            lead_id=str(row.get("company_id") or "unknown"),
+            kind=row["kind"],
+            note=row["note"],
+            created_at=row["created_at"],
         )
 
-    def insert(self, table: str, payload: dict[str, Any]) -> dict[str, Any]:
-        url = f"{self.config.url}/rest/v1/{table}"
+    def _outcome_event(self, row: dict[str, Any]) -> FeedbackEvent:
+        outcome = str(row.get("outcome") or "")
+        kind: FeedbackKind = "positive_outcome" if outcome in {"interested", "meeting_booked"} else "negative_outcome"
+        return FeedbackEvent(
+            id=f"outcome-{row['id']}",
+            lead_id=str(row.get("company_id") or "unknown"),
+            kind=kind,
+            note=str(row.get("note") or f"Outcome: {outcome}"),
+            created_at=row["occurred_at"],
+        )
+
+    def get_json(self, path: str, params: dict[str, str]) -> list[dict[str, Any]]:
+        query = urllib.parse.urlencode(params)
+        return self.request_json(f"{path}?{query}", method="GET")
+
+    def post_json(self, path: str, payload: dict[str, Any]) -> Any:
+        return self.request_json(path, method="POST", payload=payload)
+
+    def request_json(self, path: str, *, method: str, payload: dict[str, Any] | None = None) -> Any:
+        url = f"{self.config.url}/rest/v1/{path}"
         request = urllib.request.Request(
             url,
-            data=json.dumps(payload).encode("utf-8"),
+            data=json.dumps(payload).encode("utf-8") if payload is not None else None,
             headers={
                 "apikey": self.config.service_role_key,
                 "authorization": f"Bearer {self.config.service_role_key}",
                 "content-type": "application/json",
-                "prefer": "return=representation",
             },
-            method="POST",
+            method=method,
         )
         try:
             with urllib.request.urlopen(request, timeout=20) as response:
-                data = json.loads(response.read().decode("utf-8"))
+                body = response.read().decode("utf-8")
         except urllib.error.HTTPError as error:
             body = error.read().decode("utf-8", errors="replace")
-            raise RuntimeError(f"Supabase insert failed for {table}: {error.code} {body}") from error
-        if not data:
-            raise RuntimeError(f"Supabase insert returned no row for {table}")
-        return data[0]
+            raise RuntimeError(f"Supabase request failed for {path}: {error.code} {body}") from error
+        return json.loads(body) if body else None
