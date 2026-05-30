@@ -1,5 +1,5 @@
 import { Check, CircleDot, Clipboard, Compass, FileText, GraduationCap, Play, Search, ShieldCheck, X } from "lucide-react";
-import type { AgentTask, ScoutLead, ScoutSnapshot } from "@/domain/types";
+import type { AgentTask, ScoutLead, ScoutSnapshot, StructuredInsights } from "@/domain/types";
 import { ScoutActionButton } from "./ScoutActionButton";
 
 const navItems = [
@@ -58,6 +58,7 @@ export function ScoutDashboard({ snapshot }: { snapshot: ScoutSnapshot }) {
           </div>
           <aside className="side-panel">
             <BriefBox snapshot={snapshot} />
+            <ApprovalCenter snapshot={snapshot} />
             <TaskBoard tasks={snapshot.tasks} />
             <section>
               <h2>Pourquoi maintenant</h2>
@@ -119,6 +120,10 @@ function PrimaryLead({ lead }: { lead: ScoutLead }) {
           <span>Action</span>
           <span>{lead.nextAction}</span>
         </div>
+        <div className="decision-line">
+          <span>Contact</span>
+          <span>{contactSummary(lead)}</span>
+        </div>
       </div>
       <div className="action-row">
         <ScoutActionButton className="button primary" action="validate_lead" leadId={lead.id}><Check size={17} /> Valider</ScoutActionButton>
@@ -132,8 +137,64 @@ function PrimaryLead({ lead }: { lead: ScoutLead }) {
       <details className="deep-card">
         <summary><FileText size={17} /> Fiche profonde</summary>
         <p>{lead.deepCard}</p>
+        <InsightBlock lead={lead} />
       </details>
     </article>
+  );
+}
+
+function ApprovalCenter({ snapshot }: { snapshot: ScoutSnapshot }) {
+  const items = uniqueLeads([
+    snapshot.primaryLead,
+    ...snapshot.queue,
+    ...snapshot.exploration,
+    ...snapshot.rejected.filter((lead) => lead.qualityDecision === "blocked").slice(0, 2)
+  ]).slice(0, 5);
+
+  return (
+    <section>
+      <h2>À valider</h2>
+      <div className="approval-list">
+        {items.map((lead) => (
+          <div className="approval-row" key={lead.id}>
+            <div>
+              <strong>{lead.company}</strong>
+              <p>{approvalLabel(lead)}</p>
+            </div>
+            <div className="approval-actions">
+              {lead.qualityDecision === "pass" ? (
+                <ScoutActionButton className="button compact" action="validate_lead" leadId={lead.id}><Check size={15} /> OK</ScoutActionButton>
+              ) : (
+                <ScoutActionButton className="button compact" action="request_enrichment" leadId={lead.id}><Clipboard size={15} /> Enrichir</ScoutActionButton>
+              )}
+              <ScoutActionButton className="button compact danger" action="reject_lead" leadId={lead.id} reason="Rejet depuis le centre de validation."><X size={15} /> Non</ScoutActionButton>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function InsightBlock({ lead }: { lead: ScoutLead }) {
+  const insights = lead.insights ?? deriveInsights(lead);
+  return (
+    <div className="insights-grid">
+      <InsightColumn label="Observé" items={insights.observed.map((item) => item.text)} />
+      <InsightColumn label="Inféré" items={insights.inferred} />
+      <InsightColumn label="Incertain" items={insights.uncertain} />
+    </div>
+  );
+}
+
+function InsightColumn({ label, items }: { label: string; items: string[] }) {
+  return (
+    <div className="insight-column">
+      <strong>{label}</strong>
+      {items.slice(0, 2).map((item) => (
+        <p key={item}>{item}</p>
+      ))}
+    </div>
   );
 }
 
@@ -162,6 +223,50 @@ function QualityBox({ lead }: { lead: ScoutLead }) {
       <p>{failed[0]?.reason ?? "Les signaux, le message et la conformité passent les gates V1."}</p>
     </section>
   );
+}
+
+function uniqueLeads(leads: Array<ScoutLead | null>): ScoutLead[] {
+  const seen = new Set<string>();
+  return leads.flatMap((lead) => {
+    if (!lead || seen.has(lead.id)) return [];
+    seen.add(lead.id);
+    return [lead];
+  });
+}
+
+function approvalLabel(lead: ScoutLead): string {
+  if (lead.qualityDecision === "blocked") return lead.rejectionReason ?? "Bloqué QC ou do-not-contact.";
+  if (lead.qualityDecision === "needs_enrichment") return "À enrichir avant copie.";
+  if (lead.mode === "exploration") return "Shortlist exploration, pas de message direct.";
+  return "Prêt pour décision Romu, sans envoi automatique.";
+}
+
+function contactSummary(lead: ScoutLead): string {
+  const persona = lead.personas[0];
+  if (!persona) return "Aucun persona exploitable.";
+  const email = persona.email
+    ? `${persona.email} (${emailStatusLabel(persona.emailStatus)})`
+    : `email ${emailStatusLabel(persona.emailStatus)}`;
+  return `${persona.role} · ${email} · confiance ${persona.emailConfidence ?? "low"}`;
+}
+
+function emailStatusLabel(status: ScoutLead["personas"][number]["emailStatus"]): string {
+  if (status === "usable") return "utilisable";
+  if (status === "verify") return "à vérifier";
+  return "non utilisable";
+}
+
+function deriveInsights(lead: ScoutLead): StructuredInsights {
+  return {
+    observed: lead.observedSignals.map((signal, index) => ({
+      text: signal,
+      evidenceId: lead.evidence[index]?.id ?? lead.evidence[index]?.url ?? ""
+    })),
+    inferred: lead.painHypotheses,
+    uncertain: lead.personas.some((persona) => persona.contactConfidence !== "confirmed" || persona.emailStatus !== "usable")
+      ? ["Décideur, email et outils internes à confirmer."]
+      : []
+  };
 }
 
 function BriefBox({ snapshot }: { snapshot: ScoutSnapshot }) {

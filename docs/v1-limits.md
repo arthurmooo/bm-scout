@@ -15,18 +15,19 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 ## Limites agentiques
 
 - Le worker charge les feedbacks Supabase si l'env serveur existe ; sans env, il repasse en seed local pour developpement.
-- Le chemin reel Agents SDK consomme encore un batch candidat structure. Ce n'est pas encore une vraie recherche marche autonome.
+- Le chemin reel Agents SDK consomme un provider configuré et expose des tools métier. Ce n'est pas encore une vraie recherche marche autonome à volume PRD.
+- La feedback memory modifie bien scoring/message en local, mais doit encore être prouvée sur runs réels persistés.
 - Les agents produisent des sorties structurees, mais la qualite commerciale finale reste a valider par Romu.
 - Les recherches web gratuites ou publiques restent dependantes de la disponibilite des sources.
 - Les volumes PRD 15 Core / 100 Exploration sont des objectifs de routine, pas encore des preuves de production.
 
 ## Limites data
 
-- Supabase stocke runs, companies, contacts, preuves, scores, fiches, messages, feedbacks, outcomes, do-not-contact et lessons.
+- Supabase stocke runs, companies, contacts, preuves, scores, fiches, messages, feedbacks, outcomes, do-not-contact, lessons, email confidence, insights structurés et run steps.
 - La persistance worker passe par RPC transactionnelle, mais doit etre reverifiee dans chaque env avant demo.
 - La console lit Supabase cote serveur si `SUPABASE_SERVICE_ROLE_KEY` existe, sinon affiche les fixtures demo.
 - Le dedoublonnage avance et l'historique multi-semaines complet ne sont pas encore industrialises.
-- `scout_agent_tasks` et `scout_action_events` existent pour proactivite/actions, mais le cron production n'est pas branche.
+- `scout_agent_tasks` et `scout_action_events` existent pour proactivite/actions. Un runner de queue existe, mais le cron production n'est pas branche.
 
 ## Limites conformite
 
@@ -45,8 +46,8 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 
 ## Non-negociables de maintenance readiness
 
-- Le cron ou scheduler serveur consomme vraiment `scout_agent_tasks`.
-- Les providers reels remplacent le batch candidat pour Core et Exploration.
+- Le cron production consomme vraiment `scout_agent_tasks` via `agent:tasks:real`.
+- Les providers reels dépassent les seeds configurées et scannent réellement le marché.
 - `npm run verify:supabase` passe avec l'env serveur.
 - `--persist` cree un run lisible en Supabase via la RPC.
 - Un run reel Agents SDK utilise les feedbacks/outcomes Supabase et modifie les recommandations learning.

@@ -4,6 +4,16 @@ from agents import Agent, GuardrailFunctionOutput, RunContextWrapper, output_gua
 
 from .quality import mission_blockers
 from .schemas import MissionOutput
+from .tools import (
+    dedupe_company,
+    extract_company_signals,
+    fetch_company_site,
+    find_public_emails,
+    save_evidence,
+    score_candidate,
+    search_jobs,
+    search_web,
+)
 
 
 MANAGER_INSTRUCTIONS = """
@@ -97,6 +107,14 @@ def build_manager_agent(model: str) -> Agent[None]:
         instructions=MANAGER_INSTRUCTIONS,
         model=model,
         tools=[
+            search_web,
+            fetch_company_site,
+            extract_company_signals,
+            search_jobs,
+            find_public_emails,
+            dedupe_company,
+            score_candidate,
+            save_evidence,
             core_agent.as_tool("run_core_research", "Qualifier un batch Core BM avec preuves et score."),
             exploration_agent.as_tool("run_exploration", "Scanner large, filtrer et produire une shortlist."),
             outreach_agent.as_tool("draft_manual_outreach", "Rédiger email, relance et LinkedIn manuels si QC le permet."),

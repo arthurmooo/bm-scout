@@ -6,9 +6,10 @@ from unittest.mock import patch
 
 from bm_scout_worker.fixtures import offline_output
 from bm_scout_worker.memory import SupabaseConfig, SupabaseMemory
+from bm_scout_worker.providers import CompanySeed, ConfiguredWebResearchProvider, build_candidate_batch, parse_company_seeds
 from bm_scout_worker.quality import mission_blockers
 from bm_scout_worker.runner import run_bm_scout_mission
-from bm_scout_worker.schemas import OutreachPack, QualityGate, ScoutLead
+from bm_scout_worker.schemas import OutreachPack, QualityGate, ScoutLead, StructuredInsights
 
 
 def test_core_offline_produces_actionable_lead() -> None:
@@ -71,10 +72,115 @@ def test_do_not_contact_cannot_remain_in_shortlist() -> None:
     assert "DNC Core: do-not-contact encore présent dans la shortlist." in mission_blockers(output)
 
 
+def test_observed_insight_without_evidence_id_is_blocked() -> None:
+    output = offline_output("core")
+    invalid = output.leads[0].model_copy(deep=True)
+    invalid.insights = StructuredInsights(
+        observed=[{"text": "Signal inventé sans preuve", "evidence_id": "missing"}],
+        inferred=invalid.pain_hypotheses,
+        uncertain=[],
+    )
+
+    assert f"{invalid.company}: insight Observé sans evidence_id sourcé." in mission_blockers(
+        output.model_copy(update={"leads": [invalid]})
+    )
+
+
+def test_real_provider_requires_explicit_sources(monkeypatch) -> None:
+    monkeypatch.delenv("BM_SCOUT_PROVIDER", raising=False)
+    monkeypatch.delenv("BM_SCOUT_REAL_SEEDS", raising=False)
+
+    try:
+        build_candidate_batch("core", include_weak=False, feedback_notes=[])
+    except RuntimeError as error:
+        assert "BM_SCOUT_REAL_SEEDS requis" in str(error)
+    else:
+        raise AssertionError("Le mode réel ne doit pas retomber silencieusement sur les fixtures.")
+
+
+def test_configured_provider_builds_candidates_from_public_seed() -> None:
+    provider = ConfiguredWebResearchProvider(
+        [CompanySeed(company="Test M&A", website="https://example.com", segment="Conseil M&A")]
+    )
+    provider.fetch_company_site = lambda _url: "M&A transaction reporting document client team"
+
+    leads = provider.build_candidates("core")
+
+    assert leads[0].company == "Test M&A"
+    assert leads[0].id.startswith("core-")
+    assert leads[0].evidence
+    assert leads[0].quality_gates[0].code == "provider_real"
+    assert leads[0].insights is not None
+    assert leads[0].insights.observed[0].evidence_id == "https://example.com"
+
+
+def test_public_email_is_marked_to_verify_with_source() -> None:
+    provider = ConfiguredWebResearchProvider(
+        [CompanySeed(company="Test M&A", website="https://example.com", segment="Conseil M&A")]
+    )
+    provider.fetch_company_site = lambda _url: "Contact: partner@example.com M&A transaction reporting document"
+
+    lead = provider.build_candidates("core")[0]
+    persona = lead.personas[0]
+
+    assert persona.email == "partner@example.com"
+    assert persona.email_type == "public_named"
+    assert persona.email_source_url == "https://example.com"
+    assert persona.email_confidence == "medium"
+    assert persona.email_status == "verify"
+
+
+def test_generic_public_email_keeps_generic_type() -> None:
+    provider = ConfiguredWebResearchProvider(
+        [CompanySeed(company="Test M&A", website="https://example.com", segment="Conseil M&A")]
+    )
+    provider.fetch_company_site = lambda _url: "Contact: contact@example.com M&A transaction reporting document"
+
+    persona = provider.build_candidates("core")[0].personas[0]
+
+    assert persona.email == "contact@example.com"
+    assert persona.email_type == "generic"
+    assert persona.email_status == "verify"
+
+
+def test_configured_provider_dedupes_same_domain() -> None:
+    provider = ConfiguredWebResearchProvider(
+        [
+            CompanySeed(company="Test M&A", website="https://www.example.com", segment="Conseil M&A"),
+            CompanySeed(company="Test M&A Duplicate", website="https://example.com", segment="Conseil M&A"),
+        ]
+    )
+    provider.fetch_company_site = lambda _url: "M&A transaction reporting document"
+
+    leads = provider.build_candidates("core")
+
+    assert len(leads) == 1
+
+
+def test_provider_score_uses_negative_feedback_notes() -> None:
+    seed = CompanySeed(company="Test Finance Ops", website="https://example.com", segment="Finance ops")
+    provider = ConfiguredWebResearchProvider([seed])
+    evidence = []
+
+    neutral = provider.score_candidate(seed, evidence, [])
+    penalized = provider.score_candidate(seed, evidence, ["Mauvais secteur pour Romu, trop petit."])
+
+    assert penalized < neutral
+
+
+def test_parse_company_seeds_supports_json_and_compact_format() -> None:
+    json_seeds = parse_company_seeds('[{"company":"A","website":"https://a.test","segment":"M&A"}]')
+    compact_seeds = parse_company_seeds("B|https://b.test|Finance ops")
+
+    assert json_seeds[0].company == "A"
+    assert compact_seeds[0].segment == "Finance ops"
+
+
 def test_runner_writes_artifact(tmp_path) -> None:
     output = asyncio.run(run_bm_scout_mission("core", artifacts_dir=tmp_path))
 
     assert (tmp_path / f"{output.run_id}.json").exists()
+    assert output.run_steps[0].event_type == "offline_run"
 
 
 def test_supabase_memory_persists_output_through_atomic_rpc() -> None:

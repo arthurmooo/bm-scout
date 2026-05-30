@@ -287,6 +287,12 @@ a {
   color: white;
 }
 
+.button.compact {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
 .routine-actions {
   display: flex;
   flex-wrap: wrap;
@@ -312,6 +318,29 @@ a {
   margin: 10px 0 0;
   color: var(--muted);
   line-height: 1.5;
+}
+
+.insights-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.insight-column {
+  border-left: 2px solid var(--line);
+  padding-left: 10px;
+}
+
+.insight-column strong {
+  color: var(--deep);
+  font-size: 13px;
+}
+
+.insight-column p {
+  margin: 7px 0 0;
+  font-size: 13px;
+  line-height: 1.42;
 }
 
 .button.danger {
@@ -369,6 +398,7 @@ a {
 .proof-list,
 .learning-list,
 .brief-list,
+.approval-list,
 .task-list {
   display: grid;
   gap: 12px;
@@ -377,6 +407,7 @@ a {
 .proof,
 .lesson,
 .brief-group,
+.approval-row,
 .task-row {
   border-bottom: 1px solid var(--line);
   padding-bottom: 12px;
@@ -400,6 +431,29 @@ a {
   display: flex;
   justify-content: space-between;
   gap: 14px;
+}
+
+.approval-row {
+  display: grid;
+  gap: 10px;
+}
+
+.approval-row strong {
+  color: var(--deep);
+  font-size: 14px;
+}
+
+.approval-row p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .task-row span {
@@ -579,6 +633,10 @@ a {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
+  }
+
+  .insights-grid {
+    grid-template-columns: 1fr;
   }
 
   .button {

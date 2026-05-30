@@ -140,8 +140,15 @@ function leadBlockers(lead: ScoutLead): string[] {
   const blockers: string[] = [];
   if (!lead.evidence.length) blockers.push(`${lead.company}: aucune source publique.`);
   if (!lead.observedSignals.length) blockers.push(`${lead.company}: aucun signal observe.`);
+  if (!hasSourcedObservedInsights(lead)) blockers.push(`${lead.company}: insight observe sans evidence_id source.`);
   if (!lead.painHypotheses.length) blockers.push(`${lead.company}: aucune hypothese prudente.`);
   if (!lead.scoreJustification.trim()) blockers.push(`${lead.company}: score non justifie.`);
+  for (const persona of lead.personas) {
+    if (persona.email && !persona.emailSourceUrl) blockers.push(`${lead.company}: email public sans URL source.`);
+    if (persona.emailType === "probable_pattern" && persona.emailStatus !== "verify") {
+      blockers.push(`${lead.company}: email pattern probable non marque a verifier.`);
+    }
+  }
   if (lead.mode === "exploration" && !lead.outreach.coldEmail.toLowerCase().includes("brouillon blo")) {
     blockers.push(`${lead.company}: Exploration ne doit pas produire de message direct.`);
   }
@@ -176,6 +183,19 @@ function rejectedLeadBlockers(lead: ScoutLead): string[] {
     blockers.push(`${lead.company}: rejet sans raison.`);
   }
   return blockers;
+}
+
+function hasSourcedObservedInsights(lead: ScoutLead): boolean {
+  const insights = lead.insights ?? {
+    observed: lead.observedSignals.map((signal, index) => ({
+      text: signal,
+      evidenceId: lead.evidence[index]?.id ?? lead.evidence[index]?.url ?? ""
+    })),
+    inferred: lead.painHypotheses,
+    uncertain: []
+  };
+  const evidenceKeys = new Set(lead.evidence.flatMap((proof) => [proof.id, proof.url]).filter(Boolean));
+  return insights.observed.length > 0 && insights.observed.every((item) => item.evidenceId && evidenceKeys.has(item.evidenceId));
 }
 
 function messageLooksGeneric(message: string): boolean {
@@ -267,8 +287,8 @@ function renderReport(
     "",
     "- Les fixtures locales restent utiles comme harnais rapide, mais ne suffisent jamais seules a declarer le produit pret.",
     "- Les runners OpenAI Agents SDK Core et Exploration sont verifies via artefacts reels quand les preuves sont presentes.",
-    "- Supabase sert de memoire runtime pour runs, feedbacks, outcomes, do-not-contact, QC et learning.",
-    "- La persistance worker passe par la RPC transactionnelle `scout_persist_mission_output`.",
+    "- Supabase sert de memoire runtime pour runs, feedbacks, outcomes, do-not-contact, QC, learning et run steps.",
+    "- La persistance worker passe par la RPC transactionnelle `scout_persist_mission_output`, avec email confidence et Observé/Inféré/Incertain.",
     "- La validation humaine d'Arthur/Romu reste obligatoire sur les messages et la qualite commerciale."
   ];
   return lines.join("\n");
@@ -425,9 +445,9 @@ function buildProductBlockers(
     (item) => item.mode === "exploration" && item.sourceFile.includes("supabase-persist") && item.verdict === "pass"
   );
   const hasLearningFromFeedback = realEvidence.some((item) => item.mode === "core" && item.learningUsesFeedback);
-  blockers.push("production_not_ready: le cron production n'est pas branche; seule l'abstraction scheduler/agent_tasks peut etre verifiee localement.");
-  blockers.push("production_not_ready: la recherche marche reelle par tools web/jobs/email n'est pas encore prouvee a volume PRD.");
-  blockers.push("production_not_ready: le worker Agents SDK consomme encore un batch candidates structure tant que les providers real ne remplacent pas les fixtures.");
+  blockers.push("production_not_ready: le runner agent_tasks est executable, mais aucun cron production ne le déclenche encore.");
+  blockers.push("production_not_ready: le provider réel existe, mais la recherche marche web/jobs/email n'est pas encore prouvee a volume PRD.");
+  blockers.push("production_not_ready: le worker Agents SDK dépend encore de seeds configurées tant qu'une vraie source search ne les remplace pas.");
 
   if (!hasCore || !hasExploration) {
     blockers.push("Runs OpenAI Agents SDK réels Core et Exploration incomplets.");

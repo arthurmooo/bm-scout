@@ -6,7 +6,7 @@ Date : 2026-05-30
 
 Statut : `production_not_ready`.
 
-Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la démo en socle plus pilotable : tâches proactives, traces d'actions, DNC hard gate et dashboard moins fictif. Ce n'est pas encore un employé IA complet : les providers de recherche réelle, les volumes PRD et le cron production restent à prouver.
+Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la démo en socle plus pilotable : tâches proactives, traces d'actions, DNC hard gate, feedback memory causale, Observé/Inféré/Incertain full-stack et dashboard moins fictif. Ce n'est pas encore un employé IA complet : les providers de recherche réelle autonome, les volumes PRD et le cron production restent à prouver.
 
 ## Décisions reprises de l'audit
 
@@ -16,10 +16,13 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Remplacer la routine UI codée en dur par un brief construit depuis runs/tasks.
 - Mettre `quality:readiness` en échec tant que les preuves runtime réelles manquent.
 - Bloquer le DNC avant copie/message, pas seulement dans une table décorative.
+- Faire influencer le run suivant par les feedbacks Romu, pas seulement produire une synthèse.
+- Stocker Observé/Inféré/Incertain et les statuts d'email dans Supabase.
 
 ## Implémenté dans cette passe
 
 - Module scheduler TS : `src/domain/scheduler.ts`.
+- Runner de queue : `src/server/agent-task-runner.ts` et `scripts/run-agent-task-queue.ts`.
 - Tests scheduler avec routines Core, Exploration, Daily Brief, Learning, DNC, followup.
 - Migration Supabase `20260530210927_agent_tasks_and_actions.sql`.
 - API `POST /api/scout/actions`.
@@ -27,39 +30,50 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Trigger DB `scout_prevent_dnc_message` pour empêcher un message non bloqué sur une cible DNC.
 - QC TS : DNC déterministe et Observé relié à une preuve.
 - Worker offline : DNC interdit en shortlist.
+- Worker réel : provider configuré obligatoire hors `BM_SCOUT_PROVIDER=demo`, plus 8 tools Agents SDK métier.
+- Mémoire feedback TS : rejet lead, pénalité secteur, bonus angle validé, régénération anti-générique.
+- Worker Pydantic : contrat Observé/Inféré/Incertain, email confidence, run steps.
+- Migration Supabase `20260530214847_bm_scout_structured_insights_email_confidence_steps.sql` appliquée au projet interne.
 - Documentation et rapport qualité repassés en statut honnête.
 
 ## Encore fixture/demo
 
 - `quality:runs` reste un harnais fixture.
 - `demoSnapshot()` reste le fallback sans env Supabase serveur.
-- Le worker réel consomme encore un batch `Candidates JSON` plutôt qu'une vraie recherche marché autonome.
-- Les providers `search_web`, `fetch_company_site`, `search_jobs`, `find_public_emails`, `dedupe_company` ne sont pas encore le chemin réel principal.
+- Le worker réel consomme un batch issu du provider configuré, pas encore un moteur de recherche autonome.
+- Les providers `search_web`, `fetch_company_site`, `search_jobs`, `find_public_emails`, `dedupe_company` existent, mais `search_web` s'appuie encore sur des seeds configurées.
 - Les volumes 15 Core / 100 Exploration sont paramétrés mais non prouvés en run réel.
+- Le feedback influence le moteur local et les tests, mais il n'est pas encore prouvé sur un run réel Supabase à volume.
 
 ## Réellement end-to-end aujourd'hui
 
 - Scheduler dry-run reproductible : `npm run agent:schedule`.
+- Runner queue reproductible : `npm run agent:tasks:offline` ou `npm run agent:tasks:real` avec env Supabase serveur.
 - Actions API persistantes si `NEXT_PUBLIC_SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` existent.
 - DNC bloque côté TS, worker offline et trigger Supabase.
+- Feedback Romu influence le scoring et les messages dans le moteur local testé.
+- Run steps et email confidence sont écrits par le worker/RPC quand `--persist` est exécuté.
 - Console Next buildée avec route d'action dynamique.
 
 ## Vérifications exécutées
 
-- `npm run test` : 12 tests pass.
+- `npm run test` : 18 tests pass.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.
 - `npm run quality:runs` : pass fixture, décision produit `production_not_ready`.
 - `npm run quality:readiness` : fail attendu, décision produit `production_not_ready`.
-- `.venv/bin/python -m pytest services/agent-worker/tests` : 8 tests pass.
+- `.venv/bin/python -m pytest services/agent-worker/tests` : 16 tests pass.
+- Import Agents SDK manager : 12 tools disponibles, dont 8 tools métier provider.
 - `npm run agent:schedule` : pass, 6 routines planifiées.
-- Browser local : DOM smoke via Browser OK sur `http://127.0.0.1:3030`; screenshot locale `artifacts/browser-smoke/playwright-dashboard.png`.
+- `npm run agent:tasks` sans env serveur : fail attendu avec message env Supabase requis.
+- Browser local : DOM smoke via Navigateur OK sur `http://localhost:3030` ; fiche profonde Observé/Inféré/Incertain vérifiée après ouverture ; screenshot locale `artifacts/browser-smoke/playwright-dashboard-after.png`.
+- Supabase interne `Interne_Agentic_prospection` : migrations `agent_tasks_and_actions` et `bm_scout_structured_insights_email_confidence_steps` appliquées.
 
 ## Prochaine tranche P0
 
-1. Brancher un vrai runner scheduler qui consomme `scout_agent_tasks`.
-2. Remplacer le batch structuré du worker par des providers réels gratuits/mockables.
-3. Persister les run steps/tool calls du worker au fil de l'exécution.
-4. Prouver la feedback loop sur scoring et recommandations du run suivant.
-5. Tester les actions UI contre une Supabase réelle après application de la migration.
+1. Fournir l'env service role au runner local/cron et tester `agent:tasks:offline` contre Supabase.
+2. Remplacer le provider configuré par une vraie source search web/jobs scalable.
+3. Prouver les volumes PRD 15 Core / 100 Exploration avec artefacts réels.
+4. Prouver la feedback loop sur scoring et recommandations dans un run réel Supabase.
+5. Brancher le runner à Vercel Cron, GitHub Actions ou Supabase Cron.

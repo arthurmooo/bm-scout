@@ -12,6 +12,7 @@ from .schemas import (
     QualityGate,
     ScoutLead,
     ScoutMode,
+    StructuredInsights,
 )
 
 
@@ -29,7 +30,35 @@ def seed_feedbacks() -> list[FeedbackEvent]:
 
 def candidate_leads(mode: ScoutMode, include_weak: bool = False) -> list[ScoutLead]:
     base = core_candidates() if mode == "core" else exploration_candidates()
-    return [*base, *weak_candidates()] if include_weak else base
+    candidates = [*base, *weak_candidates()] if include_weak else base
+    return [with_structured_insights(lead) for lead in candidates]
+
+
+def with_structured_insights(lead: ScoutLead) -> ScoutLead:
+    if lead.insights is not None:
+        return lead
+    return lead.model_copy(
+        update={
+            "insights": StructuredInsights(
+                observed=[
+                    {
+                        "text": signal,
+                        "evidence_id": lead.evidence[min(index, len(lead.evidence) - 1)].url if lead.evidence else "",
+                    }
+                    for index, signal in enumerate(lead.observed_signals)
+                ],
+                inferred=lead.pain_hypotheses,
+                uncertain=(
+                    ["Décideur exact, email nominatif et outils internes à confirmer."]
+                    if any(
+                        persona.contact_confidence != "confirmed" or persona.email_status != "usable"
+                        for persona in lead.personas
+                    )
+                    else []
+                ),
+            )
+        }
+    )
 
 
 def core_candidates() -> list[ScoutLead]:

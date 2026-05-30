@@ -1,6 +1,6 @@
 import { demoSnapshot } from "@/domain/scout-engine";
 import { buildBriefSummary, buildTasksFromRuns } from "@/domain/scheduler";
-import type { AgentTask, Evidence, LearningLesson, Persona, QualityGate, ScoutLead, ScoutRun, ScoutSnapshot } from "@/domain/types";
+import type { AgentTask, Evidence, LearningLesson, Persona, QualityGate, ScoutLead, ScoutRun, ScoutSnapshot, StructuredInsights } from "@/domain/types";
 import { createServerSupabaseClient } from "./supabase";
 
 export async function getScoutSnapshot(): Promise<ScoutSnapshot> {
@@ -31,10 +31,11 @@ export async function getScoutSnapshot(): Promise<ScoutSnapshot> {
         quality_decision,
         observed_signals,
         pain_hypotheses,
+        structured_insights,
         score_justification,
         next_action,
         rejection_reason,
-        scout_contacts (name, role, reason, confidence, do_not_contact),
+        scout_contacts (name, role, email, email_type, email_source_url, email_confidence, email_status, reason, confidence, do_not_contact),
         scout_evidence (label, url, observed_fact, reliability),
         scout_briefs (short_card, deep_card, created_at),
         scout_messages (channel, body, status),
@@ -83,7 +84,7 @@ function buildSnapshotFromRows(rows: ScoutRunRow[], taskRows: ScoutTaskRow[] = [
     runs,
     tasks,
     brief: buildBriefSummary(tasks, runs),
-    readiness: "pilot_candidate"
+    readiness: "production_not_ready"
   };
 }
 
@@ -110,6 +111,7 @@ function mapLead(row: ScoutCompanyRow): ScoutLead {
   const messages = row.scout_messages ?? [];
   const brief = [...(row.scout_briefs ?? [])].sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
   const quality = row.scout_quality_reports?.[0];
+  const personas = (row.scout_contacts ?? []).map(mapPersona);
   return {
     id: row.external_id ?? row.id,
     company: row.name,
@@ -124,8 +126,9 @@ function mapLead(row: ScoutCompanyRow): ScoutLead {
     scoreJustification: row.score_justification ?? "Score non renseigné.",
     shortCard: brief?.short_card ?? "Fiche courte non générée.",
     deepCard: brief?.deep_card ?? "Fiche profonde non générée.",
-    personas: (row.scout_contacts ?? []).map(mapPersona),
+    personas,
     evidence: (row.scout_evidence ?? []).map(mapEvidence),
+    insights: mapStructuredInsights(row.structured_insights),
     outreach: {
       coldEmail: messages.find((message) => message.channel === "email")?.body ?? "Brouillon bloqué : message absent.",
       followUp: messages.find((message) => message.channel === "follow_up")?.body ?? "Brouillon bloqué : relance absente.",
@@ -143,7 +146,12 @@ function mapPersona(row: ScoutContactRow): Persona {
     role: row.role,
     reason: row.reason,
     contactConfidence: row.confidence,
-    doNotContact: row.do_not_contact
+    doNotContact: row.do_not_contact,
+    email: row.email ?? undefined,
+    emailType: row.email_type,
+    emailSourceUrl: row.email_source_url ?? undefined,
+    emailConfidence: row.email_confidence,
+    emailStatus: row.email_status
   };
 }
 
@@ -197,6 +205,20 @@ function mapQualityGates(row?: ScoutQualityRow): QualityGate[] {
   return row.gates.flatMap((gate) => (isQualityGate(gate) ? [gate] : []));
 }
 
+function mapStructuredInsights(value: Json | undefined): StructuredInsights | undefined {
+  if (!isJsonObject(value)) return undefined;
+  const observed = Array.isArray(value.observed)
+    ? value.observed.flatMap((item) => {
+        if (!isJsonObject(item) || typeof item.text !== "string") return [];
+        const evidenceId = typeof item.evidenceId === "string" ? item.evidenceId : typeof item.evidence_id === "string" ? item.evidence_id : "";
+        return evidenceId ? [{ text: item.text, evidenceId }] : [];
+      })
+    : [];
+  const inferred = Array.isArray(value.inferred) ? value.inferred.filter((item): item is string => typeof item === "string") : [];
+  const uncertain = Array.isArray(value.uncertain) ? value.uncertain.filter((item): item is string => typeof item === "string") : [];
+  return { observed, inferred, uncertain };
+}
+
 function isQualityGate(value: unknown): value is QualityGate {
   return Boolean(
     value &&
@@ -208,6 +230,10 @@ function isQualityGate(value: unknown): value is QualityGate {
 }
 
 type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
+
+function isJsonObject(value: Json | undefined): value is { [key: string]: Json } {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value));
+}
 
 interface ScoutRunRow {
   id: string;
@@ -234,6 +260,7 @@ interface ScoutCompanyRow {
   quality_decision: "pass" | "needs_enrichment" | "blocked";
   observed_signals: string[] | null;
   pain_hypotheses: string[] | null;
+  structured_insights: Json;
   score_justification: string | null;
   next_action: string | null;
   rejection_reason: string | null;
@@ -247,6 +274,11 @@ interface ScoutCompanyRow {
 interface ScoutContactRow {
   name: string | null;
   role: string;
+  email: string | null;
+  email_type: "public_named" | "generic" | "probable_pattern" | "unknown";
+  email_source_url: string | null;
+  email_confidence: "high" | "medium" | "low";
+  email_status: "usable" | "verify" | "not_usable";
   reason: string;
   confidence: "confirmed" | "role_only" | "uncertain";
   do_not_contact: boolean;

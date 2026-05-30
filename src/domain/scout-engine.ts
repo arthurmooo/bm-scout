@@ -1,13 +1,14 @@
 import { coreCandidates, explorationCandidates, weakCandidates } from "./fixtures";
-import { buildLearning, evaluateLead, markLeadDoNotContact } from "./quality";
+import { applyFeedbackMemory, buildFeedbackMemory } from "./feedback-memory";
+import { buildLearning } from "./quality";
 import { buildBriefSummary, buildTasksFromRuns } from "./scheduler";
 import type { FeedbackEvent, ScoutMode, ScoutRun, ScoutSnapshot } from "./types";
 
 export function runScoutMission(mode: ScoutMode, options: { includeWeak?: boolean; feedbacks?: FeedbackEvent[] } = {}): ScoutRun {
   const base = mode === "core" ? coreCandidates : explorationCandidates;
   const candidates = options.includeWeak ? [...base, ...weakCandidates] : base;
-  const dncLeadIds = new Set((options.feedbacks ?? []).filter((feedback) => feedback.kind === "do_not_contact").map((feedback) => feedback.leadId));
-  const evaluated = candidates.map((lead) => evaluateLead(dncLeadIds.has(lead.id) ? markLeadDoNotContact(lead) : lead));
+  const feedbackMemory = buildFeedbackMemory(options.feedbacks ?? [], candidates);
+  const evaluated = applyFeedbackMemory(candidates, feedbackMemory);
   const leads = evaluated.filter((lead) => lead.verdict !== "reject" && lead.qualityDecision !== "blocked");
   const rejected = evaluated.filter((lead) => lead.verdict === "reject" || lead.qualityDecision === "blocked");
   return {

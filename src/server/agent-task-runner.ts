@@ -1,0 +1,302 @@
+import { existsSync } from "node:fs";
+import { join } from "node:path";
+import { spawn } from "node:child_process";
+import type { AgentTaskStatus, AgentTaskType, RoutineConfig } from "../domain/types";
+import { createServerSupabaseClient } from "./supabase";
+
+export interface QueuedAgentTask {
+  id: string;
+  type: AgentTaskType;
+  status: AgentTaskStatus;
+  title: string;
+  summary: string;
+  payload: Partial<RoutineConfig>;
+  scheduledFor: string;
+}
+
+export interface AgentTaskExecution {
+  status: "completed" | "blocked" | "failed";
+  summary: string;
+  traceId?: string;
+  resultRunId?: string;
+  blockedReason?: string;
+  errorMessage?: string;
+}
+
+export interface AgentTaskRepository {
+  loadQueuedTasks(options: { limit: number; taskId?: string }): Promise<QueuedAgentTask[]>;
+  markRunning(taskId: string): Promise<void>;
+  markCompleted(taskId: string, execution: AgentTaskExecution): Promise<void>;
+  markBlocked(taskId: string, execution: AgentTaskExecution): Promise<void>;
+  markFailed(taskId: string, execution: AgentTaskExecution): Promise<void>;
+  findRunIdByTrace(traceId: string): Promise<string | null>;
+}
+
+export interface AgentTaskExecutor {
+  execute(task: QueuedAgentTask): Promise<AgentTaskExecution>;
+}
+
+export interface AgentTaskQueueResult {
+  ok: boolean;
+  processed: AgentTaskExecutionResult[];
+  message: string;
+}
+
+export interface AgentTaskExecutionResult extends AgentTaskExecution {
+  taskId: string;
+  taskType: AgentTaskType;
+}
+
+export async function processAgentTaskQueue(
+  repository: AgentTaskRepository,
+  executor: AgentTaskExecutor,
+  options: { limit?: number; taskId?: string } = {}
+): Promise<AgentTaskQueueResult> {
+  const tasks = await repository.loadQueuedTasks({ limit: options.limit ?? 3, taskId: options.taskId });
+  const processed: AgentTaskExecutionResult[] = [];
+
+  for (const task of tasks) {
+    await repository.markRunning(task.id);
+    const execution = await executeTask(repository, executor, task);
+    processed.push({ ...execution, taskId: task.id, taskType: task.type });
+  }
+
+  return {
+    ok: processed.every((item) => item.status === "completed"),
+    processed,
+    message: tasks.length ? `${processed.length} tâche(s) traitée(s).` : "Aucune tâche queued à traiter."
+  };
+}
+
+export function createSupabaseAgentTaskRepository(): AgentTaskRepository | null {
+  const client = createServerSupabaseClient();
+  if (!client) return null;
+
+  return {
+    async loadQueuedTasks({ limit, taskId }) {
+      let query = client
+        .from("scout_agent_tasks")
+        .select("id,type,status,title,summary,payload,scheduled_for")
+        .eq("status", "queued")
+        .lte("scheduled_for", new Date().toISOString())
+        .order("scheduled_for", { ascending: true })
+        .limit(limit);
+
+      if (taskId) query = query.eq("id", taskId);
+      const { data, error } = await query;
+      if (error) throw new Error(`Lecture agent_tasks impossible: ${error.message}`);
+      return (data ?? []).map((row) => ({
+        id: row.id,
+        type: row.type,
+        status: row.status,
+        title: row.title,
+        summary: row.summary,
+        payload: row.payload ?? {},
+        scheduledFor: row.scheduled_for
+      })) as QueuedAgentTask[];
+    },
+
+    async markRunning(taskId) {
+      await checked(
+        client
+          .from("scout_agent_tasks")
+          .update({ status: "running", started_at: new Date().toISOString(), error_message: null, blocked_reason: null })
+          .eq("id", taskId)
+      );
+    },
+
+    async markCompleted(taskId, execution) {
+      await checked(
+        client
+          .from("scout_agent_tasks")
+          .update({
+            status: "completed",
+            summary: execution.summary,
+            result_run_id: execution.resultRunId ?? null,
+            completed_at: new Date().toISOString(),
+            error_message: null,
+            blocked_reason: null
+          })
+          .eq("id", taskId)
+      );
+    },
+
+    async markBlocked(taskId, execution) {
+      await checked(
+        client
+          .from("scout_agent_tasks")
+          .update({
+            status: "blocked",
+            summary: execution.summary,
+            blocked_reason: execution.blockedReason ?? execution.summary,
+            completed_at: new Date().toISOString()
+          })
+          .eq("id", taskId)
+      );
+    },
+
+    async markFailed(taskId, execution) {
+      await checked(
+        client
+          .from("scout_agent_tasks")
+          .update({
+            status: "failed",
+            summary: execution.summary,
+            error_message: execution.errorMessage ?? execution.summary,
+            completed_at: new Date().toISOString()
+          })
+          .eq("id", taskId)
+      );
+    },
+
+    async findRunIdByTrace(traceId) {
+      const { data, error } = await client
+        .from("scout_runs")
+        .select("id")
+        .eq("trace_id", traceId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw new Error(`Recherche run par trace impossible: ${error.message}`);
+      return data?.id ?? null;
+    }
+  };
+}
+
+export function createCliAgentTaskExecutor(options: { real: boolean; persist?: boolean; pythonPath?: string } = { real: false }): AgentTaskExecutor {
+  return {
+    async execute(task) {
+      if (task.type === "weekly_core_research") {
+        return runWorkerCli("core", options);
+      }
+      if (task.type === "weekly_exploration_scan") {
+        return runWorkerCli("exploration", options);
+      }
+      if (task.type === "daily_brief") {
+        return {
+          status: "completed",
+          summary: "Daily Brief généré depuis les runs et tâches persistés. Aucun envoi automatique."
+        };
+      }
+      return {
+        status: "blocked",
+        summary: `${task.title} bloquée : runner métier pas encore implémenté.`,
+        blockedReason: "Routine planifiée mais pas encore exécutable par le worker V1."
+      };
+    }
+  };
+}
+
+async function executeTask(
+  repository: AgentTaskRepository,
+  executor: AgentTaskExecutor,
+  task: QueuedAgentTask
+): Promise<AgentTaskExecution> {
+  try {
+    const execution = await executor.execute(task);
+    const withRunId =
+      execution.traceId && !execution.resultRunId
+        ? { ...execution, resultRunId: (await repository.findRunIdByTrace(execution.traceId)) ?? undefined }
+        : execution;
+
+    if (withRunId.status === "completed") await repository.markCompleted(task.id, withRunId);
+    if (withRunId.status === "blocked") await repository.markBlocked(task.id, withRunId);
+    if (withRunId.status === "failed") await repository.markFailed(task.id, withRunId);
+    return withRunId;
+  } catch (error) {
+    const execution: AgentTaskExecution = {
+      status: "failed",
+      summary: "Tâche échouée pendant l'exécution du runner.",
+      errorMessage: error instanceof Error ? error.message : String(error)
+    };
+    await repository.markFailed(task.id, execution);
+    return execution;
+  }
+}
+
+async function runWorkerCli(
+  mode: "core" | "exploration",
+  options: { real: boolean; persist?: boolean; pythonPath?: string }
+): Promise<AgentTaskExecution> {
+  const pythonPath = options.pythonPath ?? defaultPythonPath();
+  const args = [
+    "-m",
+    "bm_scout_worker.cli",
+    "--mode",
+    mode,
+    options.real ? "--real" : "--offline",
+    "--artifacts-dir",
+    "artifacts/agent-worker-real"
+  ];
+  if (options.persist !== false) args.push("--persist");
+
+  const result = await runProcess(pythonPath, args);
+  if (result.code !== 0) {
+    return {
+      status: "failed",
+      summary: `Worker ${mode} échoué.`,
+      errorMessage: [result.stderr, result.stdout].filter(Boolean).join("\n").slice(0, 4000)
+    };
+  }
+
+  const parsed = parseWorkerOutput(result.stdout);
+  if (!parsed || parsed.verdict !== "pass") {
+    return {
+      status: "failed",
+      summary: `Worker ${mode} sans verdict pass.`,
+      errorMessage: result.stdout.slice(0, 4000)
+    };
+  }
+
+  return {
+    status: "completed",
+    summary: `Worker ${mode} terminé : ${parsed.output.kept_count} retenus, ${parsed.output.rejected_count} rejetés.`,
+    traceId: parsed.output.trace_id
+  };
+}
+
+function defaultPythonPath(): string {
+  const localVenv = join(process.cwd(), ".venv", "bin", "python");
+  return existsSync(localVenv) ? localVenv : "python3";
+}
+
+function runProcess(command: string, args: string[]): Promise<{ code: number | null; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    const child = spawn(command, args, { cwd: process.cwd(), env: process.env });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.on("error", (error) => {
+      stderr += error.message;
+      resolve({ code: 1, stdout, stderr });
+    });
+    child.on("close", (code) => resolve({ code, stdout, stderr }));
+  });
+}
+
+function parseWorkerOutput(stdout: string): WorkerCliOutput | null {
+  try {
+    return JSON.parse(stdout) as WorkerCliOutput;
+  } catch {
+    return null;
+  }
+}
+
+async function checked<T extends { error: { message: string } | null }>(request: PromiseLike<T>): Promise<void> {
+  const { error } = await request;
+  if (error) throw new Error(error.message);
+}
+
+interface WorkerCliOutput {
+  verdict: "pass" | "fail";
+  output: {
+    trace_id: string;
+    kept_count: number;
+    rejected_count: number;
+  };
+}
