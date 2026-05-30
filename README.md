@@ -29,7 +29,7 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 
 - Cron GitHub Actions versionné, mais pas encore prouvé par un run CI avec secrets.
 - Pas de preuve volume 15 Core / 100 Exploration en run réel.
-- Recherche marché réelle encore limitée : le worker peut utiliser OpenAI `web_search` ou un fallback web public avec job search minimal, mais les volumes PRD et la qualité des sources restent à prouver en run réel.
+- Recherche marché réelle encore limitée : le worker peut utiliser SerpAPI, OpenAI `web_search` ou un fallback web public avec job search minimal, mais les volumes PRD et la qualité des sources restent à prouver en run réel.
 - Feedback loop prouvée localement côté TS et worker Python, pas encore validée sur un run réel Supabase à volume.
 - `quality:readiness` échoue volontairement tant que ces preuves ne sont pas là.
 - Attribution réelle des comptes Romu/Arthur dans Supabase Auth à faire dans le dashboard projet : `app_metadata.bm_scout_role`, `app_metadata.bm_scout_roles` ou `app_metadata.bm_scout_access`.
@@ -50,7 +50,8 @@ Variables serveur :
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL` optionnel, par défaut `gpt-5.5`
 - `OPENAI_SEARCH_MODEL` optionnel pour la découverte web OpenAI, par défaut `OPENAI_MODEL`
-- `BM_SCOUT_PROVIDER=auto|openai_web|web|configured|demo`, par défaut `auto`
+- `SERPAPI_API_KEY` optionnel ; si présent, `auto` choisit SerpAPI avant OpenAI web.
+- `BM_SCOUT_PROVIDER=auto|serpapi|openai_web|web|configured|demo`, par défaut `auto`
 - `BM_SCOUT_SEARCH_QUERIES` optionnel pour piloter les requêtes web, format JSON ou `;`
 - `BM_SCOUT_REAL_SEEDS` pour le mode `configured`, ex. `[{"company":"Cambon Partners","website":"https://www.cambonpartners.com","segment":"Conseil M&A"}]`
 - `BM_SCOUT_PROVIDER=demo` uniquement pour forcer explicitement le mode fixtures.
@@ -99,7 +100,7 @@ cd services/agent-worker
 La persistance `--persist` passe par la RPC Supabase transactionnelle `scout_persist_mission_output`.
 Le chemin réel expose le `WebSearchTool` hébergé OpenAI dans l'orchestration Agents SDK, plus les tools métier `search_web`, `fetch_company_site`, `extract_company_signals`, `search_jobs`, `find_public_emails`, `dedupe_company`, `score_candidate`, `save_evidence`.
 Les scripts `worker:real:*` écrivent les artefacts `artifacts/agent-worker-real/latest-real-*.json` consommés par `quality:readiness`.
-SerpAPI pourra remplacer ou compléter `openai_web` plus tard sans changer le contrat métier du provider. OpenAI `web_search` est le provider réel par défaut utile en V1 ; SerpAPI reste pertinent si Arthur veut une SERP plus brute, contrôlable et comparable.
+SerpAPI est branché derrière le même contrat métier que `openai_web`. En `auto`, `BM_SCOUT_REAL_SEEDS` reste prioritaire, puis `SERPAPI_API_KEY`, puis OpenAI web, puis le fallback web public. SerpAPI reste non prouvé tant qu'aucun run réel avec clé n'a produit d'artefact Core/Exploration.
 
 ## Documentation
 

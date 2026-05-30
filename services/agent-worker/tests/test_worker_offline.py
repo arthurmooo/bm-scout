@@ -14,10 +14,12 @@ from bm_scout_worker.providers import (
     OpenAIWebResearchProvider,
     OpenWebResearchProvider,
     SearchResult,
+    SerpApiResearchProvider,
     build_candidate_batch,
     parse_company_seeds,
     parse_duckduckgo_lite_results,
     parse_openai_search_results,
+    parse_serpapi_results,
     parse_search_queries,
     provider_from_env,
 )
@@ -175,9 +177,33 @@ def test_open_web_provider_adds_job_search_evidence(monkeypatch) -> None:
 def test_auto_provider_prefers_openai_web_when_key_is_present(monkeypatch) -> None:
     monkeypatch.delenv("BM_SCOUT_PROVIDER", raising=False)
     monkeypatch.delenv("BM_SCOUT_REAL_SEEDS", raising=False)
+    monkeypatch.delenv("SERPAPI_API_KEY", raising=False)
+    monkeypatch.delenv("SERP_API_KEY", raising=False)
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
 
     assert isinstance(provider_from_env(), OpenAIWebResearchProvider)
+
+
+def test_auto_provider_prefers_serpapi_when_key_is_present(monkeypatch) -> None:
+    monkeypatch.delenv("BM_SCOUT_PROVIDER", raising=False)
+    monkeypatch.delenv("BM_SCOUT_REAL_SEEDS", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("SERPAPI_API_KEY", "serpapi-key")
+
+    assert isinstance(provider_from_env(), SerpApiResearchProvider)
+
+
+def test_serpapi_provider_requires_key(monkeypatch) -> None:
+    monkeypatch.setenv("BM_SCOUT_PROVIDER", "serpapi")
+    monkeypatch.delenv("SERPAPI_API_KEY", raising=False)
+    monkeypatch.delenv("SERP_API_KEY", raising=False)
+
+    try:
+        provider_from_env()
+    except RuntimeError as error:
+        assert "SERPAPI_API_KEY requis" in str(error)
+    else:
+        raise AssertionError("SerpAPI explicite ne doit pas retomber sur un provider faible sans clé.")
 
 
 def test_configured_provider_builds_candidates_from_public_seed() -> None:
@@ -401,6 +427,71 @@ def test_parse_openai_search_results_filters_non_candidates() -> None:
 
 def test_parse_openai_search_results_tolerates_invalid_json() -> None:
     assert parse_openai_search_results("pas du json", 5) == []
+
+
+def test_parse_serpapi_results_filters_non_candidates() -> None:
+    payload = {
+        "organic_results": [
+            {
+                "title": "Cambon Partners - Corporate Finance",
+                "link": "https://www.cambonpartners.com/fr/",
+                "snippet": "Conseil M&A et opérations de croissance.",
+            },
+            {
+                "title": "LinkedIn Cambon",
+                "link": "https://www.linkedin.com/company/cambon-partners",
+                "snippet": "Réseau social.",
+            },
+            {
+                "title": "Article générique",
+                "link": "https://example.com/blog/top-m-and-a",
+                "snippet": "Classement générique.",
+            },
+        ]
+    }
+
+    results = parse_serpapi_results(payload, 5)
+
+    assert [result.url for result in results] == ["https://www.cambonpartners.com/fr/"]
+    assert results[0].snippet == "Conseil M&A et opérations de croissance."
+
+
+def test_serpapi_provider_search_records_steps(monkeypatch) -> None:
+    provider = SerpApiResearchProvider(["conseil M&A France"], "serpapi-key")
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self, *_args):
+            return json.dumps(
+                {
+                    "organic_results": [
+                        {
+                            "title": "Transaction Services | Deloitte France",
+                            "link": "https://www.deloitte.com/fr/fr/services/mergers-and-acquisitions.html",
+                            "snippet": "Conseil transaction services.",
+                        }
+                    ]
+                }
+            ).encode("utf-8")
+
+    requests = []
+
+    def fake_urlopen(request, timeout):
+        requests.append((request, timeout))
+        return Response()
+
+    with patch("urllib.request.urlopen", fake_urlopen):
+        results = provider.search_web("deal advisory France", "fr", 3)
+
+    assert results[0].title == "Transaction Services | Deloitte France"
+    assert "serpapi.com/search.json" in requests[0][0].full_url
+    assert "api_key=serpapi-key" in requests[0][0].full_url
+    assert any(step.step == "serpapi_search" and step.payload["result_count"] == 1 for step in provider.run_steps)
 
 
 def test_agent_sdk_tool_calls_are_recorded(monkeypatch) -> None:

@@ -6,7 +6,7 @@ Date : 2026-05-31
 
 Statut : `production_not_ready`.
 
-Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la démo en socle plus pilotable : tâches proactives, traces d'actions, DNC hard gate, feedback memory causale, Observé/Inféré/Incertain full-stack, auth interne SSR et dashboard moins fictif. Ce n'est pas encore un employé IA complet : la recherche web OpenAI/fallback public existe, mais les volumes PRD et le cron production restent à prouver.
+Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la démo en socle plus pilotable : tâches proactives, traces d'actions, DNC hard gate, feedback memory causale, Observé/Inféré/Incertain full-stack, auth interne SSR et dashboard moins fictif. Ce n'est pas encore un employé IA complet : la recherche web SerpAPI/OpenAI/fallback public existe, mais les volumes PRD et le cron production restent à prouver.
 
 ## Décisions reprises de l'audit
 
@@ -36,7 +36,8 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Trigger DB `scout_prevent_dnc_message` pour empêcher un message non bloqué sur une cible DNC.
 - QC TS : DNC déterministe et Observé relié à une preuve.
 - Worker offline : DNC interdit en shortlist.
-- Worker réel : provider `auto` avec seeds, OpenAI `web_search` ou fallback web public, plus `WebSearchTool` hébergé OpenAI et 8 tools métier Agents SDK.
+- Worker réel : provider `auto` avec seeds, SerpAPI, OpenAI `web_search` ou fallback web public, plus `WebSearchTool` hébergé OpenAI et 8 tools métier Agents SDK.
+- Provider SerpAPI : `BM_SCOUT_PROVIDER=serpapi` ou sélection auto via `SERPAPI_API_KEY`, parsing des `organic_results`, filtrage des sources faibles et run step `serpapi_search`.
 - `search_jobs` n'est plus décoratif : le provider web cherche des sources recrutement publiques, les transforme en preuves et les trace dans `run_steps`.
 - Scripts `worker:real:*` : exécution reproductible Core/Exploration réelle, avec artefacts `latest-real-*.json` consommés par `quality:readiness`.
 - Mémoire feedback TS : rejet lead, pénalité secteur, bonus angle validé, régénération anti-générique.
@@ -52,7 +53,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 - `quality:runs` reste un harnais fixture.
 - `demoSnapshot()` reste le fallback sans env Supabase serveur.
-- Le worker réel peut découvrir des candidats sans seeds via OpenAI `web_search` ou fallback web public, mais ce n'est pas encore prouvé à volume PRD ni enrichi par SerpAPI.
+- Le worker réel peut découvrir des candidats sans seeds via SerpAPI, OpenAI `web_search` ou fallback web public, mais ce n'est pas encore prouvé à volume PRD.
 - Les providers `search_web`, `fetch_company_site`, `search_jobs`, `find_public_emails`, `dedupe_company` existent ; `search_jobs` reste minimal et la robustesse search dépend encore des sources publiques.
 - Les volumes 15 Core / 100 Exploration sont paramétrés mais non prouvés en run réel.
 - Le feedback influence le moteur TS et le provider Python en tests locaux, mais il n'est pas encore prouvé sur un run réel Supabase à volume.
@@ -77,7 +78,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - `npm run build` : pass.
 - `npm run quality:runs` : pass fixture, décision produit `production_not_ready`.
 - `npm run quality:readiness` : fail attendu, décision produit `production_not_ready`.
-- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 28 tests pass.
+- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 32 tests pass, dont provider SerpAPI.
 - Import Agents SDK manager : 13 tools disponibles, dont `WebSearchTool` et 8 tools métier provider.
 - `npm run agent:schedule` : pass, 6 routines planifiées.
 - `npm run agent:tasks` sans env serveur : fail attendu avec message env Supabase requis.
@@ -91,7 +92,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 ## Prochaine tranche P0
 
 1. Fournir l'env service role au runner local/cron et tester `agent:tasks:offline` contre Supabase.
-2. Prouver `openai_web` à volume, puis brancher SerpAPI si la couverture ou le coût OpenAI web search n'est pas suffisant.
+2. Prouver `serpapi` ou `openai_web` à volume, puis comparer couverture, coût et qualité des sources.
 3. Prouver les volumes PRD 15 Core / 100 Exploration avec artefacts réels.
 4. Prouver la feedback loop sur scoring, messages et recommandations dans un run réel Supabase.
 5. Exécuter le cron GitHub Actions avec secrets et vérifier les transitions `queued -> completed`.

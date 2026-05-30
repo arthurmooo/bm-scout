@@ -8,7 +8,7 @@ Verdict : `production_not_ready`.
 
 1. La recherche réelle existe maintenant via OpenAI `web_search` et fallback public, mais elle n'est pas encore prouvée à volume PRD.
    - Risque : le produit ressemble encore à une démo agentique bien formée.
-   - Remède : exécuter Core/Exploration réels à volume, comparer sources/shortlists et brancher SerpAPI si la couverture OpenAI/fallback public est insuffisante.
+   - Remède : exécuter Core/Exploration réels à volume, comparer sources/shortlists entre SerpAPI, OpenAI web et fallback public.
 
 2. Le runner consomme une queue et un cron GitHub Actions est versionné, mais aucune exécution CI avec secrets n'est encore prouvée.
    - Risque : proactivité configurable, mais pas encore démontrée en production.

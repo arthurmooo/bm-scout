@@ -13,9 +13,10 @@ Statut : `production_not_ready`. Socle utilisable pour demo interne, pas pour d�
   - `SUPABASE_SERVICE_ROLE_KEY`
   - `BM_SCOUT_AUTH_MODE=internal` hors démo ; `BM_SCOUT_AUTH_MODE=demo` seulement pour test local/fixtures
   - `OPENAI_API_KEY`
+  - `SERPAPI_API_KEY` optionnel pour utiliser SerpAPI comme recherche SERP réelle
   - `OPENAI_MODEL` optionnel, par defaut `gpt-5.5`
   - `OPENAI_SEARCH_MODEL` optionnel pour la recherche web OpenAI
-  - `BM_SCOUT_PROVIDER=auto|openai_web|web|configured|demo`
+  - `BM_SCOUT_PROVIDER=auto|serpapi|openai_web|web|configured|demo`
   - `BM_SCOUT_SEARCH_QUERIES` optionnel pour piloter les requêtes web
   - `BM_SCOUT_REAL_SEEDS` pour le mode `configured`
   - `BM_SCOUT_PROVIDER=demo` seulement pour forcer explicitement les fixtures
@@ -132,11 +133,13 @@ Secrets requis :
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `OPENAI_API_KEY`
+- `SERPAPI_API_KEY` optionnel si `BM_SCOUT_PROVIDER=serpapi` ou si le mode `auto` doit préférer SerpAPI
 
 Variables recommandées :
 
 - `OPENAI_MODEL`
 - `OPENAI_SEARCH_MODEL`
+- `SERPAPI_API_KEY`
 - `BM_SCOUT_PROVIDER`
 - `BM_SCOUT_SEARCH_QUERIES`
 - `BM_SCOUT_REAL_SEEDS`
@@ -162,6 +165,16 @@ npm run worker:real:core
 npm run worker:real:exploration
 ```
 
+Mode réel avec SerpAPI :
+
+```bash
+export SERPAPI_API_KEY=...
+export BM_SCOUT_PROVIDER=serpapi
+export BM_SCOUT_SEARCH_QUERIES='["conseil M&A transaction services France","cabinet corporate finance fusion acquisition France"]'
+npm run worker:real:core
+npm run worker:real:exploration
+```
+
 Mode reel avec seeds contrôlées :
 
 ```bash
@@ -181,8 +194,8 @@ npm run worker:real:exploration:persist
 
 Les scripts `worker:real:*` lancent la CLI Python et écrivent les artefacts de preuve `artifacts/agent-worker-real/latest-real-*.json` lus par `quality:readiness`. Le runner `agent:tasks:real` écrit les mêmes artefacts quand il consomme les routines `scout_agent_tasks`.
 Le worker lit `scout_feedback` et `scout_outcomes` si les variables Supabase serveur sont presentes, avec le contexte `scout_companies(name, segment, website)` quand la relation PostgREST est disponible. La persistance passe par la RPC transactionnelle `scout_persist_mission_output`, qui écrit aussi les insights structurés, l'email confidence, les run steps provider et les tool calls Agents SDK compactés.
-En `BM_SCOUT_PROVIDER=auto`, le worker utilise les seeds si elles existent, sinon OpenAI `web_search` si `OPENAI_API_KEY` est présent, sinon un fallback web public minimal. En `BM_SCOUT_PROVIDER=configured`, l'absence de `BM_SCOUT_REAL_SEEDS` échoue au lieu de retomber sur fixtures. Pour une demo fixture explicite : `BM_SCOUT_PROVIDER=demo`.
-SerpAPI pourra être ajouté ensuite comme nouveau provider derrière le même contrat `search_web`.
+En `BM_SCOUT_PROVIDER=auto`, le worker utilise les seeds si elles existent, sinon SerpAPI si `SERPAPI_API_KEY` est présent, sinon OpenAI `web_search` si `OPENAI_API_KEY` est présent, sinon un fallback web public minimal. En `BM_SCOUT_PROVIDER=configured`, l'absence de `BM_SCOUT_REAL_SEEDS` échoue au lieu de retomber sur fixtures. Pour une demo fixture explicite : `BM_SCOUT_PROVIDER=demo`.
+SerpAPI passe par `https://serpapi.com/search.json` avec `engine=google`, `q`, `hl`, `gl` et `num`, puis BM Scout ne garde que les `organic_results` qui passent le filtre source.
 
 ## Gates avant usage Romu
 

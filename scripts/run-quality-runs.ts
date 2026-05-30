@@ -446,8 +446,8 @@ function buildProductBlockers(
   );
   const hasLearningFromFeedback = realEvidence.some((item) => item.mode === "core" && item.learningUsesFeedback);
   blockers.push("production_not_ready: le runner agent_tasks et le cron GitHub Actions existent, mais aucun run CI avec secrets ne les prouve encore.");
-  blockers.push("production_not_ready: le provider OpenAI web/fallback public existe, mais la recherche marche web/jobs/email n'est pas encore prouvee a volume PRD.");
-  blockers.push("production_not_ready: la couverture OpenAI web/fallback public doit etre mesuree avant d'ecarter ou brancher SerpAPI.");
+  blockers.push("production_not_ready: les providers SerpAPI/OpenAI web/fallback public existent, mais la recherche marche web/jobs/email n'est pas encore prouvee a volume PRD.");
+  blockers.push("production_not_ready: la couverture SerpAPI vs OpenAI web/fallback public doit etre mesuree avant de choisir le provider par defaut.");
 
   if (!hasCore || !hasExploration) {
     blockers.push("Runs OpenAI Agents SDK réels Core et Exploration incomplets.");

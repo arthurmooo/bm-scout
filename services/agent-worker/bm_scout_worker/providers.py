@@ -395,10 +395,70 @@ class OpenAIWebResearchProvider(OpenWebResearchProvider):
         return results
 
 
+class SerpApiResearchProvider(OpenWebResearchProvider):
+    def __init__(self, queries: list[str], api_key: str):
+        if not api_key.strip():
+            raise RuntimeError("SERPAPI_API_KEY requis pour BM_SCOUT_PROVIDER=serpapi.")
+        super().__init__(queries)
+        self.api_key = api_key.strip()
+
+    @classmethod
+    def from_env(cls) -> "SerpApiResearchProvider":
+        api_key = os.getenv("SERPAPI_API_KEY", os.getenv("SERP_API_KEY", ""))
+        return cls(parse_search_queries(os.getenv("BM_SCOUT_SEARCH_QUERIES", "")), api_key)
+
+    def search_web(self, query: str, region: str, limit: int) -> list[SearchResult]:
+        params = {
+            "engine": os.getenv("BM_SCOUT_SERPAPI_ENGINE", "google"),
+            "q": query,
+            "api_key": self.api_key,
+            "hl": "fr" if region.lower().startswith("fr") else "en",
+            "gl": "fr" if region.lower().startswith("fr") else region.lower()[:2] or "us",
+            "num": str(max(1, min(limit, 20))),
+        }
+        url = "https://serpapi.com/search.json?" + urllib.parse.urlencode(params)
+        request = urllib.request.Request(
+            url,
+            headers={"user-agent": "BMScout/1.0 internal research; contact: bm-automation"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=18) as response:
+                body = response.read(300_000).decode("utf-8", errors="replace")
+        except (urllib.error.URLError, TimeoutError) as error:
+            self.record_step("serpapi_search_error", {"query": query, "error": str(error)})
+            return []
+
+        try:
+            payload = json.loads(body)
+        except json.JSONDecodeError:
+            self.record_step("serpapi_search_error", {"query": query, "error": "Réponse JSON invalide"})
+            return []
+
+        if isinstance(payload, dict) and payload.get("error"):
+            self.record_step("serpapi_search_error", {"query": query, "error": str(payload["error"])})
+            return []
+
+        results = parse_serpapi_results(payload, limit)
+        self.record_step(
+            "serpapi_search",
+            {
+                "query": query,
+                "region": region,
+                "limit": limit,
+                "engine": params["engine"],
+                "result_count": len(results),
+            },
+        )
+        return results
+
+
 def provider_from_env() -> ResearchProvider:
     provider = os.getenv("BM_SCOUT_PROVIDER", "auto").lower()
     if provider in {"demo", "fixture", "fixtures"}:
         return DemoFixtureProvider()
+    if provider in {"serpapi", "serp_api", "google_serp", "google_search"}:
+        return SerpApiResearchProvider.from_env()
     if provider in {"openai", "openai_web", "openai_search"}:
         return OpenAIWebResearchProvider.from_env()
     if provider in {"web", "search", "open_web"}:
@@ -407,6 +467,8 @@ def provider_from_env() -> ResearchProvider:
         return ConfiguredWebResearchProvider.from_env()
     if os.getenv("BM_SCOUT_REAL_SEEDS", "").strip():
         return ConfiguredWebResearchProvider.from_env()
+    if os.getenv("SERPAPI_API_KEY", os.getenv("SERP_API_KEY", "")).strip():
+        return SerpApiResearchProvider.from_env()
     if os.getenv("OPENAI_API_KEY"):
         return OpenAIWebResearchProvider.from_env()
     if provider == "auto":
@@ -571,6 +633,28 @@ def parse_openai_search_results(text: str, limit: int) -> list[SearchResult]:
         if not isinstance(item, dict):
             continue
         url = str(item.get("url", "")).strip()
+        title = str(item.get("title", "")).strip()
+        snippet = str(item.get("snippet", "")).strip()
+        if not url or not title or not is_candidate_url(url):
+            continue
+        results.append(SearchResult(title=title, url=url, snippet=snippet or title))
+        if len(results) >= limit:
+            break
+    return results
+
+
+def parse_serpapi_results(payload: object, limit: int) -> list[SearchResult]:
+    if not isinstance(payload, dict):
+        return []
+    organic_results = payload.get("organic_results", [])
+    if not isinstance(organic_results, list):
+        return []
+
+    results: list[SearchResult] = []
+    for item in organic_results:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("link", "")).strip()
         title = str(item.get("title", "")).strip()
         snippet = str(item.get("snippet", "")).strip()
         if not url or not title or not is_candidate_url(url):
