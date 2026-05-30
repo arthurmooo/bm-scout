@@ -18,9 +18,9 @@ Verdict : `production_not_ready`.
    - Risque : le moteur local change bien le scoring/message, mais le pilote réel peut rester sous-exercé.
    - Remède : exécuter Core/Exploration réels avec feedbacks/outcomes Supabase et comparer avant/après.
 
-4. Les run steps sont persistés au niveau run/lead, mais pas encore au niveau de chaque tool call fin.
-   - Risque : Arthur peut auditer un lead, mais pas encore toute la chaîne outil par outil.
-   - Remède : enrichir les tools Agents SDK pour pousser leurs appels et résultats dans `run_steps`.
+4. Les run steps couvrent maintenant provider et function tools Agents SDK, mais le tracing OpenAI hébergé doit encore être corrélé à des runs réels persistés.
+   - Risque : Arthur peut auditer les tools internes, mais pas encore prouver toute la chaîne OpenAI web/traces sur Supabase à volume.
+   - Remède : exécuter les runs réels persistés, conserver les trace IDs et vérifier la présence des tool calls dans `scout_run_steps`.
 
 ## Ce qui est plus sain après la passe
 
@@ -32,6 +32,7 @@ Verdict : `production_not_ready`.
 - Observé/Inféré/Incertain et email confidence sont maintenant portés par TS, worker Pydantic, DB et RPC.
 - Le RPC écrit des run steps minimaux (`mission_start`, `lead_persisted`, steps worker, `mission_complete`).
 - Le provider réel ajoute des run steps outil-par-outil pour déduplication, fetch, extraction, email discovery, evidence save et scoring.
+- Les function tools Agents SDK enregistrent leurs entrées/sorties compactées pendant `Runner.run`.
 - Un workflow GitHub Actions cron/dispatch existe pour consommer `scout_agent_tasks`.
 - Les actions Romu passent par une route serveur et une table d'événements.
 - Le DNC est un gate déterministe côté TS, worker offline et DB.
@@ -48,7 +49,7 @@ Verdict : `production_not_ready`.
 - `npm run quality:readiness` échoue comme attendu en `production_not_ready`
 - `npm run agent:tasks` échoue sans env Supabase avec un message explicite.
 - Import manager Agents SDK : 13 tools dont `WebSearchTool` et 8 tools métier.
-- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 22 tests
+- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 24 tests
 - Supabase interne : migration `bm_scout_structured_insights_email_confidence_steps` appliquée.
 
 ## Décision

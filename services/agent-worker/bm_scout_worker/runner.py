@@ -60,6 +60,7 @@ async def _run_with_agents_sdk(mode: ScoutMode, *, include_weak: bool, feedbacks
     from agents import Runner, trace
 
     from .agents import build_manager_agent
+    from .tool_recorder import capture_tool_calls
 
     model = os.getenv("OPENAI_MODEL", "gpt-5.5")
     manager = build_manager_agent(model)
@@ -106,9 +107,10 @@ Contraintes de sortie :
 - Tout contact non confirmé reste `role_only` ou `uncertain`.
 - Les textes doivent rester en français.
 """
-    with trace("BM Scout V1", metadata={"mode": mode, "include_weak": str(include_weak).lower()}):
-        result = await Runner.run(manager, prompt, max_turns=8)
+    with capture_tool_calls() as tool_steps:
+        with trace("BM Scout V1", metadata={"mode": mode, "include_weak": str(include_weak).lower()}):
+            result = await Runner.run(manager, prompt, max_turns=8)
     final_output = result.final_output
     output = final_output if isinstance(final_output, MissionOutput) else MissionOutput.model_validate(final_output)
-    output.run_steps = [provider_step, *candidate_batch.run_steps, *output.run_steps]
+    output.run_steps = [provider_step, *candidate_batch.run_steps, *tool_steps, *output.run_steps]
     return output

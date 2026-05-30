@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+from types import SimpleNamespace
 from unittest.mock import patch
 
+from bm_scout_worker import tools
 from bm_scout_worker.fixtures import offline_output
 from bm_scout_worker.memory import SupabaseConfig, SupabaseMemory
 from bm_scout_worker.providers import (
@@ -22,6 +24,7 @@ from bm_scout_worker.providers import (
 from bm_scout_worker.quality import mission_blockers
 from bm_scout_worker.runner import run_bm_scout_mission
 from bm_scout_worker.schemas import OutreachPack, QualityGate, ScoutLead, StructuredInsights
+from bm_scout_worker.tool_recorder import capture_tool_calls, compact_payload
 
 
 def test_core_offline_produces_actionable_lead() -> None:
@@ -295,6 +298,32 @@ def test_parse_openai_search_results_filters_non_candidates() -> None:
 
 def test_parse_openai_search_results_tolerates_invalid_json() -> None:
     assert parse_openai_search_results("pas du json", 5) == []
+
+
+def test_agent_sdk_tool_calls_are_recorded(monkeypatch) -> None:
+    monkeypatch.setenv("BM_SCOUT_PROVIDER", "demo")
+
+    async def invoke_tool() -> tuple[object, list[str]]:
+        context = SimpleNamespace(tool_name="search_web", run_config=None)
+        with capture_tool_calls() as steps:
+            output = await tools.search_web.on_invoke_tool(
+                context,
+                '{"query":"m&a","region":"fr","limit":1}',
+            )
+            return output, [step.step for step in steps]
+
+    output, step_names = asyncio.run(invoke_tool())
+
+    assert isinstance(output, list)
+    assert step_names == ["search_web"]
+
+
+def test_tool_recorder_compacts_large_payloads() -> None:
+    compact = compact_payload({"html": "x" * 700, "items": list(range(20))})
+
+    assert isinstance(compact, dict)
+    assert str(compact["html"]).endswith("...[truncated]")
+    assert len(compact["items"]) == 8
 
 
 def test_runner_writes_artifact(tmp_path) -> None:

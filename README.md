@@ -18,7 +18,7 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 - Actions UI branchées sur une API serveur : valider, rejeter, enrichir, copier, DNC, lancer routines.
 - DNC hard gate côté qualité TS, côté worker offline et côté DB pour empêcher un message non bloqué sur une cible DNC.
 - Feedback memory locale : mauvais lead/secteur pénalisé, angle validé renforcé, message générique régénéré, DNC bloquant.
-- Observé/Inféré/Incertain, email confidence et run steps persistés via Supabase/RPC.
+- Observé/Inféré/Incertain, email confidence, run steps provider et tool calls Agents SDK persistés via Supabase/RPC.
 - Rapport qualité qui distingue le harnais fixture de la readiness produit réelle.
 
 ## Ce qui n'est pas encore prêt

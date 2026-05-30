@@ -21,7 +21,7 @@ Verdict courant : `production_not_ready`.
 | Do-not-contact hard gate | Couvert en socle | QC TS, worker offline, trigger DB, action DNC |
 | Feedback loop influente | Partiel | Effet scoring/message prouvé par tests locaux, pas encore par run réel Supabase à volume |
 | Actions UI fonctionnelles | Partiel | API actions + traces, centre à valider, smoke Browser à relancer après cette passe |
-| Run steps/tool calls auditables | Partiel | RPC écrit run start/lead saved/worker steps, tool calls fins encore limités |
+| Run steps/tool calls auditables | Partiel | RPC écrit run start/lead saved/worker steps ; provider + function tools Agents SDK poussent des étapes compactées |
 | Supabase mémoire | Partiel | Schéma/RPC/actions, env runtime non vérifiée ici |
 | Documentation honnête | Couvert dans cette passe | README + docs en `production_not_ready` |
 
