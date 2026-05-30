@@ -5,10 +5,9 @@ out/
 __pycache__/
 .pytest_cache/
 *.pyc
+*.egg-info/
 *.tsbuildinfo
 .env
 .env.*
 !.env.example
 artifacts/
-
-*.egg-info/

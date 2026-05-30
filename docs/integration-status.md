@@ -112,14 +112,16 @@ Remote local ajoute :
 
 - `bm-scout` -> `https://github.com/arthurmooo/bm-scout.git`
 
-Decision : ne pas push le worktree actuel tel quel. Il contient encore les suppressions massives de l'ancien cockpit, des artefacts locaux, et une V1 incomplete.
+Decision : ne pas push le worktree parent tel quel. Il contient encore les suppressions massives de l'ancien cockpit, des artefacts locaux, et des changements hors BM Scout.
 
-Publication propre recommandee :
+Publication propre effectuee :
 
-1. isoler `bm-commercial-cockpit` comme contenu du repo dedie ;
-2. exclure `.next`, `.venv`, `node_modules`, zips, archives, captures lourdes ;
-3. publier quand les scripts minimum passent ;
-4. garder le repo prive tant que le worker et Supabase ne sont pas finalises.
+1. `bm-commercial-cockpit` isole comme contenu du repo dedie ;
+2. `.next`, `.venv`, `node_modules`, `.env`, artefacts et metadata Python generées exclus ;
+3. branche `main` poussee ;
+4. repo garde prive tant que le worker et Supabase ne sont pas finalises.
+
+Dernier commit publie : `d389bf5`.
 
 ## Prochaine tranche
 
@@ -127,4 +129,4 @@ Publication propre recommandee :
 2. Tester la console branchée Supabase avec env serveur.
 3. Executer `--persist` depuis la CLI si une service role key est disponible localement.
 4. Corriger les blockers de l'audit thermo-nuclear final.
-5. Nettoyer le perimetre de publication GitHub puis pousser le repo dedie.
+5. Mettre a jour le repo dedie apres correction des blockers.
