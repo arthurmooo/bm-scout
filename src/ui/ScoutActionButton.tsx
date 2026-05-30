@@ -10,10 +10,11 @@ interface ScoutActionButtonProps {
   className?: string;
   children: ReactNode;
   reason?: string;
+  note?: string;
   copyText?: string;
 }
 
-export function ScoutActionButton({ action, leadId, className, children, reason, copyText }: ScoutActionButtonProps) {
+export function ScoutActionButton({ action, leadId, className, children, reason, note, copyText }: ScoutActionButtonProps) {
   const [state, setState] = useState<"idle" | "saving" | "done" | "error">("idle");
 
   async function submit() {
@@ -28,7 +29,7 @@ export function ScoutActionButton({ action, leadId, className, children, reason,
     const response = await fetch("/api/scout/actions", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action, leadId, reason })
+      body: JSON.stringify({ action, leadId, reason, note })
     });
     setState(response.ok ? "done" : "error");
   }

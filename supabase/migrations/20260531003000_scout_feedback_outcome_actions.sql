@@ -1,0 +1,12 @@
+alter type public.scout_action_type add value if not exists 'feedback_good_lead';
+alter type public.scout_action_type add value if not exists 'feedback_bad_lead';
+alter type public.scout_action_type add value if not exists 'feedback_good_angle';
+alter type public.scout_action_type add value if not exists 'feedback_generic_message';
+alter type public.scout_action_type add value if not exists 'outcome_no_response';
+alter type public.scout_action_type add value if not exists 'outcome_negative';
+alter type public.scout_action_type add value if not exists 'outcome_positive';
+alter type public.scout_action_type add value if not exists 'outcome_meeting_booked';
+alter type public.scout_action_type add value if not exists 'outcome_wrong_person';
+alter type public.scout_action_type add value if not exists 'outcome_pain_confirmed';
+alter type public.scout_action_type add value if not exists 'outcome_pain_not_confirmed';
+alter type public.scout_action_type add value if not exists 'outcome_bad_timing';

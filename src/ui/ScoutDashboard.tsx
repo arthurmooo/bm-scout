@@ -134,6 +134,14 @@ function PrimaryLead({ lead }: { lead: ScoutLead }) {
         <ScoutActionButton className="button" action="copy_linkedin" leadId={lead.id} copyText={lead.outreach.linkedin}><Clipboard size={17} /> Copier LinkedIn</ScoutActionButton>
         <ScoutActionButton className="button danger" action="add_do_not_contact" leadId={lead.id} reason="Ajout manuel Romu depuis la console."><X size={17} /> DNC</ScoutActionButton>
       </div>
+      <div className="feedback-row" aria-label="Feedback Romu">
+        <ScoutActionButton className="button compact" action="feedback_good_lead" leadId={lead.id} note="Très bon lead : fit ICP confirmé par Romu."><Check size={15} /> Bon lead</ScoutActionButton>
+        <ScoutActionButton className="button compact" action="feedback_good_angle" leadId={lead.id} note="Très bon angle : tâche grise entre outils."><Check size={15} /> Angle OK</ScoutActionButton>
+        <ScoutActionButton className="button compact" action="feedback_generic_message" leadId={lead.id} note="Message trop générique."><Clipboard size={15} /> Générique</ScoutActionButton>
+        <ScoutActionButton className="button compact" action="outcome_meeting_booked" leadId={lead.id} note="Outcome : RDV pris."><Check size={15} /> RDV</ScoutActionButton>
+        <ScoutActionButton className="button compact danger" action="feedback_bad_lead" leadId={lead.id} note="Mauvais lead : à exclure du prochain scoring."><X size={15} /> Mauvais</ScoutActionButton>
+        <ScoutActionButton className="button compact danger" action="outcome_negative" leadId={lead.id} note="Outcome : réponse négative."><X size={15} /> Négatif</ScoutActionButton>
+      </div>
       <details className="deep-card">
         <summary><FileText size={17} /> Fiche profonde</summary>
         <p>{lead.deepCard}</p>

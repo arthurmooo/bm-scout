@@ -254,6 +254,13 @@ a {
   gap: 10px;
 }
 
+.feedback-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .button {
   border: 1px solid var(--line);
   border-radius: 7px;
@@ -633,6 +640,12 @@ a {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
+  }
+
+  .feedback-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
   }
 
   .insights-grid {

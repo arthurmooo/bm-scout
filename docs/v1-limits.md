@@ -24,6 +24,7 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 ## Limites data
 
 - Supabase stocke runs, companies, contacts, preuves, scores, fiches, messages, feedbacks, outcomes, do-not-contact, lessons, email confidence, insights structurés et run steps.
+- Les feedbacks/outcomes Romu sont persistés par l'API serveur et relus par le worker, mais l'effet à volume doit encore être démontré par runs réels persistés.
 - La persistance worker passe par RPC transactionnelle, mais doit etre reverifiee dans chaque env avant demo.
 - La console lit Supabase cote serveur si `SUPABASE_SERVICE_ROLE_KEY` existe, sinon affiche les fixtures demo.
 - Le dedoublonnage avance et l'historique multi-semaines complet ne sont pas encore industrialises.

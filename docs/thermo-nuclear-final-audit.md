@@ -37,6 +37,7 @@ Verdict : `production_not_ready`.
 - Les scripts `worker:real:*` et le runner de queue écrivent maintenant les artefacts `latest-real-*.json` attendus par `quality:readiness`.
 - Un workflow GitHub Actions cron/dispatch existe pour consommer `scout_agent_tasks`.
 - Les actions Romu passent par une route serveur et une table d'événements.
+- Les actions feedback/outcome Romu alimentent maintenant `scout_feedback` et `scout_outcomes`, donc la mémoire agentique ne dépend plus seulement de notes fictives.
 - Le DNC est un gate déterministe côté TS, worker offline et DB.
 - `quality:readiness` ne peut plus transformer des fixtures en claim de readiness.
 - Le dashboard ne contient plus de routine codée en dur.
@@ -52,6 +53,7 @@ Verdict : `production_not_ready`.
 - `npm exec tsx -- scripts/run-agent-worker-evidence.ts --offline --mode=core` : pass, harnais d'artefact vérifié sans Supabase.
 - `npm run agent:tasks` échoue sans env Supabase avec un message explicite.
 - Tests runner TS : routines brief/learning/DNC/followup couvertes.
+- Tests actions TS : feedback bon angle, message générique, outcome RDV et DNC vers mémoire couverts.
 - Import manager Agents SDK : 13 tools dont `WebSearchTool` et 8 tools métier.
 - `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 28 tests
 - Supabase interne : migration `bm_scout_structured_insights_email_confidence_steps` appliquée.

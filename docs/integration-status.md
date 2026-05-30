@@ -29,6 +29,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Migration Supabase `20260530210927_agent_tasks_and_actions.sql`.
 - API `POST /api/scout/actions`.
 - Actions UI : valider, enrichir, rejeter, copier email/relance/LinkedIn, DNC, lancer routines.
+- Actions feedback/outcome : bon lead, mauvais lead, bon angle, message trop générique, RDV pris, positif/négatif, mauvais timing, mauvais interlocuteur, douleur confirmée/non confirmée. Ces actions écrivent `scout_feedback` ou `scout_outcomes`, pas seulement `scout_action_events`.
 - Trigger DB `scout_prevent_dnc_message` pour empêcher un message non bloqué sur une cible DNC.
 - QC TS : DNC déterministe et Observé relié à une preuve.
 - Worker offline : DNC interdit en shortlist.
@@ -64,7 +65,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 ## Vérifications exécutées
 
-- `npm run test` : 24 tests pass.
+- `npm run test` : 28 tests pass.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.
@@ -75,7 +76,8 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - `npm run agent:schedule` : pass, 6 routines planifiées.
 - `npm run agent:tasks` sans env serveur : fail attendu avec message env Supabase requis.
 - `npm exec tsx -- scripts/run-agent-worker-evidence.ts --offline --mode=core` : pass, artefact `latest-offline-core.json` écrit.
-- Browser local : smoke Playwright OK sur `http://localhost:3030` ; statut `production_not_ready`, actions, Approval Center et DNC visibles ; screenshot locale `artifacts/browser-smoke/playwright-dashboard-production-not-ready.png`.
+- `npm run test:e2e` : pass, smoke Playwright sur `http://localhost:3030` ; statut `production_not_ready`, actions feedback/outcome/routines visibles, bouton feedback hydraté, screenshot locale `artifacts/browser-smoke/playwright-dashboard-feedback-actions.png`.
+- Browser intégré : smoke manuel sur `http://localhost:3030`, clic feedback `Bon lead` testé ; sans env Supabase serveur, l'action passe en état `Erreur` comme attendu au lieu de prétendre être persistée.
 - Supabase interne `Interne_Agentic_prospection` : migrations `agent_tasks_and_actions` et `bm_scout_structured_insights_email_confidence_steps` appliquées.
 
 ## Prochaine tranche P0

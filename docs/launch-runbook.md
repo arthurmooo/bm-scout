@@ -98,6 +98,7 @@ npm run agent:tasks:real
 ```
 
 Limite actuelle : le runner est reproductible, mais le cron production reste à brancher. `agent:tasks:real` lance le worker OpenAI Agents SDK et requiert `OPENAI_API_KEY`.
+Les actions Romu de feedback et outcome écrivent `scout_feedback` / `scout_outcomes`, puis les runs suivants les rechargent via le worker. Cela doit être prouvé par comparaison avant/après sur un run Supabase réel avant tout statut pilote.
 
 ## Cron GitHub Actions
 

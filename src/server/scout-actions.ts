@@ -1,5 +1,5 @@
 import { DEFAULT_ROUTINE_CONFIG, routineTypeForAction } from "../domain/scheduler";
-import type { LeadActionType } from "../domain/types";
+import type { FeedbackKind, LeadActionType, LeadVerdict, QualityDecision } from "../domain/types";
 import { createServerSupabaseClient } from "./supabase";
 
 export interface ScoutActionInput {
@@ -15,6 +15,28 @@ export interface ScoutActionResult {
   message: string;
 }
 
+type CompanyPatch = {
+  verdict?: LeadVerdict;
+  quality_decision?: QualityDecision;
+  rejection_reason?: string;
+  next_action?: string;
+};
+
+type ScoutOutcomeValue = "interested" | "not_now" | "not_relevant" | "meeting_booked" | "negative" | "no_response";
+
+type FeedbackActionEffect = {
+  kind: FeedbackKind;
+  defaultNote: string;
+  companyPatch?: (note: string) => CompanyPatch;
+  rejectMessages?: boolean;
+};
+
+type OutcomeActionEffect = {
+  value: ScoutOutcomeValue;
+  defaultNote: string;
+  companyPatch?: (note: string) => CompanyPatch;
+};
+
 const ACTION_LABELS: Record<LeadActionType, string> = {
   validate_lead: "Lead validé.",
   reject_lead: "Lead rejeté.",
@@ -27,10 +49,86 @@ const ACTION_LABELS: Record<LeadActionType, string> = {
   copy_linkedin: "Message LinkedIn copié. Aucun envoi automatique.",
   mark_message_used: "Message marqué comme utilisé manuellement.",
   add_do_not_contact: "Do-not-contact ajouté.",
+  feedback_good_lead: "Feedback lead positif enregistré.",
+  feedback_bad_lead: "Feedback lead négatif enregistré.",
+  feedback_good_angle: "Feedback angle enregistré.",
+  feedback_generic_message: "Feedback message générique enregistré.",
+  outcome_no_response: "Outcome sans réponse enregistré.",
+  outcome_negative: "Outcome négatif enregistré.",
+  outcome_positive: "Outcome positif enregistré.",
+  outcome_meeting_booked: "Outcome RDV pris enregistré.",
+  outcome_wrong_person: "Outcome mauvais interlocuteur enregistré.",
+  outcome_pain_confirmed: "Outcome douleur confirmée enregistré.",
+  outcome_pain_not_confirmed: "Outcome douleur non confirmée enregistré.",
+  outcome_bad_timing: "Outcome mauvais timing enregistré.",
   launch_core: "Routine Core mise en file.",
   launch_exploration: "Routine Exploration mise en file.",
   launch_daily_brief: "Daily Brief mis en file.",
   launch_learning_review: "Learning Review mise en file."
+};
+
+const FEEDBACK_ACTIONS: Partial<Record<LeadActionType, FeedbackActionEffect>> = {
+  feedback_good_lead: {
+    kind: "good_lead",
+    defaultNote: "Très bon lead.",
+    companyPatch: () => ({ verdict: "validate" })
+  },
+  feedback_bad_lead: {
+    kind: "bad_lead",
+    defaultNote: "Mauvais lead.",
+    companyPatch: (note) => ({ verdict: "reject", rejection_reason: note })
+  },
+  feedback_good_angle: {
+    kind: "good_angle",
+    defaultNote: "Très bon angle."
+  },
+  feedback_generic_message: {
+    kind: "generic_message",
+    defaultNote: "Message trop générique.",
+    rejectMessages: true
+  }
+};
+
+const OUTCOME_ACTIONS: Partial<Record<LeadActionType, OutcomeActionEffect>> = {
+  outcome_no_response: {
+    value: "no_response",
+    defaultNote: "Pas de réponse."
+  },
+  outcome_negative: {
+    value: "negative",
+    defaultNote: "Réponse négative.",
+    companyPatch: (note) => ({ verdict: "reject", rejection_reason: note })
+  },
+  outcome_positive: {
+    value: "interested",
+    defaultNote: "Réponse positive.",
+    companyPatch: () => ({ verdict: "validate" })
+  },
+  outcome_meeting_booked: {
+    value: "meeting_booked",
+    defaultNote: "RDV pris.",
+    companyPatch: () => ({ verdict: "validate" })
+  },
+  outcome_wrong_person: {
+    value: "not_relevant",
+    defaultNote: "Mauvais interlocuteur.",
+    companyPatch: (note) => ({ verdict: "reject", rejection_reason: note })
+  },
+  outcome_pain_confirmed: {
+    value: "interested",
+    defaultNote: "Douleur confirmée.",
+    companyPatch: () => ({ verdict: "validate" })
+  },
+  outcome_pain_not_confirmed: {
+    value: "not_relevant",
+    defaultNote: "Douleur non confirmée.",
+    companyPatch: (note) => ({ verdict: "reject", rejection_reason: note })
+  },
+  outcome_bad_timing: {
+    value: "not_now",
+    defaultNote: "Timing mauvais.",
+    companyPatch: () => ({ verdict: "watch", next_action: "À retenter plus tard : timing défavorable." })
+  }
 };
 
 export async function recordScoutAction(input: ScoutActionInput): Promise<ScoutActionResult> {
@@ -149,10 +247,41 @@ async function applyLeadMutation(input: ScoutActionInput, companyId: string): Pr
         .eq("id", companyId)
     );
     await checked(client.from("scout_messages").update({ status: "blocked" }).eq("company_id", companyId));
+    await insertFeedback(companyId, "do_not_contact", input.reason ?? input.note ?? "Do-not-contact manuel Romu.");
   }
   if (input.action === "copy_email") await markMessageCopied(companyId, "email");
   if (input.action === "copy_follow_up") await markMessageCopied(companyId, "follow_up");
   if (input.action === "copy_linkedin") await markMessageCopied(companyId, "linkedin");
+  if (input.action === "mark_message_used") await markMessagesUsed(companyId);
+  if (input.action === "rerun_qc") {
+    await checked(
+      client
+        .from("scout_companies")
+        .update({ verdict: "enrich", quality_decision: "needs_enrichment", next_action: "Relancer QC demandé par Romu." })
+        .eq("id", companyId)
+    );
+  }
+
+  const feedback = FEEDBACK_ACTIONS[input.action];
+  if (feedback) {
+    const note = input.note ?? input.reason ?? feedback.defaultNote;
+    await insertFeedback(companyId, feedback.kind, note);
+    if (feedback.companyPatch) await updateCompany(companyId, feedback.companyPatch(note));
+    if (feedback.rejectMessages) await rejectUnblockedMessages(companyId);
+  }
+
+  const outcome = OUTCOME_ACTIONS[input.action];
+  if (outcome) {
+    const note = input.note ?? input.reason ?? outcome.defaultNote;
+    await checked(
+      client.from("scout_outcomes").insert({
+        company_id: companyId,
+        outcome: outcome.value,
+        note
+      })
+    );
+    if (outcome.companyPatch) await updateCompany(companyId, outcome.companyPatch(note));
+  }
 }
 
 async function markMessageCopied(companyId: string, channel: "email" | "follow_up" | "linkedin"): Promise<void> {
@@ -165,6 +294,48 @@ async function markMessageCopied(companyId: string, channel: "email" | "follow_u
       .eq("company_id", companyId)
       .eq("channel", channel)
       .neq("status", "blocked")
+  );
+}
+
+async function markMessagesUsed(companyId: string): Promise<void> {
+  const client = createServerSupabaseClient();
+  if (!client) return;
+  await checked(
+    client
+      .from("scout_messages")
+      .update({ status: "approved" })
+      .eq("company_id", companyId)
+      .neq("status", "blocked")
+  );
+}
+
+async function rejectUnblockedMessages(companyId: string): Promise<void> {
+  const client = createServerSupabaseClient();
+  if (!client) return;
+  await checked(
+    client
+      .from("scout_messages")
+      .update({ status: "rejected" })
+      .eq("company_id", companyId)
+      .neq("status", "blocked")
+  );
+}
+
+async function updateCompany(companyId: string, patch: CompanyPatch): Promise<void> {
+  const client = createServerSupabaseClient();
+  if (!client) return;
+  await checked(client.from("scout_companies").update(patch).eq("id", companyId));
+}
+
+async function insertFeedback(companyId: string, kind: FeedbackKind, note: string): Promise<void> {
+  const client = createServerSupabaseClient();
+  if (!client) return;
+  await checked(
+    client.from("scout_feedback").insert({
+      company_id: companyId,
+      kind,
+      note
+    })
   );
 }
 
