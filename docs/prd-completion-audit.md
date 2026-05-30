@@ -13,7 +13,7 @@ Verdict courant : `production_not_ready`.
 | Proactivité réelle | Partiel | `scout_agent_tasks` appliqué Supabase, scheduler local, runner queue, cron GitHub Actions versionné mais non prouvé |
 | 15 leads Core / semaine | Non prouvé | Objectif paramétré, pas de run réel à volume |
 | 100 comptes Exploration scannés | Non prouvé | Objectif paramétré, pas de run réel à volume |
-| Vraie recherche marché | Partiel | Provider configuré + tools métier, pas encore search autonome à volume |
+| Vraie recherche marché | Partiel | Provider OpenAI `web_search` + fallback web public + tools métier, pas encore prouvé à volume |
 | Fiches courtes/profondes | Partiel | Modèle et fixtures, pas encore toutes issues providers réels |
 | Observé / Inféré / Incertain | Couvert en socle | Types TS, worker Pydantic, QC Observé/evidence, colonne `structured_insights` Supabase |
 | Messages personnalisés | Partiel | QC fixture, pas de preuve provider réel à volume |
@@ -37,7 +37,7 @@ Verdict courant : `production_not_ready`.
 
 - P0.1 : cron GitHub Actions non encore exécuté avec secrets ; transitions production à tester.
 - P0.2 Workflows Core/Exploration réels : les volumes PRD ne sont pas prouvés.
-- P0.3 Suppression de la dépendance fixtures : provider réel configuré branché, search web autonome à volume restant.
+- P0.3 Suppression de la dépendance fixtures : provider OpenAI web/fallback public branché, search autonome à volume restant à prouver.
 - P0.5 Feedback loop réelle : impact causal prouvé localement, à prouver avec feedbacks/outcomes Supabase réels.
 - P0.7 : socle full-stack ajouté, à valider sur runs réels persistés.
 

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from agents import Agent, GuardrailFunctionOutput, RunContextWrapper, output_guardrail
+from agents import Agent, GuardrailFunctionOutput, RunContextWrapper, WebSearchTool, output_guardrail
 
 from .quality import mission_blockers
 from .schemas import MissionOutput
@@ -65,11 +65,13 @@ async def bm_scout_output_quality(
 
 
 def build_manager_agent(model: str) -> Agent[None]:
+    hosted_web_search = WebSearchTool(search_context_size="low", external_web_access=True)
     core_agent = Agent(
         name="Core Research Agent",
         handoff_description="Recherche et qualification Core BM.",
         instructions=CORE_INSTRUCTIONS,
         model=model,
+        tools=[hosted_web_search, search_web, fetch_company_site, extract_company_signals, search_jobs],
         output_type=MissionOutput,
     )
     exploration_agent = Agent(
@@ -77,6 +79,7 @@ def build_manager_agent(model: str) -> Agent[None]:
         handoff_description="Exploration large filtrée.",
         instructions=EXPLORATION_INSTRUCTIONS,
         model=model,
+        tools=[hosted_web_search, search_web, fetch_company_site, extract_company_signals, search_jobs],
         output_type=MissionOutput,
     )
     outreach_agent = Agent(
@@ -107,6 +110,7 @@ def build_manager_agent(model: str) -> Agent[None]:
         instructions=MANAGER_INSTRUCTIONS,
         model=model,
         tools=[
+            hosted_web_search,
             search_web,
             fetch_company_site,
             extract_company_signals,

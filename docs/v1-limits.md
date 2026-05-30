@@ -15,10 +15,10 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 ## Limites agentiques
 
 - Le worker charge les feedbacks Supabase si l'env serveur existe ; sans env, il repasse en seed local pour developpement.
-- Le chemin reel Agents SDK consomme un provider configuré et expose des tools métier. Ce n'est pas encore une vraie recherche marche autonome à volume PRD.
+- Le chemin reel Agents SDK expose le `WebSearchTool` OpenAI, un provider `openai_web`, un fallback web public et des tools métier. Ce n'est pas encore une recherche marché prouvée à volume PRD.
 - La feedback memory modifie bien scoring/message en local, mais doit encore être prouvée sur runs réels persistés.
 - Les agents produisent des sorties structurees, mais la qualite commerciale finale reste a valider par Romu.
-- Les recherches web gratuites ou publiques restent dependantes de la disponibilite des sources.
+- Les recherches OpenAI web/fallback public restent dependantes de la disponibilite des sources, des coûts, des rate limits et de la qualité des requêtes.
 - Les volumes PRD 15 Core / 100 Exploration sont des objectifs de routine, pas encore des preuves de production.
 
 ## Limites data
@@ -47,7 +47,7 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 ## Non-negociables de maintenance readiness
 
 - Le cron GitHub Actions consomme vraiment `scout_agent_tasks` via `agent:tasks:real` avec secrets configurés.
-- Les providers reels dépassent les seeds configurées et scannent réellement le marché.
+- Les providers reels dépassent les seeds configurées, scannent réellement le marché et prouvent la qualité des sources ; SerpAPI reste une option de provider à brancher.
 - `npm run verify:supabase` passe avec l'env serveur.
 - `--persist` cree un run lisible en Supabase via la RPC.
 - Un run reel Agents SDK utilise les feedbacks/outcomes Supabase et modifie les recommandations learning.

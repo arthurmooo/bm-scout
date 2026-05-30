@@ -40,7 +40,7 @@ export function buildSnapshot(runs: ScoutRun[], feedbacks: FeedbackEvent[] = [])
     runs,
     tasks,
     brief: buildBriefSummary(tasks, runs),
-    readiness: "demo_ready"
+    readiness: "production_not_ready"
   };
 }
 

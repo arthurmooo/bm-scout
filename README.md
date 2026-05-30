@@ -24,7 +24,7 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 
 - Cron GitHub Actions versionné, mais pas encore prouvé par un run CI avec secrets.
 - Pas de preuve volume 15 Core / 100 Exploration en run réel.
-- Recherche marché réelle encore limitée : le worker réel passe par un provider configuré et des tools métier, mais pas encore par un moteur de recherche web industrialisé à volume PRD.
+- Recherche marché réelle encore limitée : le worker peut utiliser OpenAI `web_search` ou un fallback web public, mais les volumes PRD et la qualité des sources restent à prouver en run réel.
 - Feedback loop prouvée localement, pas encore validée sur un run réel Supabase à volume.
 - `quality:readiness` échoue volontairement tant que ces preuves ne sont pas là.
 - RLS/auth restent internes et à durcir avant production.
@@ -42,7 +42,10 @@ Variables serveur :
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL` optionnel, par défaut `gpt-5.5`
-- `BM_SCOUT_REAL_SEEDS` pour le mode réel sans fixtures, ex. `[{"company":"Cambon Partners","website":"https://www.cambonpartners.com","segment":"Conseil M&A"}]`
+- `OPENAI_SEARCH_MODEL` optionnel pour la découverte web OpenAI, par défaut `OPENAI_MODEL`
+- `BM_SCOUT_PROVIDER=auto|openai_web|web|configured|demo`, par défaut `auto`
+- `BM_SCOUT_SEARCH_QUERIES` optionnel pour piloter les requêtes web, format JSON ou `;`
+- `BM_SCOUT_REAL_SEEDS` pour le mode `configured`, ex. `[{"company":"Cambon Partners","website":"https://www.cambonpartners.com","segment":"Conseil M&A"}]`
 - `BM_SCOUT_PROVIDER=demo` uniquement pour forcer explicitement le mode fixtures.
 
 ## Scheduler local
@@ -83,7 +86,8 @@ cd services/agent-worker
 ```
 
 La persistance `--persist` passe par la RPC Supabase transactionnelle `scout_persist_mission_output`.
-Le chemin réel expose des tools Agents SDK : `search_web`, `fetch_company_site`, `extract_company_signals`, `search_jobs`, `find_public_emails`, `dedupe_company`, `score_candidate`, `save_evidence`.
+Le chemin réel expose le `WebSearchTool` hébergé OpenAI dans l'orchestration Agents SDK, plus les tools métier `search_web`, `fetch_company_site`, `extract_company_signals`, `search_jobs`, `find_public_emails`, `dedupe_company`, `score_candidate`, `save_evidence`.
+SerpAPI pourra remplacer ou compléter `openai_web` plus tard sans changer le contrat métier du provider.
 
 ## Documentation
 

@@ -6,7 +6,19 @@ from unittest.mock import patch
 
 from bm_scout_worker.fixtures import offline_output
 from bm_scout_worker.memory import SupabaseConfig, SupabaseMemory
-from bm_scout_worker.providers import CompanySeed, ConfiguredWebResearchProvider, build_candidate_batch, parse_company_seeds
+from bm_scout_worker.providers import (
+    CompanySeed,
+    ConfiguredWebResearchProvider,
+    OpenAIWebResearchProvider,
+    OpenWebResearchProvider,
+    SearchResult,
+    build_candidate_batch,
+    parse_company_seeds,
+    parse_duckduckgo_lite_results,
+    parse_openai_search_results,
+    parse_search_queries,
+    provider_from_env,
+)
 from bm_scout_worker.quality import mission_blockers
 from bm_scout_worker.runner import run_bm_scout_mission
 from bm_scout_worker.schemas import OutreachPack, QualityGate, ScoutLead, StructuredInsights
@@ -89,6 +101,7 @@ def test_observed_insight_without_evidence_id_is_blocked() -> None:
 def test_real_provider_requires_explicit_sources(monkeypatch) -> None:
     monkeypatch.delenv("BM_SCOUT_PROVIDER", raising=False)
     monkeypatch.delenv("BM_SCOUT_REAL_SEEDS", raising=False)
+    monkeypatch.setenv("BM_SCOUT_PROVIDER", "configured")
 
     try:
         build_candidate_batch("core", include_weak=False, feedback_notes=[])
@@ -96,6 +109,35 @@ def test_real_provider_requires_explicit_sources(monkeypatch) -> None:
         assert "BM_SCOUT_REAL_SEEDS requis" in str(error)
     else:
         raise AssertionError("Le mode réel ne doit pas retomber silencieusement sur les fixtures.")
+
+
+def test_open_web_provider_builds_candidates_without_seed(monkeypatch) -> None:
+    monkeypatch.setenv("BM_SCOUT_CORE_TARGET", "3")
+    monkeypatch.setenv("BM_SCOUT_FETCH_LIMIT", "2")
+    provider = OpenWebResearchProvider(["conseil M&A France"])
+    provider.search_web = lambda _query, _region, _limit: [
+        SearchResult(title="Conseil en Deals - PwC", url="https://www.pwc.fr/fr/expertises/transactions.html", snippet="Deals"),
+        SearchResult(title="Transaction Services | Deloitte France", url="https://www.deloitte.com/fr/fr/services/mergers-and-acquisitions.html", snippet="TS"),
+        SearchResult(title="LinkedIn post", url="https://linkedin.com/posts/test", snippet="blocked"),
+    ]
+    provider.fetch_company_site = lambda _url: "M&A transaction reporting document client team"
+
+    leads = provider.build_candidates("core")
+
+    assert [lead.company for lead in leads] == ["PwC", "Deloitte France"]
+    assert all(lead.evidence for lead in leads)
+    assert leads[0].website == "https://www.pwc.fr"
+    assert leads[0].evidence[0].url == "https://www.pwc.fr/fr/expertises/transactions.html"
+    assert any(step.step == "search_web" for step in provider.run_steps)
+    assert any(step.step == "fetch_company_site" for step in provider.run_steps)
+
+
+def test_auto_provider_prefers_openai_web_when_key_is_present(monkeypatch) -> None:
+    monkeypatch.delenv("BM_SCOUT_PROVIDER", raising=False)
+    monkeypatch.delenv("BM_SCOUT_REAL_SEEDS", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+
+    assert isinstance(provider_from_env(), OpenAIWebResearchProvider)
 
 
 def test_configured_provider_builds_candidates_from_public_seed() -> None:
@@ -182,6 +224,38 @@ def test_parse_company_seeds_supports_json_and_compact_format() -> None:
 
     assert json_seeds[0].company == "A"
     assert compact_seeds[0].segment == "Finance ops"
+
+
+def test_parse_search_queries_and_duckduckgo_results() -> None:
+    queries = parse_search_queries('["conseil M&A France", "finance ops"]')
+    html = """
+      <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.pwc.fr%2Ffr%2Fexpertises%2Ftransactions.html">Conseil en Deals - PwC</a>
+      <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.linkedin.com%2Fposts%2Fx">LinkedIn</a>
+    """
+    results = parse_duckduckgo_lite_results(html, 5)
+
+    assert queries == ["conseil M&A France", "finance ops"]
+    assert len(results) == 1
+    assert results[0].url == "https://www.pwc.fr/fr/expertises/transactions.html"
+
+
+def test_parse_openai_search_results_filters_non_candidates() -> None:
+    text = """
+    {
+      "results": [
+        {"title":"Cambon Partners - Corporate Finance","url":"https://www.cambonpartners.com/fr/","snippet":"Conseil M&A"},
+        {"title":"LinkedIn Cambon","url":"https://www.linkedin.com/company/cambon-partners","snippet":"Réseau social"}
+      ]
+    }
+    """
+
+    results = parse_openai_search_results(text, 5)
+
+    assert [result.url for result in results] == ["https://www.cambonpartners.com/fr/"]
+
+
+def test_parse_openai_search_results_tolerates_invalid_json() -> None:
+    assert parse_openai_search_results("pas du json", 5) == []
 
 
 def test_runner_writes_artifact(tmp_path) -> None:

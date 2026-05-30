@@ -6,7 +6,7 @@ Date : 2026-05-30
 
 Statut : `production_not_ready`.
 
-Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la démo en socle plus pilotable : tâches proactives, traces d'actions, DNC hard gate, feedback memory causale, Observé/Inféré/Incertain full-stack et dashboard moins fictif. Ce n'est pas encore un employé IA complet : les providers de recherche réelle autonome, les volumes PRD et le cron production restent à prouver.
+Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la démo en socle plus pilotable : tâches proactives, traces d'actions, DNC hard gate, feedback memory causale, Observé/Inféré/Incertain full-stack et dashboard moins fictif. Ce n'est pas encore un employé IA complet : la recherche web OpenAI/fallback public existe, mais les volumes PRD et le cron production restent à prouver.
 
 ## Décisions reprises de l'audit
 
@@ -31,7 +31,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Trigger DB `scout_prevent_dnc_message` pour empêcher un message non bloqué sur une cible DNC.
 - QC TS : DNC déterministe et Observé relié à une preuve.
 - Worker offline : DNC interdit en shortlist.
-- Worker réel : provider configuré obligatoire hors `BM_SCOUT_PROVIDER=demo`, plus 8 tools Agents SDK métier.
+- Worker réel : provider `auto` avec seeds, OpenAI `web_search` ou fallback web public, plus `WebSearchTool` hébergé OpenAI et 8 tools métier Agents SDK.
 - Mémoire feedback TS : rejet lead, pénalité secteur, bonus angle validé, régénération anti-générique.
 - Worker Pydantic : contrat Observé/Inféré/Incertain, email confidence, run steps.
 - Migration Supabase `20260530214847_bm_scout_structured_insights_email_confidence_steps.sql` appliquée au projet interne.
@@ -41,8 +41,8 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 - `quality:runs` reste un harnais fixture.
 - `demoSnapshot()` reste le fallback sans env Supabase serveur.
-- Le worker réel consomme un batch issu du provider configuré, pas encore un moteur de recherche autonome.
-- Les providers `search_web`, `fetch_company_site`, `search_jobs`, `find_public_emails`, `dedupe_company` existent, mais `search_web` s'appuie encore sur des seeds configurées.
+- Le worker réel peut découvrir des candidats sans seeds via OpenAI `web_search` ou fallback web public, mais ce n'est pas encore prouvé à volume PRD ni enrichi par SerpAPI.
+- Les providers `search_web`, `fetch_company_site`, `search_jobs`, `find_public_emails`, `dedupe_company` existent, mais `search_jobs` reste minimal et la robustesse search dépend encore des sources publiques.
 - Les volumes 15 Core / 100 Exploration sont paramétrés mais non prouvés en run réel.
 - Le feedback influence le moteur local et les tests, mais il n'est pas encore prouvé sur un run réel Supabase à volume.
 
@@ -64,17 +64,17 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - `npm run build` : pass.
 - `npm run quality:runs` : pass fixture, décision produit `production_not_ready`.
 - `npm run quality:readiness` : fail attendu, décision produit `production_not_ready`.
-- `.venv/bin/python -m pytest services/agent-worker/tests` : 16 tests pass.
-- Import Agents SDK manager : 12 tools disponibles, dont 8 tools métier provider.
+- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 21 tests pass.
+- Import Agents SDK manager : 13 tools disponibles, dont `WebSearchTool` et 8 tools métier provider.
 - `npm run agent:schedule` : pass, 6 routines planifiées.
 - `npm run agent:tasks` sans env serveur : fail attendu avec message env Supabase requis.
-- Browser local : DOM smoke via Navigateur OK sur `http://localhost:3030` ; fiche profonde Observé/Inféré/Incertain vérifiée après ouverture ; screenshot locale `artifacts/browser-smoke/playwright-dashboard-after.png`.
+- Browser local : smoke Playwright OK sur `http://localhost:3030` ; statut `production_not_ready`, actions, Approval Center et DNC visibles ; screenshot locale `artifacts/browser-smoke/playwright-dashboard-production-not-ready.png`.
 - Supabase interne `Interne_Agentic_prospection` : migrations `agent_tasks_and_actions` et `bm_scout_structured_insights_email_confidence_steps` appliquées.
 
 ## Prochaine tranche P0
 
 1. Fournir l'env service role au runner local/cron et tester `agent:tasks:offline` contre Supabase.
-2. Remplacer le provider configuré par une vraie source search web/jobs scalable.
+2. Prouver `openai_web` à volume, puis brancher SerpAPI si la couverture ou le coût OpenAI web search n'est pas suffisant.
 3. Prouver les volumes PRD 15 Core / 100 Exploration avec artefacts réels.
 4. Prouver la feedback loop sur scoring et recommandations dans un run réel Supabase.
 5. Exécuter le cron GitHub Actions avec secrets et vérifier les transitions `queued -> completed`.

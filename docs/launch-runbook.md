@@ -12,7 +12,10 @@ Statut : `production_not_ready`. Socle utilisable pour demo interne, pas pour d�
   - `SUPABASE_SERVICE_ROLE_KEY`
   - `OPENAI_API_KEY`
   - `OPENAI_MODEL` optionnel, par defaut `gpt-5.5`
-  - `BM_SCOUT_REAL_SEEDS` pour le mode réel sans fixtures
+  - `OPENAI_SEARCH_MODEL` optionnel pour la recherche web OpenAI
+  - `BM_SCOUT_PROVIDER=auto|openai_web|web|configured|demo`
+  - `BM_SCOUT_SEARCH_QUERIES` optionnel pour piloter les requêtes web
+  - `BM_SCOUT_REAL_SEEDS` pour le mode `configured`
   - `BM_SCOUT_PROVIDER=demo` seulement pour forcer explicitement les fixtures
 
 Ne jamais exposer `SUPABASE_SERVICE_ROLE_KEY` dans le navigateur. Elle sert uniquement au worker et au rendu serveur.
@@ -109,6 +112,9 @@ Secrets requis :
 Variables recommandées :
 
 - `OPENAI_MODEL`
+- `OPENAI_SEARCH_MODEL`
+- `BM_SCOUT_PROVIDER`
+- `BM_SCOUT_SEARCH_QUERIES`
 - `BM_SCOUT_REAL_SEEDS`
 
 Le workflow est versionné, mais BM Scout reste `production_not_ready` tant qu'aucune exécution GitHub Actions réelle avec secrets n'a prouvé les transitions `queued -> completed`.
@@ -125,6 +131,16 @@ Mode reel sans persistance :
 
 ```bash
 cd services/agent-worker
+export BM_SCOUT_PROVIDER=openai_web
+export BM_SCOUT_SEARCH_QUERIES='["conseil M&A transaction services France","cabinet corporate finance fusion acquisition France"]'
+../../.venv/bin/python -m bm_scout_worker.cli --real --mode core
+```
+
+Mode reel avec seeds contrôlées :
+
+```bash
+cd services/agent-worker
+export BM_SCOUT_PROVIDER=configured
 export BM_SCOUT_REAL_SEEDS='[{"company":"Cambon Partners","website":"https://www.cambonpartners.com","segment":"Conseil M&A"}]'
 ../../.venv/bin/python -m bm_scout_worker.cli --real --mode core
 ../../.venv/bin/python -m bm_scout_worker.cli --real --mode exploration --include-weak
@@ -138,7 +154,8 @@ cd services/agent-worker
 ```
 
 Le worker lit `scout_feedback` et `scout_outcomes` si les variables Supabase serveur sont presentes. La persistance passe par la RPC transactionnelle `scout_persist_mission_output`, qui écrit aussi les insights structurés, l'email confidence et les run steps minimaux.
-Sans `BM_SCOUT_REAL_SEEDS`, le mode réel échoue au lieu de retomber silencieusement sur les fixtures. Pour une demo fixture explicite : `BM_SCOUT_PROVIDER=demo`.
+En `BM_SCOUT_PROVIDER=auto`, le worker utilise les seeds si elles existent, sinon OpenAI `web_search` si `OPENAI_API_KEY` est présent, sinon un fallback web public minimal. En `BM_SCOUT_PROVIDER=configured`, l'absence de `BM_SCOUT_REAL_SEEDS` échoue au lieu de retomber sur fixtures. Pour une demo fixture explicite : `BM_SCOUT_PROVIDER=demo`.
+SerpAPI pourra être ajouté ensuite comme nouveau provider derrière le même contrat `search_web`.
 
 ## Gates avant usage Romu
 
@@ -172,6 +189,6 @@ BM Scout peut etre marque au mieux `pilot_candidate` uniquement si :
 - un run reel Agents SDK post-branchement feedback Supabase a produit 3 a 5 apprentissages exploitables ;
 - les feedbacks/outcomes Supabase changent réellement le scoring, l'angle ou la shortlist suivante ;
 - les routines `scout_agent_tasks` sont consommées par un runner reproductible et par un cron GitHub Actions réellement vert ;
-- les providers réels ne se limitent plus aux seeds configurées ;
+- les providers réels ne se limitent plus aux seeds configurées et prouvent un volume Core/Exploration suffisant ;
 - `quality:readiness` passe ;
 - l'audit thermo-nuclear ne contient plus de P1 ouvert.

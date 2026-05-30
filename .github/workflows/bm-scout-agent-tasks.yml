@@ -23,6 +23,9 @@ jobs:
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
       OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-5.5' }}
+      OPENAI_SEARCH_MODEL: ${{ vars.OPENAI_SEARCH_MODEL || vars.OPENAI_MODEL || 'gpt-5.5' }}
+      BM_SCOUT_PROVIDER: ${{ vars.BM_SCOUT_PROVIDER || 'auto' }}
+      BM_SCOUT_SEARCH_QUERIES: ${{ vars.BM_SCOUT_SEARCH_QUERIES }}
       BM_SCOUT_REAL_SEEDS: ${{ vars.BM_SCOUT_REAL_SEEDS }}
     steps:
       - uses: actions/checkout@v4

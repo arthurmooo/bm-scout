@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import hashlib
+import html
 import json
 import os
 import re
 import urllib.error
+import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from typing import Protocol
@@ -20,6 +22,7 @@ class CompanySeed:
     website: str
     segment: str = "M&A / finance ops"
     region: str = "fr"
+    source_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -121,8 +124,9 @@ class ConfiguredWebResearchProvider:
                 continue
             seen_keys.add(dedupe_key)
             self.record_step("dedupe_company", {"company": seed.company, "website": seed.website, "dedupe_key": dedupe_key, "decision": "kept"})
-            page = self.fetch_company_site(seed.website)
-            self.record_step("fetch_company_site", {"company": seed.company, "url": seed.website, "chars": len(page), "failed": page.startswith("Fetch failed")})
+            source_url = seed.source_url or seed.website
+            page = self.fetch_company_site(source_url)
+            self.record_step("fetch_company_site", {"company": seed.company, "url": source_url, "chars": len(page), "failed": page.startswith("Fetch failed")})
             signals = self.extract_company_signals(page)
             self.record_step("extract_company_signals", {"company": seed.company, "signal_count": len(signals), "signals": signals[:3]})
             domain = normalized_domain(seed.website)
@@ -132,7 +136,7 @@ class ConfiguredWebResearchProvider:
                 [
                     Evidence(
                         label="Site public",
-                        url=seed.website,
+                        url=source_url,
                         observed_fact=signals[0] if signals else f"Page publique consultée pour {seed.company}.",
                         reliability="medium",
                     )
@@ -221,11 +225,128 @@ class ConfiguredWebResearchProvider:
         return evidence
 
 
+class OpenWebResearchProvider(ConfiguredWebResearchProvider):
+    def __init__(self, queries: list[str]):
+        self.uses_default_queries = not queries
+        self.queries = queries or default_search_queries("core")
+        self.seeds: list[CompanySeed] = []
+        self.run_steps: list[RunStep] = []
+
+    @classmethod
+    def from_env(cls) -> "OpenWebResearchProvider":
+        return cls(parse_search_queries(os.getenv("BM_SCOUT_SEARCH_QUERIES", "")))
+
+    def build_candidates(self, mode: ScoutMode, include_weak: bool = False, feedback_notes: list[str] | None = None) -> list[ScoutLead]:
+        self.run_steps = []
+        queries = default_search_queries(mode) if self.uses_default_queries else self.queries
+        target_scan = scan_target_for_mode(mode)
+        fetch_limit = fetch_limit_for_mode(mode, target_scan)
+        discovered = self.discover_seeds(queries, target_scan)
+        self.record_step(
+            "search_web",
+            {
+                "mode": mode,
+                "queries": queries,
+                "target_scan": target_scan,
+                "discovered_count": len(discovered),
+                "fetch_limit": fetch_limit,
+            },
+        )
+        discovery_steps = [*self.run_steps]
+        self.seeds = discovered[:fetch_limit]
+        leads = super().build_candidates(mode, include_weak=include_weak, feedback_notes=feedback_notes)
+        self.run_steps = [*discovery_steps, *self.run_steps]
+        return leads
+
+    def discover_seeds(self, queries: list[str], target_scan: int) -> list[CompanySeed]:
+        seeds: list[CompanySeed] = []
+        seen: set[str] = set()
+        per_query_limit = max(10, min(30, target_scan))
+        for query in queries:
+            for result in self.search_web(query, "fr", per_query_limit):
+                seed = seed_from_search_result(result, query)
+                if not seed:
+                    continue
+                key = self.dedupe_company(seed)
+                if key in seen:
+                    continue
+                seen.add(key)
+                seeds.append(seed)
+                if len(seeds) >= target_scan:
+                    return seeds
+        if not seeds:
+            raise RuntimeError(
+                "Aucun candidat trouvé via recherche web publique. Configure BM_SCOUT_REAL_SEEDS ou BM_SCOUT_SEARCH_QUERIES."
+            )
+        return seeds
+
+    def search_web(self, query: str, region: str, limit: int) -> list[SearchResult]:
+        del region
+        url = "https://lite.duckduckgo.com/lite/?q=" + urllib.parse.quote(query)
+        request = urllib.request.Request(
+            url,
+            headers={"user-agent": "Mozilla/5.0 BMScout/1.0 internal research"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=12) as response:
+                body = response.read(180_000).decode("utf-8", errors="replace")
+        except (urllib.error.URLError, TimeoutError) as error:
+            self.record_step("search_web_error", {"query": query, "error": str(error)})
+            return []
+        return parse_duckduckgo_lite_results(body, limit)
+
+
+class OpenAIWebResearchProvider(OpenWebResearchProvider):
+    @classmethod
+    def from_env(cls) -> "OpenAIWebResearchProvider":
+        return cls(parse_search_queries(os.getenv("BM_SCOUT_SEARCH_QUERIES", "")))
+
+    def search_web(self, query: str, region: str, limit: int) -> list[SearchResult]:
+        if not os.getenv("OPENAI_API_KEY"):
+            self.record_step("openai_web_search_error", {"query": query, "error": "OPENAI_API_KEY manquant"})
+            return []
+        from openai import OpenAI
+
+        model = os.getenv("OPENAI_SEARCH_MODEL", os.getenv("OPENAI_MODEL", "gpt-5.5"))
+        client = OpenAI()
+        try:
+            response = client.responses.create(
+                model=model,
+                input=openai_search_prompt(query, region, limit),
+                tools=[{"type": "web_search", "search_context_size": "low", "external_web_access": True}],
+                tool_choice="required",
+                max_output_tokens=1200,
+            )
+        except Exception as error:
+            self.record_step("openai_web_search_error", {"query": query, "error": str(error), "model": model})
+            return []
+        text = getattr(response, "output_text", "") or ""
+        results = parse_openai_search_results(text, limit)
+        self.record_step(
+            "openai_web_search",
+            {"query": query, "region": region, "limit": limit, "result_count": len(results), "model": model},
+        )
+        return results
+
+
 def provider_from_env() -> ResearchProvider:
-    provider = os.getenv("BM_SCOUT_PROVIDER", "configured").lower()
+    provider = os.getenv("BM_SCOUT_PROVIDER", "auto").lower()
     if provider in {"demo", "fixture", "fixtures"}:
         return DemoFixtureProvider()
-    return ConfiguredWebResearchProvider.from_env()
+    if provider in {"openai", "openai_web", "openai_search"}:
+        return OpenAIWebResearchProvider.from_env()
+    if provider in {"web", "search", "open_web"}:
+        return OpenWebResearchProvider.from_env()
+    if provider in {"configured", "configured_strict", "seeds"}:
+        return ConfiguredWebResearchProvider.from_env()
+    if os.getenv("BM_SCOUT_REAL_SEEDS", "").strip():
+        return ConfiguredWebResearchProvider.from_env()
+    if os.getenv("OPENAI_API_KEY"):
+        return OpenAIWebResearchProvider.from_env()
+    if provider == "auto":
+        return OpenWebResearchProvider.from_env()
+    raise RuntimeError(f"BM_SCOUT_PROVIDER inconnu: {provider}")
 
 
 def build_candidate_batch(
@@ -277,6 +398,179 @@ def parse_company_seeds(value: str) -> list[CompanySeed]:
     return seeds
 
 
+def parse_search_queries(value: str) -> list[str]:
+    if not value.strip():
+        return []
+    if value.strip().startswith("["):
+        payload = json.loads(value)
+        return [str(item).strip() for item in payload if str(item).strip()]
+    return [item.strip() for item in value.split(";") if item.strip()]
+
+
+def default_search_queries(mode: ScoutMode) -> list[str]:
+    if mode == "core":
+        return [
+            "conseil M&A transaction services France",
+            "cabinet corporate finance fusion acquisition France",
+            "deal advisory transaction services Paris"
+        ]
+    return [
+        "opérations formation B2B inscriptions documents relances France",
+        "finance operations reporting multi sites documents France",
+        "services B2B processus documents relances CRM France"
+    ]
+
+
+def scan_target_for_mode(mode: ScoutMode) -> int:
+    env_name = "BM_SCOUT_CORE_TARGET" if mode == "core" else "BM_SCOUT_EXPLORATION_SCAN_TARGET"
+    default_value = 15 if mode == "core" else 100
+    return max(1, int(os.getenv(env_name, str(default_value))))
+
+
+def fetch_limit_for_mode(mode: ScoutMode, target_scan: int) -> int:
+    default_value = min(target_scan, 15 if mode == "core" else 25)
+    return max(1, min(target_scan, int(os.getenv("BM_SCOUT_FETCH_LIMIT", str(default_value)))))
+
+
+def parse_duckduckgo_lite_results(body: str, limit: int) -> list[SearchResult]:
+    results: list[SearchResult] = []
+    pattern = re.compile(r'<a rel="nofollow" href="([^"]+)"[^>]*>(.*?)</a>', re.S)
+    for match in pattern.finditer(body):
+        url = unwrap_duckduckgo_url(html.unescape(match.group(1)))
+        title = clean_html_text(match.group(2))
+        if not url or not title or not is_candidate_url(url):
+            continue
+        results.append(SearchResult(title=title, url=url, snippet=title))
+        if len(results) >= limit:
+            break
+    return results
+
+
+def openai_search_prompt(query: str, region: str, limit: int) -> str:
+    return f"""
+Tu recherches des entreprises B2B françaises pour BM Scout.
+Requête: {query}
+Région: {region}
+Nombre maximum: {limit}
+
+Retourne uniquement un JSON valide, sans markdown :
+{{
+  "results": [
+    {{
+      "title": "Nom ou titre de la source",
+      "url": "https://domaine-public",
+      "snippet": "Signal concret observé en une phrase"
+    }}
+  ]
+}}
+
+Contraintes :
+- privilégie sites officiels entreprise, pages services, jobs, communiqués ;
+- exclue annuaires faibles, réseaux sociaux, articles génériques et pages impossibles à sourcer ;
+- chaque snippet doit contenir un signal utile pour qualification, pas une phrase marketing vague.
+"""
+
+
+def parse_openai_search_results(text: str, limit: int) -> list[SearchResult]:
+    payload = extract_json_payload(text)
+    if not payload:
+        return []
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        return []
+    items = data.get("results", data if isinstance(data, list) else [])
+    results: list[SearchResult] = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        url = str(item.get("url", "")).strip()
+        title = str(item.get("title", "")).strip()
+        snippet = str(item.get("snippet", "")).strip()
+        if not url or not title or not is_candidate_url(url):
+            continue
+        results.append(SearchResult(title=title, url=url, snippet=snippet or title))
+        if len(results) >= limit:
+            break
+    return results
+
+
+def extract_json_payload(text: str) -> str:
+    stripped = text.strip()
+    if stripped.startswith("```"):
+        stripped = re.sub(r"^```(?:json)?\s*", "", stripped)
+        stripped = re.sub(r"\s*```$", "", stripped).strip()
+    if stripped.startswith("{") or stripped.startswith("["):
+        return stripped
+    start = min((index for index in [stripped.find("{"), stripped.find("[")] if index >= 0), default=-1)
+    if start < 0:
+        return ""
+    end_char = "}" if stripped[start] == "{" else "]"
+    end = stripped.rfind(end_char)
+    return stripped[start : end + 1] if end > start else ""
+
+
+def unwrap_duckduckgo_url(value: str) -> str:
+    if value.startswith("//"):
+        value = "https:" + value
+    parsed = urlparse(value)
+    if "duckduckgo.com" in parsed.netloc:
+        params = urllib.parse.parse_qs(parsed.query)
+        target = params.get("uddg", [None])[0]
+        return target or ""
+    return value
+
+
+def clean_html_text(value: str) -> str:
+    return re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", html.unescape(value))).strip()
+
+
+def is_candidate_url(url: str) -> bool:
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    domain = parsed.netloc.lower()
+    path = parsed.path.lower()
+    blocked_domains = ("linkedin.com", "facebook.com", "youtube.com", "wikipedia.org")
+    blocked_paths = ("/blog", "/news", "/actualite", "/classement", "/jobs", "/recrutement")
+    return not any(blocked in domain for blocked in blocked_domains) and not any(blocked in path for blocked in blocked_paths)
+
+
+def seed_from_search_result(result: SearchResult, query: str) -> CompanySeed | None:
+    domain = normalized_domain(result.url)
+    if not domain:
+        return None
+    company = company_name_from_title(result.title, domain)
+    segment = infer_segment(result.title, result.url, query)
+    return CompanySeed(company=company, website=origin_from_url(result.url), segment=segment, source_url=result.url)
+
+
+def company_name_from_title(title: str, domain: str) -> str:
+    parts = [part.strip() for part in re.split(r"\s(?:-|–|\|)\s|:", title) if part.strip()]
+    generic_terms = ("transaction", "conseil", "service", "deal", "m&a", "fusion", "acquisition", "corporate finance")
+    if len(parts) > 1 and any(term in parts[0].lower() for term in generic_terms):
+        return parts[-1]
+    if parts:
+        return parts[0]
+    return domain.split(".")[0].replace("-", " ").title()
+
+
+def infer_segment(title: str, url: str, query: str) -> str:
+    text = f"{title} {url} {query}".lower()
+    if any(term in text for term in ["m&a", "fusion", "acquisition", "deal", "transaction", "corporate finance"]):
+        return "Conseil M&A / deal advisory"
+    if "formation" in text:
+        return "Formation B2B"
+    if any(term in text for term in ["reporting", "finance", "daf", "comptable"]):
+        return "Finance ops"
+    return "Exploration B2B process-heavy"
+
+
+def origin_from_url(url: str) -> str:
+    parsed = urlparse(url)
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
 def to_scout_lead(
     seed: CompanySeed,
     mode: ScoutMode,
@@ -326,7 +620,7 @@ def to_scout_lead(
                 email_type=emails[0]["type"] if emails else "unknown",
                 email_confidence=emails[0]["confidence"] if emails else "low",
                 email_status="verify" if emails else "not_usable",
-                email_source_url=seed.website if emails else None,
+                email_source_url=evidence[0].url if emails and evidence else None,
             )
         ],
         evidence=evidence,
