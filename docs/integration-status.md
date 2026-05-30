@@ -49,6 +49,7 @@ Restent a corriger apres integration :
 - Persistance worker remplacee par la RPC transactionnelle `scout_persist_mission_output`.
 - Worker reel branche sur `scout_feedback` et `scout_outcomes` quand l'env Supabase serveur existe.
 - `quality:readiness` separe du harnais fixture et echoue tant que le produit reste `not_ready`.
+- Documentation de livraison completee : runbook, scenario demo, limites V1, audit de couverture PRD.
 
 ## Deja implemente
 
@@ -56,7 +57,9 @@ Restent a corriger apres integration :
 - types/domain TS ;
 - QC TS et tests unitaires ;
 - script `quality:runs` ;
+- script `verify:supabase` pour prouver la lecture console avec env serveur ;
 - rapport `artifacts/quality-runs/latest-report.md` ;
+- docs `launch-runbook.md`, `demo-scenario.md`, `v1-limits.md`, `prd-completion-audit.md` ;
 - migration locale `supabase/migrations/20260530161000_bm_scout_v1.sql` ;
 - migration locale `supabase/migrations/20260530150744_bm_scout_atomic_persist_and_feedback_memory.sql` ;
 - migration appliquee au projet Supabase `Interne_Agentic_prospection` ;
@@ -84,6 +87,7 @@ Valide :
 - `npm run quality:runs` : socle fixture OK, produit pas pret ;
 - `npm run worker:install` : OK ;
 - `npm run worker:test` : 7 tests offline/memory OK ;
+- `npm run verify:supabase` : bloque correctement si l'env serveur manque ;
 - `npm run worker:offline` : CLI offline OK ;
 - import Agents SDK : manager cree avec 4 tools et 1 handoff QC.
 - Supabase : 13 tables `scout_*`, RLS activee partout ;

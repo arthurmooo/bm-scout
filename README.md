@@ -53,3 +53,12 @@ cd services/agent-worker
 ```
 
 Le chemin réel utilise OpenAI Agents SDK avec `Runner.run`, `trace`, agents spécialisés, agents-as-tools, handoff QC, outputs Pydantic et guardrail de qualité. La persistance `--persist` passe par la RPC Supabase transactionnelle `scout_persist_mission_output`.
+
+## Documentation de livraison
+
+- `docs/architecture-v1.md` : architecture produit et technique.
+- `docs/launch-runbook.md` : installation, lancement, gates.
+- `docs/demo-scenario.md` : scénario de démonstration Romu.
+- `docs/v1-limits.md` : limites assumées de la V1.
+- `docs/prd-completion-audit.md` : couverture PRD et preuves manquantes.
+- `docs/thermo-nuclear-final-audit.md` : audit maintenabilité strict.
