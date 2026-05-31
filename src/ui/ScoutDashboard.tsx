@@ -189,7 +189,7 @@ function PrimaryLead({ lead }: { lead: ScoutLead }) {
         <ScoutActionButton className="button" action="copy_email" leadId={lead.id} copyText={lead.outreach.coldEmail}><Clipboard size={17} /> Copier email</ScoutActionButton>
         <ScoutActionButton className="button" action="copy_follow_up" leadId={lead.id} copyText={lead.outreach.followUp}><Clipboard size={17} /> Copier relance</ScoutActionButton>
         <ScoutActionButton className="button" action="copy_linkedin" leadId={lead.id} copyText={lead.outreach.linkedin}><Clipboard size={17} /> Copier LinkedIn</ScoutActionButton>
-        <ScoutActionButton className="button" action="mark_message_used" leadId={lead.id}><Check size={17} /> Utilisé</ScoutActionButton>
+        <ScoutActionButton className="button" action="mark_message_used" leadId={lead.id}><Check size={17} /> Marquer utilisé</ScoutActionButton>
         <ScoutActionButton className="button danger" action="add_do_not_contact" leadId={lead.id} reason="Ajout manuel Romu depuis la console."><X size={17} /> DNC</ScoutActionButton>
       </div>
       <div className="feedback-row" aria-label="Feedback Romu">

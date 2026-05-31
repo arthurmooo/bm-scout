@@ -37,7 +37,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - API `POST /api/scout/actions`.
 - Actions UI : valider, surveiller, enrichir, rejeter, exclure, relancer QC, copier email/relance/LinkedIn, marquer utilisé, DNC, outcomes, raisons feedback en 1 clic et lancer les 6 routines P0.
 - Actions feedback/outcome : bon lead, mauvais lead, raisons de fit ou rejet, bon angle, feedback message détaillé, RDV pris, positif/négatif, mauvais timing, mauvais interlocuteur, douleur confirmée/non confirmée. Ces actions écrivent `scout_feedback` ou `scout_outcomes`, pas seulement `scout_action_events`; les outcomes neutres ne déclenchent pas un rejet mémoire.
-- Actions message auditables : copie et marquage utilisé ciblent les derniers `scout_messages.id` validés par canal, jamais tous les messages historiques d'une company ; les traces `scout_action_events` portent `message_id`, canal et IDs approuvés.
+- Actions message auditables : copie et marquage utilisé ciblent les derniers `scout_messages.id` validés par canal, jamais tous les messages historiques d'une company ; les traces `scout_action_events` portent `message_id`, canal et IDs utilisés manuellement.
 - Triggers DB `scout_prevent_dnc_message` et `scout_messages_prevent_blocking_outcome` pour empêcher un message non bloqué sur une cible DNC ou un outcome négatif ; un outcome négatif bloque aussi les messages existants.
 - QC TS : DNC déterministe et Observé relié à une preuve.
 - Worker offline : DNC interdit en shortlist.
@@ -87,14 +87,14 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Console runtime : si Supabase serveur est configuré mais ne contient aucun run, elle affiche zéro lead et les routines à lancer au lieu de retomber sur les fixtures.
 - Auth interne : home protégée en mode `BM_SCOUT_AUTH_MODE=internal`, login magic link Supabase, fallback démo seulement si l'auth publique est absente ou explicitement forcée.
 - DNC/outcome négatif bloque côté TS, actions serveur, worker offline et triggers Supabase.
-- Les actions de copie attendent maintenant la validation serveur avant d'écrire dans le presse-papiers ; côté serveur, un message bloqué QC, une cible DNC, un outcome négatif ou un email `verify/not_usable` refuse la copie et trace l'échec. `mark_message_used` repasse par les mêmes gates avant d'approuver uniquement les messages courants validés par ID.
+- Les actions de copie attendent maintenant la validation serveur avant d'écrire dans le presse-papiers ; côté serveur, un message bloqué QC, une cible DNC, un outcome négatif ou un email `verify/not_usable` refuse la copie et trace l'échec. `mark_message_used` repasse par les mêmes gates avant de passer uniquement les messages courants validés par ID en `used_manually`, sans statut d'envoi.
 - Feedback Romu influence le scoring et les messages dans le moteur TS et le worker provider testés, le provider émet des compteurs d'impact exploitables, et un script dédié peut produire la preuve Supabase contrôlée avec Learning exploitable.
 - Run steps et email confidence sont écrits par le worker/RPC quand `--persist` est exécuté.
 - Console Next buildée avec route d'action dynamique.
 
 ## Vérifications exécutées
 
-- `npm run test` : 96 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/outcome négatif/email incertain bloquée, outcomes neutres non assimilés à un opt-out, raisons feedback en 1 clic, routines DNC/followup lançables, indexes FK Supabase, index anti-doublon, fusion Supabase company par `external_id`/domaine, preuve `verify:supabase` de fusion RPC avec cleanup, cron readiness couvrant les 6 routines P0, workflow GitHub readiness complet, worker réel persisté refusé sous volume PRD, exception explicite `feedback_loop` pour la preuve causale contrôlée, affichage inéligible des anciens artefacts `pass`, policy Auth BM Scout, actions Romu, provider runtime des preuves et scénario `feedback:evidence`.
+- `npm run test` : 99 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou marquage `used_manually` DNC/QC/outcome négatif/email incertain bloqué, outcomes neutres non assimilés à un opt-out, raisons feedback en 1 clic, routines DNC/followup lançables, indexes FK Supabase, statut message utilisé distinct d'un envoi, index anti-doublon, fusion Supabase company par `external_id`/domaine, preuve `verify:supabase` de fusion RPC avec cleanup, cron readiness couvrant les 6 routines P0, workflow GitHub readiness complet, worker réel persisté refusé sous volume PRD, exception explicite `feedback_loop` pour la preuve causale contrôlée, affichage inéligible des anciens artefacts `pass`, policy Auth BM Scout, actions Romu, provider runtime des preuves et scénario `feedback:evidence`.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.

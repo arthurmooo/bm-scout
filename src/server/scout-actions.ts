@@ -57,7 +57,7 @@ const ACTION_LABELS: Record<LeadActionType, string> = {
   copy_email: "Email copié. Aucun envoi automatique.",
   copy_follow_up: "Relance copiée. Aucun envoi automatique.",
   copy_linkedin: "Message LinkedIn copié. Aucun envoi automatique.",
-  mark_message_used: "Message marqué comme utilisé manuellement.",
+  mark_message_used: "Messages marqués comme utilisés manuellement.",
   add_do_not_contact: "Do-not-contact ajouté.",
   feedback_good_lead: "Feedback lead positif enregistré.",
   feedback_bad_lead: "Feedback lead négatif enregistré.",
@@ -402,7 +402,7 @@ async function markMessagesUsed(companyId: string): Promise<ActionMutationTrace>
   await checked(
     client
       .from("scout_messages")
-      .update({ status: "approved" })
+      .update({ status: "used_manually" })
       .in("id", messageIds)
       .neq("status", "blocked")
   );

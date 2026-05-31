@@ -43,7 +43,7 @@ Verdict : `production_not_ready`.
 - La readiness distingue le provider runtime : `configured` ne compte plus comme preuve de recherche marché, même si le run Agents SDK est réel et persisté.
 - Un workflow GitHub Actions cron/dispatch existe pour consommer `scout_agent_tasks` et écrire une preuve `latest-ci-run.json`.
 - Les actions Romu passent par une route serveur et une table d'événements.
-- Les copies email/relance/LinkedIn ne touchent plus le presse-papiers avant validation serveur, et le serveur bloque une copie ou approbation de message DNC, QC bloquée ou email non utilisable.
+- Les copies email/relance/LinkedIn ne touchent plus le presse-papiers avant validation serveur, et le serveur bloque une copie ou un marquage `used_manually` de message DNC, QC bloqué ou email non utilisable.
 - Les actions feedback/outcome Romu alimentent maintenant `scout_feedback` et `scout_outcomes`, donc la mémoire agentique ne dépend plus seulement de notes fictives.
 - Le DNC et les rejets/outcomes négatifs sont des gates déterministes côté TS/worker/provider/DB selon leur portée ; `feedback:evidence` exige désormais les run steps `dnc_pre_generation_gate` et `feedback_reject_pre_generation_gate`.
 - `quality:readiness` ne peut plus transformer des fixtures en claim de readiness.

@@ -98,6 +98,13 @@ describe("supabase security posture", () => {
     expect(migration).toContain("alter type public.scout_action_type add value if not exists 'launch_followup_review'");
   });
 
+  it("distingue message utilise manuellement d'un statut d'envoi ou d'approbation", () => {
+    const migration = readMigration("scout_message_used_manually_status");
+
+    expect(migration).toContain("alter type public.scout_message_status add value if not exists 'used_manually'");
+    expect(migration).toContain("it is not an automatic send state");
+  });
+
   it("fusionne les companies persistées par external_id ou domaine en priorisant Core", () => {
     const migration = readMigration("scout_company_persistence_dedupe");
 

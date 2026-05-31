@@ -288,8 +288,9 @@ describe("scout actions", () => {
     const result = await recordScoutAction({ action: "mark_message_used", leadId: "core-cambon" });
 
     expect(result.ok).toBe(true);
-    expect(calls).toContainEqual({ table: "scout_messages", op: "update", payload: { status: "approved" } });
+    expect(calls).toContainEqual({ table: "scout_messages", op: "update", payload: { status: "used_manually" } });
     expect(calls).toContainEqual({ table: "scout_messages", op: "in", payload: { column: "id", values: ["message-1"] } });
+    expect(calls).not.toContainEqual({ table: "scout_messages", op: "update", payload: { status: "approved" } });
     expect(
       calls.some(
         (call) =>
@@ -309,7 +310,7 @@ describe("scout actions", () => {
 
     expect(result.ok).toBe(false);
     expect(result.message).toContain("email contact à vérifier");
-    expect(calls).not.toContainEqual({ table: "scout_messages", op: "update", payload: { status: "approved" } });
+    expect(calls).not.toContainEqual({ table: "scout_messages", op: "update", payload: { status: "used_manually" } });
   });
 
   it("bloque la copie de message si la cible est do-not-contact", async () => {
