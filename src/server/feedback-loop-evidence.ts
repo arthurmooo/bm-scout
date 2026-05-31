@@ -1,4 +1,5 @@
-import { analyzeRunnerSteps, type RunnerRuntimeEvidence, type RunnerStepEvidence } from "./readiness-evidence";
+import type { OpenAiPreflightArtifact } from "./openai-preflight";
+import { analyzeRunnerSteps, codeRevisionMatchesCurrent, type RunnerRuntimeEvidence, type RunnerStepEvidence } from "./readiness-evidence";
 
 export interface FeedbackLoopScenarioCompany {
   externalId: string;
@@ -135,6 +136,27 @@ export function feedbackLoopLearningUsesFeedback(lessons: FeedbackLoopLesson[]):
     .join(" ")
     .toLowerCase();
   return text.includes("feedback romu") && text.includes("do-not-contact");
+}
+
+export function feedbackLoopOpenAiPreflightBlockers(
+  payload: OpenAiPreflightArtifact,
+  currentCodeRevision: string
+): string[] {
+  if (payload.status === "pass") return [];
+  if (!codeRevisionMatchesCurrent(payload.code_revision, currentCodeRevision) && !sameHeadRevision(payload.code_revision, currentCodeRevision)) {
+    return [];
+  }
+  return payload.blockers.length
+    ? payload.blockers
+    : ["OpenAI preflight échoué sur la révision courante : feedback loop non lancée pour éviter une mutation Supabase inutile."];
+}
+
+function sameHeadRevision(left: string, right: string): boolean {
+  const cleanLeft = left.replace(/-dirty$/, "");
+  const cleanRight = right.replace(/-dirty$/, "");
+  if (!cleanLeft || !cleanRight || cleanLeft === "unknown" || cleanRight === "unknown") return false;
+  if (cleanLeft.length < 7 || cleanRight.length < 7) return false;
+  return cleanLeft.startsWith(cleanRight) || cleanRight.startsWith(cleanLeft);
 }
 
 function hasCausalFeedbackEffect(runtime: RunnerRuntimeEvidence): boolean {

@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
@@ -7,9 +8,11 @@ import {
   FEEDBACK_LOOP_SCENARIO_COMPANIES,
   analyzeFeedbackLoopEvidence,
   feedbackLoopLearningUsesFeedback,
+  feedbackLoopOpenAiPreflightBlockers,
   feedbackLoopWorkerEnv,
   type FeedbackLoopScenarioCompany
 } from "../src/server/feedback-loop-evidence";
+import type { OpenAiPreflightArtifact } from "../src/server/openai-preflight";
 import { runWorkerCliForEvidence } from "../src/server/agent-task-runner";
 import { createServerSupabaseClient } from "../src/server/supabase";
 import { loadLocalEnvFiles } from "../src/server/runtime-env";
@@ -49,6 +52,30 @@ export async function runFeedbackLoopEvidence() {
       lesson_count: 0,
       learning_uses_feedback: false,
       blockers: envBlockers
+    });
+  }
+
+  const preflightBlockers = await loadOpenAiPreflightBlockers(currentRevision);
+  if (preflightBlockers.length) {
+    return writeArtifact({
+      status: "fail" as const,
+      generated_at: new Date().toISOString(),
+      code_revision: currentRevision,
+      seeded_companies: [],
+      worker_evidence_file: null,
+      trace_id: null,
+      runtime_provider: "openai_unavailable",
+      feedback_impact_count: 0,
+      feedback_score_changed_count: 0,
+      feedback_blocked_count: 0,
+      feedback_dnc_blocked_count: 0,
+      dnc_pre_generation_blocked_count: 0,
+      feedback_pre_generation_rejected_count: 0,
+      feedback_message_regenerated_count: 0,
+      feedback_angle_reinforced_count: 0,
+      lesson_count: 0,
+      learning_uses_feedback: false,
+      blockers: preflightBlockers
     });
   }
 
@@ -114,6 +141,13 @@ export async function runFeedbackLoopEvidence() {
     learning_uses_feedback: feedbackLoopLearningUsesFeedback(lessons),
     blockers: workerBlockers
   });
+}
+
+async function loadOpenAiPreflightBlockers(currentRevision: string): Promise<string[]> {
+  const preflightPath = join(process.cwd(), "artifacts", "openai-runtime", "latest-preflight.json");
+  if (!existsSync(preflightPath)) return [];
+  const payload = JSON.parse(await readFile(preflightPath, "utf8")) as OpenAiPreflightArtifact;
+  return feedbackLoopOpenAiPreflightBlockers(payload, currentRevision);
 }
 
 async function seedFeedbackLoopMemory(client: NonNullable<ReturnType<typeof createServerSupabaseClient>>) {

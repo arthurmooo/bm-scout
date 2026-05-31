@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import {
   analyzeFeedbackLoopEvidence,
   feedbackLoopLearningUsesFeedback,
+  feedbackLoopOpenAiPreflightBlockers,
   feedbackLoopScenarioSeeds,
   feedbackLoopWorkerEnv
 } from "./feedback-loop-evidence";
@@ -22,6 +23,41 @@ describe("feedback loop evidence", () => {
     const script = readFileSync(join(process.cwd(), "scripts", "run-feedback-loop-evidence.ts"), "utf8");
 
     expect(script).toContain('evidenceDir: "artifacts/feedback-loop"');
+  });
+
+  it("court-circuite le feedback loop si le preflight OpenAI courant est bloqué", () => {
+    expect(
+      feedbackLoopOpenAiPreflightBlockers(
+        {
+          status: "fail",
+          source: "openai_responses",
+          generated_at: "2026-05-31T10:00:00.000Z",
+          code_revision: "abcdef123456",
+          has_openai_env: true,
+          model: "gpt-4.1-mini",
+          http_status: 429,
+          error_type: "insufficient_quota",
+          error_code: "insufficient_quota",
+          blockers: ["OpenAI preflight échoué : quota/billing insuffisant."]
+        },
+        "abcdef1234567890-dirty"
+      )
+    ).toEqual(["OpenAI preflight échoué : quota/billing insuffisant."]);
+
+    expect(
+      feedbackLoopOpenAiPreflightBlockers(
+        {
+          status: "fail",
+          source: "openai_responses",
+          generated_at: "2026-05-31T10:00:00.000Z",
+          code_revision: "oldrev",
+          has_openai_env: true,
+          model: "gpt-4.1-mini",
+          blockers: ["Ancien blocage."]
+        },
+        "abcdef1234567890"
+      )
+    ).toEqual([]);
   });
 
   it("valide une preuve feedback Supabase avec impacts structurés", () => {
