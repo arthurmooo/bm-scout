@@ -972,6 +972,7 @@ def test_provider_audit_can_recommend_real_provider(monkeypatch) -> None:
     monkeypatch.setattr(provider_audit, "provider_unavailable_reason", lambda _name: None)
     monkeypatch.setattr(provider_audit, "build_named_provider", lambda _name: FakeProvider())
     monkeypatch.setenv("BM_SCOUT_CODE_REVISION", "provider-audit-test-revision")
+    monkeypatch.setenv("BM_SCOUT_FETCH_LIMIT", "1")
 
     report = compare_providers(["serpapi"], ["core", "exploration"])
 
@@ -1000,12 +1001,42 @@ def test_provider_audit_does_not_claim_prd_volume_for_core_only_smoke(monkeypatc
 
     monkeypatch.setattr(provider_audit, "provider_unavailable_reason", lambda _name: None)
     monkeypatch.setattr(provider_audit, "build_named_provider", lambda _name: FakeProvider())
+    monkeypatch.setenv("BM_SCOUT_FETCH_LIMIT", "1")
 
     report = compare_providers(["openai_web"], ["core"])
 
     assert report.verdict == "pass"
     assert report.recommended_default == "openai_web"
     assert report.prd_volume_proven is False
+
+
+def test_provider_audit_refuses_smoke_without_configured_volume(monkeypatch) -> None:
+    class FakeProvider:
+        run_steps: list[RunStep]
+
+        def build_candidates(self, _mode, **_kwargs):
+            self.run_steps = [
+                RunStep(
+                    agent_name="bm_scout_provider",
+                    step="search_web",
+                    event_type="tool_call",
+                    payload={"discovered_count": 55, "target_scan": 100},
+                )
+            ]
+            return offline_output("exploration").leads[:1]
+
+    monkeypatch.setattr(provider_audit, "provider_unavailable_reason", lambda _name: None)
+    monkeypatch.setattr(provider_audit, "build_named_provider", lambda _name: FakeProvider())
+    monkeypatch.setenv("BM_SCOUT_EXPLORATION_SCAN_TARGET", "100")
+    monkeypatch.setenv("BM_SCOUT_FETCH_LIMIT", "1")
+
+    report = compare_providers(["web"], ["exploration"])
+    result = report.results[0]
+
+    assert report.verdict == "fail"
+    assert result.status == "fail"
+    assert result.scan_target_reached is False
+    assert "Volume scan non prouvé : 55/100 comptes découverts." in result.blockers
 
 
 def test_provider_audit_keeps_run_steps_when_provider_fails(monkeypatch) -> None:

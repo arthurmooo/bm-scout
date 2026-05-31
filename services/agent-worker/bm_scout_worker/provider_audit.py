@@ -132,7 +132,14 @@ def audit_provider_mode(provider_name: str, mode: ScoutMode) -> ProviderModeAudi
         run_steps = getattr(provider, "run_steps", [])
         discovered_count = discovered_count_from_steps(run_steps)
         source_domains = sorted({domain_from_url(item.url) for lead in leads for item in lead.evidence if domain_from_url(item.url)})
-        blockers = provider_mode_blockers(provider_name, mode, leads)
+        blockers = provider_mode_blockers(
+            provider_name,
+            mode,
+            leads,
+            discovered_count=discovered_count,
+            target_scan=target_scan,
+            fetch_limit=fetch_limit,
+        )
         return ProviderModeAudit(
             provider=provider_name,
             mode=mode,
@@ -173,10 +180,22 @@ def audit_provider_mode(provider_name: str, mode: ScoutMode) -> ProviderModeAudi
         )
 
 
-def provider_mode_blockers(provider_name: str, mode: ScoutMode, leads: list[ScoutLead]) -> list[str]:
+def provider_mode_blockers(
+    provider_name: str,
+    mode: ScoutMode,
+    leads: list[ScoutLead],
+    *,
+    discovered_count: int,
+    target_scan: int,
+    fetch_limit: int,
+) -> list[str]:
     blockers: list[str] = []
     if provider_name in {"demo", "fixture", "fixtures"}:
         blockers.append("Les fixtures ne comptent pas comme provider réel.")
+    if discovered_count < target_scan:
+        blockers.append(f"Volume scan non prouvé : {discovered_count}/{target_scan} comptes découverts.")
+    if len(leads) < fetch_limit:
+        blockers.append(f"Volume qualification non prouvé : {len(leads)}/{fetch_limit} candidats qualifiés.")
     if not leads:
         blockers.append("Aucun candidat exploitable.")
     if leads and not all(lead.evidence for lead in leads):
