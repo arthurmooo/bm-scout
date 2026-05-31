@@ -1,0 +1,33 @@
+name: BM Scout static quality
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - "codex/**"
+
+jobs:
+  static-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - run: python -m venv .venv
+      - run: .venv/bin/python -m pip install -e "services/agent-worker[dev]"
+      - name: Static gates
+        run: |
+          npm run test
+          npm run typecheck
+          npm run lint
+          npm run worker:test
+          npm run build

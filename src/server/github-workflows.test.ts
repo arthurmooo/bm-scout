@@ -32,6 +32,19 @@ describe("github readiness workflows", () => {
     expect(workflow).toContain("artifacts/openai-runtime/*.json");
   });
 
+  it("exécute une CI statique sans secrets sur PR et branches codex", () => {
+    const workflow = readFileSync(join(root, ".github", "workflows", "bm-scout-static.yml"), "utf8");
+
+    expect(workflow).toContain("pull_request:");
+    expect(workflow).toContain('"codex/**"');
+    expect(workflow).toContain("npm run test");
+    expect(workflow).toContain("npm run typecheck");
+    expect(workflow).toContain("npm run lint");
+    expect(workflow).toContain("npm run worker:test");
+    expect(workflow).toContain("npm run build");
+    expect(workflow).not.toContain("secrets.");
+  });
+
   it("force les six routines P0 dans le mode cron de readiness", () => {
     const script = readFileSync(join(root, "scripts", "run-agent-task-cron-evidence.ts"), "utf8");
 
