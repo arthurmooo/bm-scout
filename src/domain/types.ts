@@ -19,36 +19,38 @@ export type AgentTaskType =
   | "learning_review"
   | "dnc_check"
   | "followup_review";
-export type LeadActionType =
-  | "validate_lead"
-  | "reject_lead"
-  | "watch_lead"
-  | "exclude_lead"
-  | "request_enrichment"
-  | "rerun_qc"
-  | "copy_email"
-  | "copy_follow_up"
-  | "copy_linkedin"
-  | "mark_message_used"
-  | "add_do_not_contact"
-  | "feedback_good_lead"
-  | "feedback_bad_lead"
-  | "feedback_good_angle"
-  | "feedback_generic_message"
-  | "outcome_no_response"
-  | "outcome_negative"
-  | "outcome_positive"
-  | "outcome_meeting_booked"
-  | "outcome_wrong_person"
-  | "outcome_pain_confirmed"
-  | "outcome_pain_not_confirmed"
-  | "outcome_bad_timing"
-  | "launch_core"
-  | "launch_exploration"
-  | "launch_daily_brief"
-  | "launch_learning_review"
-  | "launch_dnc_check"
-  | "launch_followup_review";
+export const LEAD_ACTION_TYPES = [
+  "validate_lead",
+  "reject_lead",
+  "watch_lead",
+  "exclude_lead",
+  "request_enrichment",
+  "rerun_qc",
+  "copy_email",
+  "copy_follow_up",
+  "copy_linkedin",
+  "mark_message_used",
+  "add_do_not_contact",
+  "feedback_good_lead",
+  "feedback_bad_lead",
+  "feedback_good_angle",
+  "feedback_generic_message",
+  "outcome_no_response",
+  "outcome_negative",
+  "outcome_positive",
+  "outcome_meeting_booked",
+  "outcome_wrong_person",
+  "outcome_pain_confirmed",
+  "outcome_pain_not_confirmed",
+  "outcome_bad_timing",
+  "launch_core",
+  "launch_exploration",
+  "launch_daily_brief",
+  "launch_learning_review",
+  "launch_dnc_check",
+  "launch_followup_review"
+] as const;
+export type LeadActionType = (typeof LEAD_ACTION_TYPES)[number];
 
 export interface Evidence {
   id?: string;

@@ -1,42 +1,7 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { recordScoutAction } from "@/server/scout-actions";
+import { scoutActionSchema } from "@/server/scout-action-schema";
 import { getInternalAuthState } from "@/server/supabase-auth";
-
-const actionSchema = z.object({
-  action: z.enum([
-    "validate_lead",
-    "reject_lead",
-    "watch_lead",
-    "exclude_lead",
-    "request_enrichment",
-    "rerun_qc",
-    "copy_email",
-    "copy_follow_up",
-    "copy_linkedin",
-    "mark_message_used",
-    "add_do_not_contact",
-    "feedback_good_lead",
-    "feedback_bad_lead",
-    "feedback_good_angle",
-    "feedback_generic_message",
-    "outcome_no_response",
-    "outcome_negative",
-    "outcome_positive",
-    "outcome_meeting_booked",
-    "outcome_wrong_person",
-    "outcome_pain_confirmed",
-    "outcome_pain_not_confirmed",
-    "outcome_bad_timing",
-    "launch_core",
-    "launch_exploration",
-    "launch_daily_brief",
-    "launch_learning_review"
-  ]),
-  leadId: z.string().min(1).optional(),
-  note: z.string().max(600).optional(),
-  reason: z.string().max(300).optional()
-});
 
 export async function POST(request: Request) {
   const auth = await getInternalAuthState();
@@ -47,7 +12,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, message: auth.reason }, { status: 403 });
   }
 
-  const parsed = actionSchema.safeParse(await request.json());
+  const parsed = scoutActionSchema.safeParse(await request.json());
   if (!parsed.success) {
     return NextResponse.json({ ok: false, message: "Action invalide.", issues: parsed.error.issues }, { status: 400 });
   }
