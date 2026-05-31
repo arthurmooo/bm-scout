@@ -19,6 +19,15 @@ export function ScoutActionButton({ action, leadId, className, children, reason,
 
   async function submit() {
     setState("saving");
+    const response = await fetch("/api/scout/actions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action, leadId, reason, note })
+    });
+    if (!response.ok) {
+      setState("error");
+      return;
+    }
     if (copyText && navigator.clipboard) {
       try {
         await navigator.clipboard.writeText(copyText);
@@ -26,12 +35,7 @@ export function ScoutActionButton({ action, leadId, className, children, reason,
         // La trace serveur reste prioritaire si le presse-papiers navigateur est indisponible.
       }
     }
-    const response = await fetch("/api/scout/actions", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ action, leadId, reason, note })
-    });
-    setState(response.ok ? "done" : "error");
+    setState("done");
   }
 
   return (

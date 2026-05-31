@@ -5,15 +5,27 @@ const { calls } = vi.hoisted(() => ({
   calls: [] as Array<{ table: string; op: string; payload?: unknown }>
 }));
 
+const { state } = vi.hoisted(() => ({
+  state: {
+    dnc: false,
+    messageStatus: "proposed",
+    messageBody: "Bonjour, message spécifique."
+  }
+}));
+
 vi.mock("./supabase", () => ({
   createServerSupabaseClient: () => ({
-    from: (table: string) => fakeTable(table)
+    from: (table: string) => fakeTable(table),
+    rpc: (fn: string, payload: unknown) => {
+      calls.push({ table: `rpc:${fn}`, op: "rpc", payload });
+      return { data: state.dnc, error: null };
+    }
   })
 }));
 
 describe("scout actions", () => {
   it("persiste une validation lead et trace l'action", async () => {
-    calls.length = 0;
+    reset();
 
     const result = await recordScoutAction({ action: "validate_lead", leadId: "core-cambon" });
 
@@ -23,7 +35,7 @@ describe("scout actions", () => {
   });
 
   it("met une routine Core en file via agent_tasks", async () => {
-    calls.length = 0;
+    reset();
 
     const result = await recordScoutAction({ action: "launch_core" });
 
@@ -32,7 +44,7 @@ describe("scout actions", () => {
   });
 
   it("ajoute un do-not-contact et bloque le lead", async () => {
-    calls.length = 0;
+    reset();
 
     const result = await recordScoutAction({ action: "add_do_not_contact", leadId: "core-cambon" });
 
@@ -57,7 +69,7 @@ describe("scout actions", () => {
   });
 
   it("enregistre un feedback bon angle dans scout_feedback", async () => {
-    calls.length = 0;
+    reset();
 
     const result = await recordScoutAction({
       action: "feedback_good_angle",
@@ -78,7 +90,7 @@ describe("scout actions", () => {
   });
 
   it("rejette les messages quand Romu signale un message trop generique", async () => {
-    calls.length = 0;
+    reset();
 
     const result = await recordScoutAction({
       action: "feedback_generic_message",
@@ -100,7 +112,7 @@ describe("scout actions", () => {
   });
 
   it("persiste un outcome RDV pris", async () => {
-    calls.length = 0;
+    reset();
 
     const result = await recordScoutAction({
       action: "outcome_meeting_booked",
@@ -122,7 +134,7 @@ describe("scout actions", () => {
   });
 
   it("marque les messages comme utilises sans envoi automatique", async () => {
-    calls.length = 0;
+    reset();
 
     const result = await recordScoutAction({ action: "mark_message_used", leadId: "core-cambon" });
 
@@ -130,7 +142,56 @@ describe("scout actions", () => {
     expect(calls).toContainEqual({ table: "scout_messages", op: "update", payload: { status: "approved" } });
     expect(calls.some((call) => JSON.stringify(call.payload).includes("sent"))).toBe(false);
   });
+
+  it("bloque la copie de message si la cible est do-not-contact", async () => {
+    reset();
+    state.dnc = true;
+
+    const result = await recordScoutAction({ action: "copy_email", leadId: "core-cambon" });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("do-not-contact");
+    expect(calls).toContainEqual({
+      table: "rpc:scout_is_do_not_contact",
+      op: "rpc",
+      payload: {
+        input_email: "romu@example.com",
+        input_domain: "example.com",
+        input_company_id: "company-1",
+        input_contact_id: "contact-1"
+      }
+    });
+    expect(calls).not.toContainEqual({ table: "scout_messages", op: "update", payload: { status: "copied" } });
+    expect(
+      calls.some(
+        (call) =>
+          call.table === "scout_action_events" &&
+          call.op === "insert" &&
+          JSON.stringify(call.payload).includes("Copie bloquée")
+      )
+    ).toBe(true);
+  });
+
+  it("bloque la copie d'un brouillon QC bloque", async () => {
+    reset();
+    state.messageStatus = "blocked";
+    state.messageBody = "Brouillon bloqué : signal insuffisant.";
+
+    const result = await recordScoutAction({ action: "copy_email", leadId: "core-cambon" });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("Quality Control");
+    expect(calls.some((call) => call.table === "rpc:scout_is_do_not_contact")).toBe(false);
+    expect(calls).not.toContainEqual({ table: "scout_messages", op: "update", payload: { status: "copied" } });
+  });
 });
+
+function reset() {
+  calls.length = 0;
+  state.dnc = false;
+  state.messageStatus = "proposed";
+  state.messageBody = "Bonjour, message spécifique.";
+}
 
 function fakeTable(table: string) {
   const chain = {
@@ -140,7 +201,7 @@ function fakeTable(table: string) {
     or: () => chain,
     order: () => chain,
     limit: () => chain,
-    maybeSingle: () => ({ data: { id: "company-1" }, error: null }),
+    maybeSingle: () => ({ data: singleRow(table), error: null }),
     eq: () => chain,
     neq: () => chain,
     insert: (payload: unknown) => {
@@ -153,4 +214,18 @@ function fakeTable(table: string) {
     }
   };
   return chain;
+}
+
+function singleRow(table: string) {
+  if (table === "scout_messages") {
+    return {
+      id: "message-1",
+      status: state.messageStatus,
+      body: state.messageBody,
+      contact_id: "contact-1",
+      scout_contacts: { email: "romu@example.com" },
+      scout_companies: { domain: "example.com" }
+    };
+  }
+  return { id: "company-1", domain: "example.com" };
 }

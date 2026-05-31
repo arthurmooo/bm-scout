@@ -37,6 +37,8 @@ type OutcomeActionEffect = {
   companyPatch?: (note: string) => CompanyPatch;
 };
 
+type MessageChannel = "email" | "follow_up" | "linkedin";
+
 const ACTION_LABELS: Record<LeadActionType, string> = {
   validate_lead: "Lead validé.",
   reject_lead: "Lead rejeté.",
@@ -165,8 +167,13 @@ export async function recordScoutAction(input: ScoutActionInput): Promise<ScoutA
     if (error) return failure(error.message);
   }
 
+  let mutationError: string | null = null;
   if (companyId) {
-    await applyLeadMutation(input, companyId);
+    try {
+      await applyLeadMutation(input, companyId);
+    } catch (error) {
+      mutationError = error instanceof Error ? error.message : String(error);
+    }
   }
 
   const { error } = await client.from("scout_action_events").insert({
@@ -175,10 +182,14 @@ export async function recordScoutAction(input: ScoutActionInput): Promise<ScoutA
     note: input.note ?? input.reason ?? ACTION_LABELS[input.action],
     payload: {
       leadId: input.leadId ?? null,
-      reason: input.reason ?? null
+      reason: input.reason ?? null,
+      ok: mutationError === null,
+      error: mutationError
     }
   });
   if (error) return failure(error.message);
+
+  if (mutationError) return failure(mutationError);
 
   return {
     ok: true,
@@ -284,9 +295,10 @@ async function applyLeadMutation(input: ScoutActionInput, companyId: string): Pr
   }
 }
 
-async function markMessageCopied(companyId: string, channel: "email" | "follow_up" | "linkedin"): Promise<void> {
+async function markMessageCopied(companyId: string, channel: MessageChannel): Promise<void> {
   const client = createServerSupabaseClient();
   if (!client) return;
+  await assertMessageCopyAllowed(companyId, channel);
   await checked(
     client
       .from("scout_messages")
@@ -295,6 +307,37 @@ async function markMessageCopied(companyId: string, channel: "email" | "follow_u
       .eq("channel", channel)
       .neq("status", "blocked")
   );
+}
+
+async function assertMessageCopyAllowed(companyId: string, channel: MessageChannel): Promise<void> {
+  const client = createServerSupabaseClient();
+  if (!client) return;
+
+  const { data, error } = await client
+    .from("scout_messages")
+    .select("id,status,body,contact_id,scout_contacts(email),scout_companies(domain)")
+    .eq("company_id", companyId)
+    .eq("channel", channel)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(`Vérification message impossible: ${error.message}`);
+  const message = data as CopyableMessageRow | null;
+  if (!message) throw new Error("Copie bloquée : message introuvable.");
+  if (message.status === "blocked" || message.body.toLowerCase().startsWith("brouillon blo")) {
+    throw new Error("Copie bloquée : message non autorisé par le Quality Control.");
+  }
+
+  const { data: isDnc, error: dncError } = await client.rpc("scout_is_do_not_contact", {
+    input_email: message.scout_contacts?.email ?? null,
+    input_domain: message.scout_companies?.domain ?? null,
+    input_company_id: companyId,
+    input_contact_id: message.contact_id ?? null
+  });
+
+  if (dncError) throw new Error(`Vérification do-not-contact impossible: ${dncError.message}`);
+  if (isDnc) throw new Error("Copie bloquée : cible do-not-contact.");
 }
 
 async function markMessagesUsed(companyId: string): Promise<void> {
@@ -354,4 +397,13 @@ function failure(message: string): ScoutActionResult {
     persisted: false,
     message
   };
+}
+
+interface CopyableMessageRow {
+  id: string;
+  status: string;
+  body: string;
+  contact_id: string | null;
+  scout_contacts?: { email: string | null } | null;
+  scout_companies?: { domain: string | null } | null;
 }
