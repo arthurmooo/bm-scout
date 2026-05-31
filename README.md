@@ -10,6 +10,7 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 
 - Console Next.js centrée sur la prochaine décision Romu.
 - Schéma Supabase pour runs, leads, preuves, messages, feedbacks, outcomes, DNC, run steps, tasks et action events.
+- RPC Supabase de persistance qui fusionne les entreprises par `external_id` puis domaine, priorise Core si un même compte apparaît aussi en Exploration, et trace `dedupe_decision`.
 - Worker Python OpenAI Agents SDK avec `Runner.run`, `trace`, agents spécialisés et outputs Pydantic.
 - Recherche métier provider : découverte web, fetch site, extraction signaux, job search public, emails publics, déduplication domaine/nom/pays/ville/LinkedIn/identifiant et scoring.
 - Scheduler local reproductible qui crée les routines Core, Exploration, Daily Brief, Learning, DNC check et followup review.

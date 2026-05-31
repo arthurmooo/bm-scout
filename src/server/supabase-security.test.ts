@@ -97,6 +97,22 @@ describe("supabase security posture", () => {
     expect(migration).toContain("alter type public.scout_action_type add value if not exists 'launch_dnc_check'");
     expect(migration).toContain("alter type public.scout_action_type add value if not exists 'launch_followup_review'");
   });
+
+  it("fusionne les companies persistées par external_id ou domaine en priorisant Core", () => {
+    const migration = readMigration("scout_company_persistence_dedupe");
+
+    expect(migration).toContain("create index if not exists scout_companies_domain_idx");
+    expect(migration).toContain("where external_id = lead->>'id'");
+    expect(migration).toContain("where domain = lead_domain");
+    expect(migration).toContain("company_dedupe_decision := 'merged_existing'");
+    expect(migration).toContain("'dedupe_decision', company_dedupe_decision");
+    expect(migration).toContain("update public.scout_companies as existing");
+    expect(migration).toContain("when existing.mode = 'core'::public.scout_mode then existing.mode");
+    expect(migration).toContain("when existing.mode = 'core'::public.scout_mode and lead_mode = 'exploration'::public.scout_mode then existing.verdict");
+    expect(migration).toContain("as signals(signal)");
+    expect(migration).toContain("as hypotheses(hypothesis)");
+    expect(migration).toContain("latest_run_id = run_id");
+  });
 });
 
 function readMigration(name: string): string {

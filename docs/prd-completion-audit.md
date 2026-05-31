@@ -23,7 +23,7 @@ Verdict courant : `production_not_ready`.
 | Actions UI fonctionnelles | Partiel | API actions + traces + feedback/outcomes + centre à valider + décisions avancées + 6 routines P0 lançables, smoke Playwright/Browser repassés ; persistance réelle dépend encore de l'env Supabase |
 | Run steps/tool calls auditables | Partiel | RPC écrit run start/lead saved/worker steps ; provider + function tools Agents SDK poussent des étapes compactées ; scripts `worker:real:*` produisent les artefacts readiness |
 | Supabase mémoire | Partiel | Schéma/RPC/actions, env runtime non vérifiée ici |
-| Déduplication robuste | Partiel | Provider renforcé avec clés domaine, domaine enregistrable, identité légale+pays/ville, LinkedIn et identifiant public ; fusion historique multi-semaines Supabase encore à prouver |
+| Déduplication robuste | Partiel | Provider renforcé avec clés domaine, domaine enregistrable, identité légale+pays/ville, LinkedIn et identifiant public ; RPC Supabase fusionne désormais par `external_id` ou domaine et priorise Core ; rétro-merge historique complet encore non traité |
 | Email confidence | Couvert en socle | Worker + DB + UI distinguent nominatif public, générique, pattern probable et inconnu ; seuls les emails publics nominatifs sourcés passent `usable`, les autres restent `verify/not_usable` |
 | RLS / sécurité interne | Partiel | Policies Supabase restreintes par `app_metadata`, service role serveur, advisor sécurité à 0 lint ; Auth SSR UI/API branchée, claims réels Romu/Arthur encore à poser et vérifier dans Supabase |
 | Documentation honnête | Couvert dans cette passe | README + docs en `production_not_ready`, gate provider corrigé pour empêcher un smoke Core seul de prouver les volumes PRD |

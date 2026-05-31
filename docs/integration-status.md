@@ -30,6 +30,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Migration Supabase `20260530210927_agent_tasks_and_actions.sql`.
 - Migration Supabase `20260531030736_agent_tasks_active_dedupe.sql` : index unique partiel pour empêcher deux tâches `queued/running` identiques sur le même créneau.
 - Migration Supabase `20260531030749_scout_fk_covering_indexes.sql` : indexes couvrants pour les clés étrangères de persistance, actions, messages, outcomes, evidence et learning.
+- Migration Supabase `20260531043451_scout_company_persistence_dedupe.sql` : la RPC `scout_persist_mission_output` cherche d'abord `external_id`, puis le domaine généré, fusionne les companies existantes, priorise Core sur Exploration et trace `dedupe_decision`.
 - Migration Supabase `20260530232128_restrict_internal_rls_policies.sql` : suppression des policies `using (true)` et restriction aux rôles internes `app_metadata`.
 - Migration Supabase `20260530232456_close_security_definer_rpc_exposure.sql` : fermeture des fonctions `SECURITY DEFINER` exposées en RPC publique.
 - API `POST /api/scout/actions`.
@@ -43,7 +44,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Preuve provider : `latest-comparison.json` porte maintenant `code_revision`, `python_version` et `openai_sdk_version`; `quality:readiness` refuse une comparaison provider ancienne ou sans métadonnées runtime.
 - Provider SerpAPI : `BM_SCOUT_PROVIDER=serpapi` ou sélection auto via `SERPAPI_API_KEY`, parsing des `organic_results`, filtrage des sources faibles et run step `serpapi_search`.
 - `search_jobs` n'est plus décoratif : le provider web cherche des sources recrutement publiques, les transforme en preuves et les trace dans `run_steps`.
-- Déduplication provider renforcée : clés multiples domaine, domaine enregistrable, identité légale normalisée + pays/ville, LinkedIn et identifiant public si disponible, avec run steps `dedupe_company` exposant les clés de doublon.
+- Déduplication provider renforcée : clés multiples domaine, domaine enregistrable, identité légale normalisée + pays/ville, LinkedIn et identifiant public si disponible, avec run steps `dedupe_company` exposant les clés de doublon. Côté Supabase, la persistance fusionne aussi les companies par `external_id` ou domaine pour éviter un doublon Core/Exploration.
 - Scripts `worker:real:*` : exécution reproductible Core/Exploration réelle, avec artefacts `latest-real-*.json` consommés par `quality:readiness`, incluant modèle, provider, versions SDK, révision code, timestamps et durée. Un artefact réel ne compte pas pour la readiness si sa révision ne correspond pas au commit courant.
 - Les routines Core/Exploration transmettent maintenant leurs objectifs payload au worker Python ; le worker dérive `scanned_count` des steps provider `discovered_count`, et `quality:readiness` exige Core >= 15 scannés et Exploration >= 100 scannés.
 - Mémoire feedback TS : rejet lead, pénalité secteur, bonus angle validé, régénération anti-générique.
@@ -87,7 +88,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 ## Vérifications exécutées
 
-- `npm run test` : 81 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/outcome négatif/email incertain bloquée, routines DNC/followup lançables, indexes FK Supabase, index anti-doublon, policy Auth BM Scout, actions Romu, provider runtime des preuves et scénario `feedback:evidence`.
+- `npm run test` : 82 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/outcome négatif/email incertain bloquée, routines DNC/followup lançables, indexes FK Supabase, index anti-doublon, fusion Supabase company par `external_id`/domaine, policy Auth BM Scout, actions Romu, provider runtime des preuves et scénario `feedback:evidence`.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.
@@ -109,6 +110,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Supabase interne `Interne_Agentic_prospection` : migrations `agent_tasks_and_actions`, `bm_scout_structured_insights_email_confidence_steps`, `scout_feedback_outcome_actions`, `restrict_internal_rls_policies`, `close_security_definer_rpc_exposure` et `block_messages_after_negative_outcome` appliquées.
 - Supabase interne : triggers `scout_messages_prevent_blocking_outcome` et `scout_outcomes_block_messages` vérifiés en base via MCP ; advisor sécurité à 0 lint après application.
 - Supabase interne : migrations `agent_tasks_active_dedupe` et `scout_fk_covering_indexes` alignées avec l'historique distant ; index `scout_agent_tasks_active_type_schedule_uniq` et 17 indexes FK vérifiés en base via MCP.
+- Supabase interne : migration `scout_company_persistence_dedupe` appliquée ; vérification distante par scénario temporaire Core puis Exploration sur le même domaine, fusion en une seule company, priorité Core conservée, run step `dedupe_decision=merged_existing`, nettoyage confirmé.
 - Supabase advisor performance : plus aucun lint `unindexed_foreign_keys`; les lints restants sont `unused_index`, attendus sur une base de test à faible volume.
 - Supabase advisor sécurité : 0 lint après durcissement RLS/RPC.
 
