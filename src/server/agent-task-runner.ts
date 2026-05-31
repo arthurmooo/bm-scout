@@ -492,10 +492,17 @@ function applyWorkerEvidenceGates(
   options: WorkerCliOptions,
   parsed: WorkerCliOutput
 ): WorkerCliOutput {
-  const blockers = [...(parsed.blockers ?? []), ...workerReadinessBlockers(mode, options, parsed.output)];
+  const hasOutput = isWorkerOutputPayload(parsed.output);
+  const output = hasOutput ? parsed.output : fallbackWorkerOutput(mode, "worker_cli_missing_output", "Worker CLI sans champ output exploitable.");
+  const blockers = [
+    ...(parsed.blockers ?? []),
+    ...(!hasOutput ? [`Worker CLI ${mode} sans champ output exploitable.`] : []),
+    ...workerReadinessBlockers(mode, options, output)
+  ];
   if (!blockers.length) return parsed;
   return {
     ...parsed,
+    output,
     verdict: "fail",
     blockers
   };
@@ -504,19 +511,19 @@ function applyWorkerEvidenceGates(
 export function workerReadinessBlockers(
   mode: "core" | "exploration",
   options: Pick<WorkerCliOptions, "real" | "persist" | "env">,
-  output: Pick<WorkerCliOutput["output"], "scanned_count" | "run_steps">
+  output?: Pick<WorkerCliOutput["output"], "scanned_count" | "run_steps">
 ): string[] {
   if (!options.real || options.persist === false) return [];
 
   const blockers: string[] = [];
   if (!isControlledFeedbackEvidence(options.env)) {
     const target = requiredWorkerScanTarget(mode, options.env);
-    const scannedCount = Number(output.scanned_count ?? 0);
+    const scannedCount = Number(output?.scanned_count ?? 0);
     if (!Number.isFinite(scannedCount) || scannedCount < target) {
       blockers.push(`Volume PRD ${mode} non prouvé : ${Number.isFinite(scannedCount) ? scannedCount : 0}/${target} comptes scannés.`);
     }
   }
-  const persistComplete = output.run_steps?.some((step) => step.step === "persist_complete" && step.event_type === "supabase_persist");
+  const persistComplete = output?.run_steps?.some((step) => step.step === "persist_complete" && step.event_type === "supabase_persist");
   if (!persistComplete) {
     blockers.push("Persistance Supabase non prouvée : step persist_complete absent.");
   }
@@ -542,26 +549,43 @@ function failedWorkerOutput(
   return {
     verdict: "fail",
     blockers: [`Worker CLI ${mode} échoué sans sortie JSON valide.`],
-    output: {
-      trace_id: `trace_worker_cli_failed_${mode}`,
-      mode,
-      kept_count: 0,
-      rejected_count: 0,
-      final_decision: "not_ready",
-      run_steps: [
-        {
-          agent_name: "bm_scout_worker",
-          step: "worker_cli_failed",
-          event_type: "runner_error",
-          payload: {
-            mode,
-            code: result.code,
-            error
-          }
-        }
-      ]
-    }
+    output: fallbackWorkerOutput(mode, "worker_cli_failed", "Worker CLI échoué sans sortie JSON valide.", {
+      code: result.code,
+      error
+    })
   };
+}
+
+function fallbackWorkerOutput(
+  mode: "core" | "exploration",
+  step: string,
+  reason: string,
+  payload: Record<string, unknown> = {}
+): WorkerCliOutput["output"] {
+  return {
+    trace_id: `trace_worker_cli_failed_${mode}`,
+    mode,
+    kept_count: 0,
+    scanned_count: 0,
+    rejected_count: 0,
+    final_decision: "not_ready",
+    run_steps: [
+      {
+        agent_name: "bm_scout_worker",
+        step,
+        event_type: "runner_error",
+        payload: {
+          mode,
+          reason,
+          ...payload
+        }
+      }
+    ]
+  };
+}
+
+function isWorkerOutputPayload(value: WorkerCliOutput["output"] | undefined): value is WorkerCliOutput["output"] {
+  return typeof value === "object" && value !== null && typeof value.trace_id === "string";
 }
 
 async function runWorkerCli(mode: "core" | "exploration", options: WorkerCliOptions): Promise<AgentTaskExecution> {

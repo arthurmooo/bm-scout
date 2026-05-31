@@ -306,6 +306,13 @@ describe("agent task runner", () => {
     expect(workerReadinessBlockers("core", { real: false, persist: true }, { scanned_count: 1, run_steps: [] })).toEqual([]);
   });
 
+  it("transforme un output worker absent en blockers explicites au lieu de crasher", () => {
+    expect(workerReadinessBlockers("core", { real: true, persist: true, env: { BM_SCOUT_CORE_TARGET: "15" } })).toEqual([
+      "Volume PRD core non prouvé : 0/15 comptes scannés.",
+      "Persistance Supabase non prouvée : step persist_complete absent."
+    ]);
+  });
+
   it("n'impose pas le volume PRD au scénario feedback loop contrôlé", () => {
     expect(
       workerReadinessBlockers(

@@ -498,8 +498,10 @@ def test_provider_score_uses_negative_feedback_notes() -> None:
     evidence = []
 
     neutral = provider.score_candidate(seed, evidence, [])
-    penalized = provider.score_candidate(seed, evidence, ["Mauvais secteur pour Romu, trop petit."])
+    unrelated = provider.score_candidate(seed, evidence, ["Mauvais secteur pour Romu, trop petit : Autre segment."])
+    penalized = provider.score_candidate(seed, evidence, ["Finance ops mauvais secteur pour Romu, trop petit."])
 
+    assert unrelated == neutral
     assert penalized < neutral
 
 

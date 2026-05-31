@@ -409,7 +409,7 @@ class ConfiguredWebResearchProvider:
             base += 22
         if any(term in text for term in ["reporting", "document", "client", "workflow", "data room"]):
             base += 12
-        if any("mauvais secteur" in note.lower() or "trop petit" in note.lower() for note in feedback_notes):
+        if any(note_penalizes_candidate(note, seed) for note in feedback_notes):
             base -= 10
         return max(0, min(100, base))
 
@@ -1517,6 +1517,17 @@ def email_status_with_source(item: dict[str, str], source_url: str | None) -> st
 
 def normalized_name(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+def note_penalizes_candidate(note: str, seed: CompanySeed) -> bool:
+    normalized_note = normalized_name(note)
+    if not normalized_note:
+        return False
+    has_negative_signal = "mauvais-secteur" in normalized_note or "trop-petit" in normalized_note
+    if not has_negative_signal:
+        return False
+    candidate_keys = {normalized_name(seed.company), normalized_name(seed.segment)}
+    return any(key and key in normalized_note for key in candidate_keys)
 
 
 def normalized_company_identity(name: str) -> str:
