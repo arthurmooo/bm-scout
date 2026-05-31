@@ -54,7 +54,6 @@ async def run_bm_scout_mission(
     if persist:
         if memory is None:
             raise RuntimeError("Persistance demandée mais SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY manque.")
-        memory.persist_output(output)
         output.run_steps.append(
             RunStep(
                 agent_name="bm_scout_worker",
@@ -63,6 +62,7 @@ async def run_bm_scout_mission(
                 payload={"mode": mode, "trace_id": output.trace_id, "run_id": output.run_id},
             )
         )
+        memory.persist_output(output)
 
     if artifacts_dir:
         artifacts_dir.mkdir(parents=True, exist_ok=True)

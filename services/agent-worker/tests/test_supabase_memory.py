@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from hashlib import sha256
 from unittest.mock import patch
@@ -7,6 +8,7 @@ from unittest.mock import patch
 from bm_scout_worker.fixtures import offline_output
 from bm_scout_worker.memory import SupabaseConfig, SupabaseMemory
 from bm_scout_worker.providers import CompanySeed, ConfiguredWebResearchProvider
+from bm_scout_worker.runner import run_bm_scout_mission
 from bm_scout_worker.schemas import FeedbackEvent
 
 
@@ -82,6 +84,34 @@ def test_supabase_memory_persists_output_through_atomic_rpc() -> None:
     assert request.full_url == "https://example.supabase.co/rest/v1/rpc/scout_persist_mission_output"
     assert request.get_method() == "POST"
     assert json.loads(request.data.decode("utf-8"))["payload"]["run_id"] == output.run_id
+
+
+def test_runner_persist_payload_includes_persist_complete_step(monkeypatch) -> None:
+    monkeypatch.setenv("SUPABASE_URL", "https://example.supabase.co")
+    monkeypatch.setenv("SUPABASE_SERVICE_ROLE_KEY", "service")
+    payloads = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def read(self):
+            return json.dumps("ok").encode("utf-8")
+
+    def fake_urlopen(request, timeout):
+        assert timeout == 20
+        payloads.append(json.loads(request.data.decode("utf-8"))["payload"])
+        return Response()
+
+    with patch("urllib.request.urlopen", fake_urlopen):
+        output = asyncio.run(run_bm_scout_mission("core", persist=True))
+
+    persisted_steps = payloads[0]["run_steps"]
+    assert any(step["step"] == "persist_complete" and step["event_type"] == "supabase_persist" for step in persisted_steps)
+    assert output.run_steps[-1].step == "persist_complete"
 
 
 def test_supabase_memory_loads_feedback_outcomes_and_dnc() -> None:
