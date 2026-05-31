@@ -1,6 +1,6 @@
-import { demoSnapshot } from "@/domain/scout-engine";
-import { buildBriefSummary, buildTasksFromRuns } from "@/domain/scheduler";
-import type { AgentTask, Evidence, LearningLesson, Persona, QualityGate, ScoutLead, ScoutRun, ScoutSnapshot, StructuredInsights } from "@/domain/types";
+import { demoSnapshot } from "../domain/scout-engine";
+import { buildBriefSummary, buildTasksFromRuns } from "../domain/scheduler";
+import type { AgentTask, Evidence, LearningLesson, Persona, QualityGate, ScoutLead, ScoutRun, ScoutSnapshot, StructuredInsights } from "../domain/types";
 import { createServerSupabaseClient } from "./supabase";
 
 export async function getScoutSnapshot(): Promise<ScoutSnapshot> {
@@ -36,7 +36,7 @@ export async function getScoutSnapshot(): Promise<ScoutSnapshot> {
         next_action,
         rejection_reason,
         scout_contacts (name, role, email, email_type, email_source_url, email_confidence, email_status, reason, confidence, do_not_contact),
-        scout_evidence (label, url, observed_fact, reliability),
+        scout_evidence (id, label, url, observed_fact, reliability),
         scout_briefs (short_card, deep_card, created_at),
         scout_messages (channel, body, status),
         scout_quality_reports (decision, gates, reason, blocker_code)
@@ -51,8 +51,15 @@ export async function getScoutSnapshot(): Promise<ScoutSnapshot> {
   if (error) {
     throw new Error(`Lecture Supabase BM Scout impossible: ${error.message}`);
   }
-  if (!runs?.length) return demoSnapshot();
 
+  const tasks = await loadTaskRows(client);
+
+  return buildSnapshotFromRows((runs ?? []) as ScoutRunRow[], tasks);
+}
+
+type SupabaseServerClient = NonNullable<ReturnType<typeof createServerSupabaseClient>>;
+
+async function loadTaskRows(client: SupabaseServerClient): Promise<ScoutTaskRow[]> {
   const { data: tasks, error: taskError } = await client
     .from("scout_agent_tasks")
     .select(
@@ -65,7 +72,7 @@ export async function getScoutSnapshot(): Promise<ScoutSnapshot> {
     throw new Error(`Lecture des tâches BM Scout impossible: ${taskError.message}`);
   }
 
-  return buildSnapshotFromRows(runs as ScoutRunRow[], (tasks ?? []) as ScoutTaskRow[]);
+  return (tasks ?? []) as ScoutTaskRow[];
 }
 
 function buildSnapshotFromRows(rows: ScoutRunRow[], taskRows: ScoutTaskRow[] = []): ScoutSnapshot {

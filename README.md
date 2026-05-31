@@ -24,6 +24,7 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 - RLS Supabase durcie : policies `authenticated` restreintes aux rôles internes via `app_metadata`, service role réservée au serveur/worker, advisor sécurité Supabase sans lint après migration.
 - Auth interne Supabase SSR branchée : login magic link, refresh cookies via proxy Next, API actions bloquée si l'utilisateur n'a pas de claim `app_metadata` BM Scout. Le mode démo local reste explicite via `BM_SCOUT_AUTH_MODE=demo`.
 - Rapport qualité qui distingue le harnais fixture de la readiness produit réelle.
+- Console qui n'utilise les fixtures que sans env Supabase serveur ; une base Supabase configurée mais vide reste affichée comme vide.
 
 ## Ce qui n'est pas encore prêt
 

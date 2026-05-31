@@ -81,7 +81,7 @@ La fonction doit exister. Les nouvelles tables `scout_agent_tasks` et `scout_act
 npm run dev
 ```
 
-Sans variables Supabase serveur, la console affiche les fixtures demo. Avec variables serveur, elle lit `scout_runs` et relations `scout_*`. Si `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` existe ou si `BM_SCOUT_AUTH_MODE=internal` est configuré, la console demande aussi une session Supabase interne.
+Sans variables Supabase serveur, la console affiche les fixtures demo. Avec variables serveur, elle lit `scout_runs`, `scout_agent_tasks` et relations `scout_*`. Si Supabase est configuré mais vide, elle affiche zéro lead et les routines à lancer, pas les fixtures. Si `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` existe ou si `BM_SCOUT_AUTH_MODE=internal` est configuré, la console demande aussi une session Supabase interne.
 
 Verification runtime :
 

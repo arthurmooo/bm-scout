@@ -54,7 +54,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 ## Encore fixture/demo
 
 - `quality:runs` reste un harnais fixture.
-- `demoSnapshot()` reste le fallback sans env Supabase serveur.
+- `demoSnapshot()` reste le fallback sans env Supabase serveur. Avec Supabase configuré mais vide, la console affiche un état runtime vide et les tâches, jamais les fixtures comme vérité produit.
 - Le worker réel peut découvrir des candidats sans seeds via SerpAPI, OpenAI `web_search` ou fallback web public, mais ce n'est pas encore prouvé à volume PRD.
 - Une comparaison provider Core seule ne peut plus déclarer les volumes PRD prouvés ; `prd_volume_proven` exige Core + Exploration.
 - Les providers `search_web`, `fetch_company_site`, `search_jobs`, `find_public_emails`, `dedupe_company` existent ; `search_jobs` reste minimal et la robustesse search dépend encore des sources publiques.
@@ -67,6 +67,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Runner queue reproductible : `npm run agent:tasks:offline` ou `npm run agent:tasks:real` avec env Supabase serveur ; les routines brief/learning/DNC/followup ne s'appuient pas sur les fixtures demo.
 - Artefacts de run réel reproductibles : `npm run worker:real:core`, `npm run worker:real:exploration`, puis variantes `:persist` avec env Supabase.
 - Actions API persistantes si `NEXT_PUBLIC_SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` existent ; si Auth SSR est configurée, l'API exige aussi un compte interne BM Scout.
+- Console runtime : si Supabase serveur est configuré mais ne contient aucun run, elle affiche zéro lead et les routines à lancer au lieu de retomber sur les fixtures.
 - Auth interne : home protégée en mode `BM_SCOUT_AUTH_MODE=internal`, login magic link Supabase, fallback démo seulement si l'auth publique est absente ou explicitement forcée.
 - DNC bloque côté TS, worker offline et trigger Supabase.
 - Feedback Romu influence le scoring et les messages dans le moteur TS et le worker provider testés.
@@ -75,7 +76,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 ## Vérifications exécutées
 
-- `npm run test` : 43 tests pass, dont scheduler idempotent, index anti-doublon Supabase, policy Auth BM Scout et actions Romu.
+- `npm run test` : 46 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, index anti-doublon Supabase, policy Auth BM Scout et actions Romu.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.
