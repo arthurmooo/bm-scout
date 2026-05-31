@@ -39,6 +39,13 @@ export interface SupabaseRuntimeArtifactEvidence {
   dncCount?: number;
   runStepCount?: number;
   actionEventCount?: number;
+  persistenceDedupeVerified?: boolean;
+  persistenceDedupeCompanyCount?: number;
+  persistenceDedupeRetainedMode?: string | null;
+  persistenceDedupeRunStepCount?: number;
+  persistenceDedupeCleanupRemainingCompanies?: number;
+  persistenceDedupeCleanupRemainingRuns?: number;
+  persistenceDedupeTraceIds?: string[];
   traces?: string[];
   blockers?: string[];
   error?: string;
@@ -137,6 +144,11 @@ export function analyzeSupabaseRuntimeArtifact(
 ): SupabaseRuntimeEvidenceAnalysis {
   const codeRevision = stringValue(payload.code_revision);
   const blockers = Array.isArray(payload.blockers) ? payload.blockers.filter((item): item is string => typeof item === "string") : [];
+  const persistenceDedupeComplete = hasPersistenceDedupeProof(payload);
+  const derivedBlockers = [
+    ...blockers,
+    ...(!persistenceDedupeComplete ? ["Preuve Supabase manquante: la RPC ne prouve pas la fusion par domaine avec priorité Core et cleanup."] : [])
+  ];
   const runtimeMetadataComplete = Boolean(
     stringValue(payload.generated_at) &&
       codeRevision &&
@@ -150,6 +162,7 @@ export function analyzeSupabaseRuntimeArtifact(
       numericAtLeast(payload.dncCount, 1) &&
       numericAtLeast(payload.runStepCount, 1) &&
       numericAtLeast(payload.actionEventCount, 1) &&
+      persistenceDedupeComplete &&
       Array.isArray(payload.traces) &&
       payload.traces.length > 0
   );
@@ -160,7 +173,7 @@ export function analyzeSupabaseRuntimeArtifact(
     runtimeMetadataComplete,
     runtimeRevisionMatchesCurrent,
     codeRevision: codeRevision || "unknown",
-    blockers,
+    blockers: derivedBlockers,
     traces: Array.isArray(payload.traces) ? payload.traces.filter((item): item is string => typeof item === "string") : [],
     source: stringValue(payload.source) || "artifact"
   };
@@ -247,6 +260,17 @@ function stringValue(value: unknown): string {
 
 function numericAtLeast(value: unknown, minimum: number): boolean {
   return typeof value === "number" && Number.isFinite(value) && value >= minimum;
+}
+
+function hasPersistenceDedupeProof(payload: SupabaseRuntimeArtifactEvidence): boolean {
+  return Boolean(
+    payload.persistenceDedupeVerified === true &&
+      payload.persistenceDedupeCompanyCount === 1 &&
+      payload.persistenceDedupeRetainedMode === "core" &&
+      numericAtLeast(payload.persistenceDedupeRunStepCount, 1) &&
+      payload.persistenceDedupeCleanupRemainingCompanies === 0 &&
+      payload.persistenceDedupeCleanupRemainingRuns === 0
+  );
 }
 
 function numberValue(value: unknown): number {

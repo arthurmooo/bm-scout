@@ -188,6 +188,12 @@ describe("readiness evidence", () => {
         dncCount: 1,
         runStepCount: 1,
         actionEventCount: 1,
+        persistenceDedupeVerified: true,
+        persistenceDedupeCompanyCount: 1,
+        persistenceDedupeRetainedMode: "core",
+        persistenceDedupeRunStepCount: 1,
+        persistenceDedupeCleanupRemainingCompanies: 0,
+        persistenceDedupeCleanupRemainingRuns: 0,
         traces: ["trace-1"]
       },
       "abcdef1234567890"
@@ -219,6 +225,12 @@ describe("readiness evidence", () => {
         dncCount: 1,
         runStepCount: 1,
         actionEventCount: 1,
+        persistenceDedupeVerified: true,
+        persistenceDedupeCompanyCount: 1,
+        persistenceDedupeRetainedMode: "core",
+        persistenceDedupeRunStepCount: 1,
+        persistenceDedupeCleanupRemainingCompanies: 0,
+        persistenceDedupeCleanupRemainingRuns: 0,
         traces: ["trace-1"]
       },
       "abcdef123456"
@@ -238,6 +250,12 @@ describe("readiness evidence", () => {
         dncCount: 1,
         runStepCount: 1,
         actionEventCount: 1,
+        persistenceDedupeVerified: true,
+        persistenceDedupeCompanyCount: 1,
+        persistenceDedupeRetainedMode: "core",
+        persistenceDedupeRunStepCount: 1,
+        persistenceDedupeCleanupRemainingCompanies: 0,
+        persistenceDedupeCleanupRemainingRuns: 0,
         traces: ["trace-1"]
       },
       "abcdef123456"
@@ -274,6 +292,35 @@ describe("readiness evidence", () => {
     expect(evidence.runtimeMetadataComplete).toBe(false);
     expect(evidence.runtimeRevisionMatchesCurrent).toBe(false);
     expect(evidence.verdict).toBe("fail");
+  });
+
+  it("refuse une preuve Supabase sans fusion RPC domain/Core reproductible", () => {
+    const evidence = analyzeSupabaseRuntimeArtifact(
+      {
+        status: "pass",
+        generated_at: "2026-05-31T10:00:00.000Z",
+        source: "supabase_live",
+        code_revision: "abcdef123456",
+        runCount: 1,
+        leadCount: 2,
+        rejectedCount: 1,
+        lessonCount: 3,
+        taskCount: 1,
+        feedbackCount: 1,
+        outcomeCount: 1,
+        dncCount: 1,
+        runStepCount: 1,
+        actionEventCount: 1,
+        traces: ["trace-1"]
+      },
+      "abcdef123456"
+    );
+
+    expect(evidence.runtimeMetadataComplete).toBe(false);
+    expect(evidence.verdict).toBe("fail");
+    expect(evidence.blockers).toContain(
+      "Preuve Supabase manquante: la RPC ne prouve pas la fusion par domaine avec priorité Core et cleanup."
+    );
   });
 
   it("accepte une preuve cron GitHub Actions réelle avec transition completed", () => {

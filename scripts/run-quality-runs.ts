@@ -16,6 +16,7 @@ import {
 } from "../src/server/readiness-evidence";
 import { getScoutSnapshot } from "../src/server/scout-repository";
 import { createServerSupabaseClient } from "../src/server/supabase";
+import { verifySupabasePersistenceDedupe } from "../src/server/supabase-runtime-verification";
 
 type RunVerdict = "pass" | "fail";
 type ProductReadiness = "pilot_candidate" | "production_not_ready";
@@ -342,6 +343,7 @@ function renderReport(
     ...(cronEvidence?.blockers.length ? cronEvidence.blockers.map((blocker) => `- Blocker cron : ${blocker}`) : []),
     `- Console serveur Supabase : ${consoleEvidence.verdict}; source : ${consoleEvidence.source}; artefact : ${consoleEvidence.sourceFile ?? "live"}; runs : ${consoleEvidence.runCount}; leads : ${consoleEvidence.leadCount}; rejetes : ${consoleEvidence.rejectedCount}; lessons : ${consoleEvidence.lessonCount}`,
     `- Console runtime : metadata ${consoleEvidence.runtimeMetadataComplete ? "oui" : "non"}; révision ${consoleEvidence.codeRevision}; révision courante ${consoleEvidence.runtimeRevisionMatchesCurrent ? "oui" : "non"}; actions : ${consoleEvidence.actionEventCount}`,
+    `- Supabase RPC dedupe : ${consoleEvidence.persistenceDedupeVerified ? "oui" : "non"}; companies : ${consoleEvidence.persistenceDedupeCompanyCount}; mode conservé : ${consoleEvidence.persistenceDedupeRetainedMode ?? "absent"}; run steps merged : ${consoleEvidence.persistenceDedupeRunStepCount}; cleanup companies/runs : ${consoleEvidence.persistenceDedupeCleanupRemainingCompanies}/${consoleEvidence.persistenceDedupeCleanupRemainingRuns}`,
     consoleEvidence.traces.length ? `- Traces console : ${consoleEvidence.traces.join(", ")}` : "- Traces console : aucune.",
     ...(consoleEvidence.error ? [`- Erreur console : ${consoleEvidence.error}`] : []),
     ...(consoleEvidence.blockers.length ? consoleEvidence.blockers.map((blocker) => `- Blocker console : ${blocker}`) : []),
@@ -670,6 +672,12 @@ interface SupabaseConsoleEvidence {
   dncCount: number;
   runStepCount: number;
   actionEventCount: number;
+  persistenceDedupeVerified: boolean;
+  persistenceDedupeCompanyCount: number;
+  persistenceDedupeRetainedMode: string | null;
+  persistenceDedupeRunStepCount: number;
+  persistenceDedupeCleanupRemainingCompanies: number;
+  persistenceDedupeCleanupRemainingRuns: number;
   traces: string[];
   blockers: string[];
   runtimeMetadataComplete: boolean;
@@ -741,6 +749,12 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
       dncCount: 0,
       runStepCount: 0,
       actionEventCount: 0,
+      persistenceDedupeVerified: false,
+      persistenceDedupeCompanyCount: 0,
+      persistenceDedupeRetainedMode: null,
+      persistenceDedupeRunStepCount: 0,
+      persistenceDedupeCleanupRemainingCompanies: 0,
+      persistenceDedupeCleanupRemainingRuns: 0,
       traces: [],
       blockers: [],
       runtimeMetadataComplete: false,
@@ -766,6 +780,7 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
     const rejectedCount = snapshot.runs.reduce((sum, run) => sum + run.rejected.length, 0);
     const lessonCount = snapshot.lessons.length;
     const traces = snapshot.runs.map((run) => run.traceId).filter(Boolean);
+    const persistenceDedupe = await verifySupabasePersistenceDedupe(client);
     const payload: SupabaseRuntimeArtifactEvidence = {
       status:
         snapshot.runs.length > 0 &&
@@ -779,6 +794,7 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
         dncCount > 0 &&
         runStepCount > 0 &&
         actionEventCount > 0 &&
+        persistenceDedupe.verified &&
         traces.length > 0
           ? "pass"
           : "fail",
@@ -795,6 +811,13 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
       dncCount,
       runStepCount,
       actionEventCount,
+      persistenceDedupeVerified: persistenceDedupe.verified,
+      persistenceDedupeCompanyCount: persistenceDedupe.companyCount,
+      persistenceDedupeRetainedMode: persistenceDedupe.retainedMode,
+      persistenceDedupeRunStepCount: persistenceDedupe.mergedRunStepCount,
+      persistenceDedupeCleanupRemainingCompanies: persistenceDedupe.cleanupRemainingCompanies,
+      persistenceDedupeCleanupRemainingRuns: persistenceDedupe.cleanupRemainingRuns,
+      persistenceDedupeTraceIds: persistenceDedupe.traceIds,
       traces,
       blockers: [
         ...(snapshot.runs.length < 1 ? ["Aucun run Supabase lisible par la console."] : []),
@@ -808,6 +831,7 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
         ...(dncCount < 1 ? ["Aucun do-not-contact persisté."] : []),
         ...(runStepCount < 1 ? ["Aucun run step agentique persisté."] : []),
         ...(actionEventCount < 1 ? ["Aucune trace d'action Romu persistée."] : []),
+        ...persistenceDedupe.blockers,
         ...(traces.length < 1 ? ["Aucune trace de run Supabase disponible."] : [])
       ]
     };
@@ -825,6 +849,12 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
       dncCount,
       runStepCount,
       actionEventCount,
+      persistenceDedupeVerified: persistenceDedupe.verified,
+      persistenceDedupeCompanyCount: persistenceDedupe.companyCount,
+      persistenceDedupeRetainedMode: persistenceDedupe.retainedMode,
+      persistenceDedupeRunStepCount: persistenceDedupe.mergedRunStepCount,
+      persistenceDedupeCleanupRemainingCompanies: persistenceDedupe.cleanupRemainingCompanies,
+      persistenceDedupeCleanupRemainingRuns: persistenceDedupe.cleanupRemainingRuns,
       traces,
       blockers: analysis.blockers,
       runtimeMetadataComplete: analysis.runtimeMetadataComplete,
@@ -845,6 +875,12 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
       dncCount: 0,
       runStepCount: 0,
       actionEventCount: 0,
+      persistenceDedupeVerified: false,
+      persistenceDedupeCompanyCount: 0,
+      persistenceDedupeRetainedMode: null,
+      persistenceDedupeRunStepCount: 0,
+      persistenceDedupeCleanupRemainingCompanies: 0,
+      persistenceDedupeCleanupRemainingRuns: 0,
       traces: [],
       blockers: [],
       runtimeMetadataComplete: false,
@@ -876,6 +912,12 @@ async function loadSupabaseRuntimeArtifact(currentRevision: string): Promise<Sup
       dncCount: numberValue(payload.dncCount),
       runStepCount: numberValue(payload.runStepCount),
       actionEventCount: numberValue(payload.actionEventCount),
+      persistenceDedupeVerified: payload.persistenceDedupeVerified === true,
+      persistenceDedupeCompanyCount: numberValue(payload.persistenceDedupeCompanyCount),
+      persistenceDedupeRetainedMode: typeof payload.persistenceDedupeRetainedMode === "string" ? payload.persistenceDedupeRetainedMode : null,
+      persistenceDedupeRunStepCount: numberValue(payload.persistenceDedupeRunStepCount),
+      persistenceDedupeCleanupRemainingCompanies: numberValue(payload.persistenceDedupeCleanupRemainingCompanies),
+      persistenceDedupeCleanupRemainingRuns: numberValue(payload.persistenceDedupeCleanupRemainingRuns),
       traces: analysis.traces,
       blockers: analysis.blockers,
       runtimeMetadataComplete: analysis.runtimeMetadataComplete,
@@ -898,6 +940,12 @@ async function loadSupabaseRuntimeArtifact(currentRevision: string): Promise<Sup
       dncCount: 0,
       runStepCount: 0,
       actionEventCount: 0,
+      persistenceDedupeVerified: false,
+      persistenceDedupeCompanyCount: 0,
+      persistenceDedupeRetainedMode: null,
+      persistenceDedupeRunStepCount: 0,
+      persistenceDedupeCleanupRemainingCompanies: 0,
+      persistenceDedupeCleanupRemainingRuns: 0,
       traces: [],
       blockers: [],
       runtimeMetadataComplete: false,
@@ -1046,6 +1094,9 @@ function buildProductBlockers(
   }
   if (consoleEvidence.verdict === "pass" && consoleEvidence.runtimeMetadataComplete && !consoleEvidence.runtimeRevisionMatchesCurrent) {
     blockers.push(`Console Supabase serveur prouvée par la révision ${consoleEvidence.codeRevision}, différente du code courant.`);
+  }
+  if (!consoleEvidence.persistenceDedupeVerified) {
+    blockers.push("RPC Supabase `scout_persist_mission_output` non prouvée avec fusion domaine, priorité Core et cleanup reproductible.");
   }
   return blockers;
 }

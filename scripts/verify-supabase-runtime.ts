@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { getScoutSnapshot } from "../src/server/scout-repository";
 import { createServerSupabaseClient } from "../src/server/supabase";
+import { verifySupabasePersistenceDedupe } from "../src/server/supabase-runtime-verification";
 
 const execFileAsync = promisify(execFile);
 const requiredEnv = ["NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"];
@@ -24,6 +25,13 @@ interface SupabaseRuntimeVerificationArtifact {
   dncCount: number;
   runStepCount: number;
   actionEventCount: number;
+  persistenceDedupeVerified: boolean;
+  persistenceDedupeCompanyCount: number;
+  persistenceDedupeRetainedMode: string | null;
+  persistenceDedupeRunStepCount: number;
+  persistenceDedupeCleanupRemainingCompanies: number;
+  persistenceDedupeCleanupRemainingRuns: number;
+  persistenceDedupeTraceIds: string[];
   traces: string[];
   primaryLead?: string;
   error?: string;
@@ -73,6 +81,7 @@ try {
   const rejectedCount = snapshot.runs.reduce((sum, run) => sum + run.rejected.length, 0);
   const lessonCount = snapshot.lessons.length;
   const traces = snapshot.runs.map((run) => run.traceId).filter(Boolean);
+  const persistenceDedupe = await verifySupabasePersistenceDedupe(supabaseClient);
 
   const blockers: string[] = [];
 
@@ -88,6 +97,7 @@ try {
   if (runStepCount < 1) blockers.push("Aucun run step agentique persisté.");
   if (actionEventCount < 1) blockers.push("Aucune trace d'action Romu persistée.");
   if (!traces.length) blockers.push("Aucune trace de run Supabase disponible.");
+  blockers.push(...persistenceDedupe.blockers);
 
   const artifact: SupabaseRuntimeVerificationArtifact = {
     status: blockers.length ? "fail" : "pass",
@@ -105,6 +115,13 @@ try {
     dncCount,
     runStepCount,
     actionEventCount,
+    persistenceDedupeVerified: persistenceDedupe.verified,
+    persistenceDedupeCompanyCount: persistenceDedupe.companyCount,
+    persistenceDedupeRetainedMode: persistenceDedupe.retainedMode,
+    persistenceDedupeRunStepCount: persistenceDedupe.mergedRunStepCount,
+    persistenceDedupeCleanupRemainingCompanies: persistenceDedupe.cleanupRemainingCompanies,
+    persistenceDedupeCleanupRemainingRuns: persistenceDedupe.cleanupRemainingRuns,
+    persistenceDedupeTraceIds: persistenceDedupe.traceIds,
     traces
   };
 
@@ -152,6 +169,13 @@ function emptyArtifact(
     dncCount: 0,
     runStepCount: 0,
     actionEventCount: 0,
+    persistenceDedupeVerified: false,
+    persistenceDedupeCompanyCount: 0,
+    persistenceDedupeRetainedMode: null,
+    persistenceDedupeRunStepCount: 0,
+    persistenceDedupeCleanupRemainingCompanies: 0,
+    persistenceDedupeCleanupRemainingRuns: 0,
+    persistenceDedupeTraceIds: [],
     traces: []
   };
 }

@@ -66,6 +66,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - `demoSnapshot()` reste le fallback sans env Supabase serveur. Avec Supabase configuré mais vide, la console affiche un état runtime vide et les tâches, jamais les fixtures comme vérité produit.
 - Le worker réel peut découvrir des candidats sans seeds via SerpAPI, OpenAI `web_search` ou fallback web public ; OpenAI web est prouvé à volume PRD en comparaison provider, mais pas encore en run Agents SDK persisté Supabase à volume.
 - `verify:supabase` produit maintenant `artifacts/supabase-runtime/latest-verify.json`. `quality:readiness` refuse cet artefact s'il est ancien, `-dirty`, incomplet, sans actions Romu persistées ou sans traces Supabase.
+- `verify:supabase` exécute aussi un probe temporaire Core puis Exploration sur le même domaine via `scout_persist_mission_output`, exige une seule company conservée en Core, un run step `dedupe_decision=merged_existing`, puis vérifie que le cleanup laisse zéro company/run de probe.
 - `quality:readiness` refuse aussi le cron si l'artefact `latest-ci-run.json` n'est pas issu de GitHub Actions, pas en mode `real`, pas sur la révision courante, sans secrets Supabase/OpenAI ou sans transition `completed`.
 - Une comparaison provider Core seule ne peut plus déclarer les volumes PRD prouvés ; `prd_volume_proven` exige Core + Exploration.
 - Les providers `search_web`, `fetch_company_site`, `search_jobs`, `find_public_emails`, `dedupe_company` existent ; `search_jobs` reste minimal et la robustesse search dépend encore des sources publiques.
@@ -88,14 +89,14 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 ## Vérifications exécutées
 
-- `npm run test` : 82 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/outcome négatif/email incertain bloquée, routines DNC/followup lançables, indexes FK Supabase, index anti-doublon, fusion Supabase company par `external_id`/domaine, policy Auth BM Scout, actions Romu, provider runtime des preuves et scénario `feedback:evidence`.
+- `npm run test` : 84 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/outcome négatif/email incertain bloquée, routines DNC/followup lançables, indexes FK Supabase, index anti-doublon, fusion Supabase company par `external_id`/domaine, preuve `verify:supabase` de fusion RPC avec cleanup, policy Auth BM Scout, actions Romu, provider runtime des preuves et scénario `feedback:evidence`.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.
 - `npm run quality:runs` : pass fixture, décision produit `production_not_ready`.
 - `npm run quality:readiness` : fail attendu, décision produit `production_not_ready`. Les anciens artefacts réels ne suffisent plus à prouver le learning si la mémoire ne vient pas de Supabase, si aucun feedback/outcome Supabase ni DNC Supabase n'est chargé, si aucun impact `feedback_memory_effects` n'est mesuré, si le provider opérationnel est seulement `configured`, si les métadonnées runtime sont absentes ou si la révision code ne correspond pas au commit courant.
 - `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 60 tests pass, dont provider SerpAPI, provider OpenAI web, schéma strict Agents SDK, hosted web search opt-in, max turns borné, métadonnées runtime, contexte/verbosité OpenAI compatibles, surface de requêtes PRD, DNC table/domaine/hash email, email confidence public/générique/pattern/no-reply, seuil Core validable, fallback jobs, parsing sources, comparaison provider, déduplication domaine/nom/pays/ville/LinkedIn/identifiant, impact feedback structuré et anti-faux-positif PRD sur smoke Core seul.
-- `npm run verify:supabase` vérifie maintenant aussi `scout_agent_tasks`, `scout_feedback`, `scout_outcomes`, `scout_do_not_contact`, `scout_run_steps` et `scout_action_events`.
+- `npm run verify:supabase` vérifie maintenant aussi `scout_agent_tasks`, `scout_feedback`, `scout_outcomes`, `scout_do_not_contact`, `scout_run_steps`, `scout_action_events` et la fusion RPC domain/Core.
 - Avec `OPENAI_API_KEY` présent en env, `OPENAI_MODEL=gpt-4.1-mini`, `OPENAI_SEARCH_MODEL=gpt-4.1-mini` et `BM_SCOUT_FETCH_LIMIT=3`, `npm run provider:compare -- --providers=openai_web --modes=core,exploration` : pass réel. Core atteint `15/15`, Exploration atteint `100/100`, `openai_web` est recommandé et `prd_volume_proven=true`.
 - Avec `OPENAI_API_KEY` présent en env, `OPENAI_MODEL=gpt-4.1-mini`, `OPENAI_SEARCH_MODEL=gpt-4.1-mini`, `BM_SCOUT_PROVIDER=openai_web` et `BM_SCOUT_FETCH_LIMIT=2`, `npm run worker:real:core` : pass réel Agents SDK, artefact `latest-real-core.json`, 2 leads retenus, 5 lessons.
 - Avec les mêmes env, `npm run worker:real:exploration` : pass réel Agents SDK, artefact `latest-real-exploration.json`, 2 leads retenus, 5 lessons, aucun message direct.

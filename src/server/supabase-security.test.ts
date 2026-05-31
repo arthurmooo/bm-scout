@@ -113,6 +113,22 @@ describe("supabase security posture", () => {
     expect(migration).toContain("as hypotheses(hypothesis)");
     expect(migration).toContain("latest_run_id = run_id");
   });
+
+  it("prouve la fusion domaine via verify:supabase avec cleanup des lignes temporaires", () => {
+    const verifier = readFileSync(join(root, "src", "server", "supabase-runtime-verification.ts"), "utf8");
+    const runtimeScript = readFileSync(join(root, "scripts", "verify-supabase-runtime.ts"), "utf8");
+
+    expect(verifier).toContain('client.rpc("scout_persist_mission_output"');
+    expect(verifier).toContain('"core"');
+    expect(verifier).toContain('"exploration"');
+    expect(verifier).toContain("dedupe_decision");
+    expect(verifier).toContain("merged_existing");
+    expect(verifier).toContain("retainedMode !== \"core\"");
+    expect(verifier).toContain('client.from("scout_companies").delete().eq("domain", domain)');
+    expect(verifier).toContain('client.from("scout_runs").delete().in("id", allRunIds)');
+    expect(runtimeScript).toContain("persistenceDedupeVerified");
+    expect(runtimeScript).toContain("verifySupabasePersistenceDedupe");
+  });
 });
 
 function readMigration(name: string): string {

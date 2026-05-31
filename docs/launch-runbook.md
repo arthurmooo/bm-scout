@@ -268,7 +268,7 @@ npm run quality:readiness
 `quality:readiness` doit echouer tant que la V1 n'a pas les preuves runtime serveur completes. Il ne faut pas contourner ce gate en interpretant `quality:runs` comme une validation produit.
 Les artefacts `latest-real-*.json` doivent prouver `scanned_count >= 15` pour Core et `scanned_count >= 100` pour Exploration. Un run réel réduit par seeds trop courtes ou un smoke provider ne suffit pas à lever le blocker de volume PRD.
 `feedback:evidence` est le run contrôlé pour P0.5 : il écrit des feedbacks/outcomes/DNC dans Supabase, force `BM_SCOUT_PROVIDER=configured`, lance Core en `--persist`, puis exige des compteurs `feedback_memory_effects` et une synthèse Learning de 3 à 5 apprentissages exploitant feedback Romu + do-not-contact. Il prouve la causalité mémoire, pas la découverte marché ; un artefact configured ne doit pas être utilisé pour lever les blockers Core/Exploration à volume.
-`verify:supabase` écrit `artifacts/supabase-runtime/latest-verify.json` à chaque exécution, y compris en échec d'env. `quality:readiness` accepte cette preuve uniquement si elle est `pass`, générée par la révision courante, non `-dirty`, avec runs, leads, rejets QC, lessons, tasks, feedbacks, outcomes, DNC, run steps, traces et actions Romu persistés.
+`verify:supabase` écrit `artifacts/supabase-runtime/latest-verify.json` à chaque exécution, y compris en échec d'env. `quality:readiness` accepte cette preuve uniquement si elle est `pass`, générée par la révision courante, non `-dirty`, avec runs, leads, rejets QC, lessons, tasks, feedbacks, outcomes, DNC, run steps, traces, actions Romu persistés et preuve RPC de fusion par domaine. Cette preuve RPC insère deux runs temporaires Core puis Exploration sur un domaine `.invalid`, exige une seule company conservée en Core, un run step `dedupe_decision=merged_existing`, puis nettoie les lignes de probe.
 
 ## Decision de lancement
 
@@ -283,7 +283,7 @@ BM Scout peut etre utilise en demo interne si :
 BM Scout peut etre marque au mieux `pilot_candidate` uniquement si :
 
 - `verify:supabase` passe avec la vraie env serveur ;
-- l'artefact `artifacts/supabase-runtime/latest-verify.json` correspond au commit courant et n'est pas un run ancien ;
+- l'artefact `artifacts/supabase-runtime/latest-verify.json` correspond au commit courant, n'est pas un run ancien, et prouve la fusion RPC domain/Core avec cleanup à zéro ;
 - la CLI `--persist` a cree un run lisible dans Supabase ;
 - un run reel Agents SDK post-branchement feedback Supabase a produit 3 a 5 apprentissages exploitables ;
 - les feedbacks/outcomes/DNC Supabase changent réellement le scoring, l'angle, le blocage DNC, le message ou la shortlist suivante, avec `feedback_memory_effects.impact_count > 0` ;
