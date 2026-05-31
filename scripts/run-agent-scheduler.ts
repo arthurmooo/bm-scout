@@ -4,6 +4,9 @@ import {
   createSupabaseAgentTaskSchedulerRepository,
   enqueueScheduledAgentTasks
 } from "../src/server/agent-task-scheduler";
+import { loadLocalEnvFiles } from "../src/server/runtime-env";
+
+loadLocalEnvFiles();
 
 const args = new Set(process.argv.slice(2));
 const taskArg = process.argv.find((arg) => arg.startsWith("--task="))?.split("=")[1] as AgentTaskType | undefined;

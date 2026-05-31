@@ -9,9 +9,11 @@ from agents.exceptions import OutputGuardrailTripwireTriggered
 
 from .quality import mission_blockers
 from .runner import run_bm_scout_mission
+from .runtime_env import load_local_env_files
 
 
 def main() -> None:
+    load_local_env_files()
     parser = argparse.ArgumentParser(description="Worker agentique BM Scout V1")
     parser.add_argument("--mode", choices=["core", "exploration"], default="core")
     parser.add_argument("--include-weak", action="store_true", help="Injecte des cas faibles pour le QC négatif.")

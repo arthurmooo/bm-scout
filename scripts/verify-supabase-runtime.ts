@@ -5,8 +5,11 @@ import { promisify } from "node:util";
 import { getScoutSnapshot } from "../src/server/scout-repository";
 import { createServerSupabaseClient } from "../src/server/supabase";
 import { verifySupabasePersistenceDedupe } from "../src/server/supabase-runtime-verification";
+import { loadLocalEnvFiles } from "../src/server/runtime-env";
 
 const execFileAsync = promisify(execFile);
+loadLocalEnvFiles();
+
 const requiredEnv = ["NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY"];
 
 interface SupabaseRuntimeVerificationArtifact {

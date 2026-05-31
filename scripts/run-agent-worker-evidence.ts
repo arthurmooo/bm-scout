@@ -1,4 +1,7 @@
 import { runWorkerCliForEvidence } from "../src/server/agent-task-runner";
+import { loadLocalEnvFiles } from "../src/server/runtime-env";
+
+loadLocalEnvFiles();
 
 const args = new Set(process.argv.slice(2));
 const mode = readMode();

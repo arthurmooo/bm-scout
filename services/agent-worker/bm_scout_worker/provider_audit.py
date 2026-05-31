@@ -19,6 +19,7 @@ from .providers import (
     scan_target_for_mode,
 )
 from .runtime import code_revision, package_version
+from .runtime_env import load_local_env_files
 from .schemas import RunStep, ScoutLead, ScoutMode
 
 ProviderAuditStatus = Literal["pass", "fail", "unavailable"]
@@ -61,6 +62,7 @@ class ProviderComparisonReport:
 
 
 def main() -> None:
+    load_local_env_files()
     parser = argparse.ArgumentParser(description="Compare les providers réels BM Scout sans passer par fixtures.")
     parser.add_argument("--providers", default=os.getenv("BM_SCOUT_PROVIDER_COMPARISON", "serpapi,openai_web,web"))
     parser.add_argument("--modes", default="core,exploration")

@@ -12,8 +12,11 @@ import {
 } from "../src/server/feedback-loop-evidence";
 import { runWorkerCliForEvidence } from "../src/server/agent-task-runner";
 import { createServerSupabaseClient } from "../src/server/supabase";
+import { loadLocalEnvFiles } from "../src/server/runtime-env";
 
 const execFileAsync = promisify(execFile);
+loadLocalEnvFiles();
+
 const artifactDir = join(process.cwd(), "artifacts", "feedback-loop");
 const artifactPath = join(artifactDir, "latest-feedback-loop.json");
 

@@ -15,8 +15,11 @@ import {
   processAgentTaskQueue,
   type AgentTaskQueueResult
 } from "../src/server/agent-task-runner";
+import { loadLocalEnvFiles } from "../src/server/runtime-env";
 
 const execFileAsync = promisify(execFile);
+
+loadLocalEnvFiles();
 
 type CronMode = "real" | "offline";
 

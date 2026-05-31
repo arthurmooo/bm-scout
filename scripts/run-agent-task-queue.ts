@@ -3,6 +3,9 @@ import {
   createSupabaseAgentTaskRepository,
   processAgentTaskQueue
 } from "../src/server/agent-task-runner";
+import { loadLocalEnvFiles } from "../src/server/runtime-env";
+
+loadLocalEnvFiles();
 
 const args = new Set(process.argv.slice(2));
 const dryRun = args.has("--dry-run");

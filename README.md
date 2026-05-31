@@ -47,6 +47,7 @@ npm run dev
 
 Variables serveur :
 
+- Les scripts Node (`agent:*`, `quality:*`, `verify:supabase`, `feedback:evidence`) et le worker Python chargent automatiquement `.env.local` puis `.env` si ces fichiers existent. Les variables déjà présentes dans l'environnement shell restent prioritaires. `.env.local` est ignoré par Git : c'est l'endroit correct pour `OPENAI_API_KEY` en local, sans l'écrire dans une commande ni dans le repo.
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` recommandé pour Auth SSR, ou `NEXT_PUBLIC_SUPABASE_ANON_KEY` legacy.
 - `SUPABASE_SERVICE_ROLE_KEY`

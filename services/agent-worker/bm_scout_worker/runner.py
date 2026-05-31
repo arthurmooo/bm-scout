@@ -11,6 +11,7 @@ from .fixtures import offline_output, seed_feedbacks
 from .memory import SupabaseConfig, SupabaseMemory
 from .providers import build_candidate_batch_with_steps
 from .runtime import code_revision, package_version
+from .runtime_env import load_local_env_files
 from .schemas import FeedbackEvent, MissionAgentOutput, MissionOutput, RunStep, ScoutMode
 
 
@@ -22,6 +23,7 @@ async def run_bm_scout_mission(
     persist: bool = False,
     artifacts_dir: Path | None = None,
 ) -> MissionOutput:
+    load_local_env_files()
     started_at = datetime.now(UTC)
     started_perf = time.perf_counter()
     config = SupabaseConfig.from_env()

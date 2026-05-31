@@ -18,11 +18,13 @@ import {
 import { getScoutSnapshot } from "../src/server/scout-repository";
 import { createServerSupabaseClient } from "../src/server/supabase";
 import { verifySupabasePersistenceDedupe } from "../src/server/supabase-runtime-verification";
+import { loadLocalEnvFiles } from "../src/server/runtime-env";
 
 type RunVerdict = "pass" | "fail";
 type ProductReadiness = "pilot_candidate" | "production_not_ready";
 
 const execFileAsync = promisify(execFile);
+loadLocalEnvFiles();
 
 interface EvaluatedRun {
   name: string;
