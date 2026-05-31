@@ -13,7 +13,14 @@ const { state } = vi.hoisted(() => ({
     messageBody: "Bonjour, message spécifique.",
     emailStatus: "usable" as "usable" | "verify" | "not_usable",
     taskInsertError: false,
-    lastTaskPayload: null as unknown
+    lastTaskPayload: null as unknown,
+    existingDncRows: [] as Array<{
+      scope: "company" | "domain" | "contact";
+      company_id: string | null;
+      contact_id: string | null;
+      normalized_domain: string | null;
+      normalized_email_hash: string | null;
+    }>
   }
 }));
 
@@ -203,6 +210,52 @@ describe("scout actions", () => {
           call.table === "scout_action_events" &&
           call.op === "insert" &&
           JSON.stringify(call.payload).includes('"dncScopes":["company","domain","contact"]')
+      )
+    ).toBe(true);
+  });
+
+  it("rend l'ajout do-not-contact idempotent si les cibles existent deja", async () => {
+    reset();
+    state.existingDncRows = [
+      {
+        scope: "company",
+        company_id: "company-1",
+        contact_id: null,
+        normalized_domain: null,
+        normalized_email_hash: null
+      },
+      {
+        scope: "domain",
+        company_id: "company-1",
+        contact_id: null,
+        normalized_domain: "example.com",
+        normalized_email_hash: null
+      },
+      {
+        scope: "contact",
+        company_id: "company-1",
+        contact_id: "contact-1",
+        normalized_domain: null,
+        normalized_email_hash: "hash-romu"
+      }
+    ];
+
+    const result = await recordScoutAction({ action: "add_do_not_contact", leadId: "core-cambon" });
+
+    expect(result.ok).toBe(true);
+    expect(calls.some((call) => call.table === "scout_do_not_contact" && call.op === "insert")).toBe(false);
+    expect(calls.some((call) => call.table === "scout_do_not_contact" && call.op === "or")).toBe(true);
+    expect(calls).toContainEqual({
+      table: "scout_messages",
+      op: "update",
+      payload: { status: "blocked" }
+    });
+    expect(
+      calls.some(
+        (call) =>
+          call.table === "scout_action_events" &&
+          call.op === "insert" &&
+          JSON.stringify(call.payload).includes('"dncAlreadyPresentScopes":["company","domain","contact"]')
       )
     ).toBe(true);
   });
@@ -550,14 +603,23 @@ function reset() {
   state.emailStatus = "usable";
   state.taskInsertError = false;
   state.lastTaskPayload = null;
+  state.existingDncRows = [];
 }
 
 function fakeTable(table: string) {
   const chain = {
-    error: null,
-    data: table === "scout_companies" ? { id: "company-1" } : null,
+    error: null as { message: string } | null,
+    data:
+      table === "scout_companies"
+        ? { id: "company-1" }
+        : table === "scout_do_not_contact"
+          ? state.existingDncRows
+          : null,
     select: () => chain,
-    or: () => chain,
+    or: (filter: string) => {
+      calls.push({ table, op: "or", payload: filter });
+      return chain;
+    },
     order: () => chain,
     in: (column: string, values: unknown[]) => {
       calls.push({ table, op: "in", payload: { column, values } });

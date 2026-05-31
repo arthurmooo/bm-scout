@@ -47,6 +47,8 @@ type ActionMutationTrace = {
   channel?: MessageChannel;
   channels?: MessageChannel[];
   dncScopes?: string[];
+  dncInsertedScopes?: string[];
+  dncAlreadyPresentScopes?: string[];
   taskId?: string;
   taskType?: AgentTaskType;
   taskStatus?: AgentTaskStatus;
@@ -475,8 +477,17 @@ async function markCompanyDoNotContact(
       reason
     });
   }
-  await checked(client.from("scout_do_not_contact").insert(records));
-  return { dncScopes: Array.from(new Set(records.map((record) => record.scope))) };
+  const existing = await loadExistingDncRecords(records);
+  const existingRecords = records.filter((record) => existing.some((row) => dncRecordMatches(record, row)));
+  const recordsToInsert = records.filter((record) => !existingRecords.includes(record));
+  if (recordsToInsert.length > 0) {
+    await checked(client.from("scout_do_not_contact").insert(recordsToInsert));
+  }
+  return {
+    dncScopes: uniqueScopes(records),
+    dncInsertedScopes: uniqueScopes(recordsToInsert),
+    dncAlreadyPresentScopes: uniqueScopes(existingRecords)
+  };
 }
 
 async function loadDncTargets(companyId: string): Promise<CompanyDncTargets> {
@@ -495,6 +506,19 @@ async function loadDncTargets(companyId: string): Promise<CompanyDncTargets> {
       ? row.scout_contacts.filter((contact): contact is ContactDncTarget => Boolean(contact?.id))
       : []
   };
+}
+
+async function loadExistingDncRecords(records: DoNotContactInsert[]): Promise<DoNotContactRow[]> {
+  const client = createServerSupabaseClient();
+  if (!client || records.length === 0) return [];
+  const filters = dncLookupFilters(records);
+  if (!filters.length) return [];
+  const { data, error } = await client
+    .from("scout_do_not_contact")
+    .select("scope,company_id,contact_id,normalized_domain,normalized_email_hash")
+    .or(filters.join(","));
+  if (error) throw new Error(`Lecture do-not-contact existant impossible: ${error.message}`);
+  return (data ?? []) as DoNotContactRow[];
 }
 
 async function updateCompany(companyId: string, patch: CompanyPatch): Promise<void> {
@@ -565,6 +589,14 @@ type DoNotContactInsert = {
   normalized_email_hash?: string;
 };
 
+type DoNotContactRow = {
+  scope: "company" | "domain" | "contact";
+  company_id: string | null;
+  contact_id: string | null;
+  normalized_domain: string | null;
+  normalized_email_hash: string | null;
+};
+
 type ContactDncTarget = {
   id: string;
   email_hash: string | null;
@@ -589,4 +621,40 @@ type QueuedTaskRow = {
 function normalizeDomain(domain: string | null | undefined): string | null {
   const value = domain?.trim().toLowerCase();
   return value || null;
+}
+
+function dncLookupFilters(records: DoNotContactInsert[]): string[] {
+  return Array.from(
+    new Set(
+      records.flatMap((record) => {
+        if (record.scope === "company" && record.company_id) {
+          return [`and(scope.eq.company,company_id.eq.${record.company_id})`];
+        }
+        if (record.scope === "domain" && record.normalized_domain) {
+          return [`and(scope.eq.domain,normalized_domain.eq.${record.normalized_domain})`];
+        }
+        if (record.scope === "contact") {
+          return [
+            record.contact_id ? `and(scope.eq.contact,contact_id.eq.${record.contact_id})` : null,
+            record.normalized_email_hash ? `and(scope.eq.contact,normalized_email_hash.eq.${record.normalized_email_hash})` : null
+          ].filter((filter): filter is string => Boolean(filter));
+        }
+        return [];
+      })
+    )
+  );
+}
+
+function dncRecordMatches(record: DoNotContactInsert, row: DoNotContactRow): boolean {
+  if (record.scope !== row.scope) return false;
+  if (record.scope === "company") return Boolean(record.company_id && row.company_id === record.company_id);
+  if (record.scope === "domain") return Boolean(record.normalized_domain && row.normalized_domain === record.normalized_domain);
+  return Boolean(
+    (record.contact_id && row.contact_id === record.contact_id) ||
+      (record.normalized_email_hash && row.normalized_email_hash === record.normalized_email_hash)
+  );
+}
+
+function uniqueScopes(records: DoNotContactInsert[]): Array<DoNotContactInsert["scope"]> {
+  return Array.from(new Set(records.map((record) => record.scope)));
 }
