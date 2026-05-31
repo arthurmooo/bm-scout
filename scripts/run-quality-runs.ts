@@ -242,7 +242,21 @@ function renderReport(
     ...(realEvidence.length
       ? realEvidence.map(
           (item) =>
-            `- ${item.name} : ${item.verdict}; trace : ${item.traceId}; leads retenus : ${item.keptCount}; rejetes : ${item.rejectedCount}; lessons : ${item.lessonCount}; mémoire : ${item.memorySource}; DNC mémoire : ${item.doNotContactEventCount}; persist artefact : ${item.persistComplete ? "oui" : "non"}; feedback learning : ${item.learningUsesFeedback ? "oui" : "non"}`
+            [
+              `- ${item.name} : ${item.verdict}`,
+              `trace : ${item.traceId}`,
+              `leads retenus : ${item.keptCount}`,
+              `rejetes : ${item.rejectedCount}`,
+              `lessons : ${item.lessonCount}`,
+              `mémoire : ${item.memorySource}`,
+              `DNC mémoire : ${item.doNotContactEventCount}`,
+              `persist artefact : ${item.persistComplete ? "oui" : "non"}`,
+              `feedback learning : ${item.learningUsesFeedback ? "oui" : "non"}`,
+              `runtime metadata : ${item.runtimeMetadataComplete ? "oui" : "non"}`,
+              `modèle : ${item.runtimeModel}`,
+              `révision : ${item.runtimeCodeRevision}`,
+              `durée : ${item.runtimeDurationMs}ms`
+            ].join("; ")
         )
       : ["- Aucun artefact réel détecté dans `artifacts/agent-worker-real/`."]),
     "",
@@ -323,6 +337,10 @@ interface RealRunnerEvidence {
   memorySource: string;
   doNotContactEventCount: number;
   persistComplete: boolean;
+  runtimeMetadataComplete: boolean;
+  runtimeCodeRevision: string;
+  runtimeDurationMs: number;
+  runtimeModel: string;
 }
 
 async function loadRealRunnerEvidence(): Promise<RealRunnerEvidence[]> {
@@ -365,7 +383,11 @@ async function loadRealRunnerEvidence(): Promise<RealRunnerEvidence[]> {
       learningUsesFeedback: learningUsesFeedback(lessons),
       memorySource: memory.source,
       doNotContactEventCount: memory.doNotContactEventCount,
-      persistComplete: memory.persistComplete
+      persistComplete: memory.persistComplete,
+      runtimeMetadataComplete: memory.runtimeMetadataComplete,
+      runtimeCodeRevision: memory.runtimeCodeRevision,
+      runtimeDurationMs: memory.runtimeDurationMs,
+      runtimeModel: memory.runtimeModel
     });
   }
   return evidence;
@@ -377,15 +399,39 @@ interface RunnerStep {
   payload?: Record<string, unknown>;
 }
 
-function runnerMemoryEvidence(steps: RunnerStep[]): { source: string; doNotContactEventCount: number; persistComplete: boolean } {
+function runnerMemoryEvidence(steps: RunnerStep[]): {
+  source: string;
+  doNotContactEventCount: number;
+  persistComplete: boolean;
+  runtimeMetadataComplete: boolean;
+  runtimeCodeRevision: string;
+  runtimeDurationMs: number;
+  runtimeModel: string;
+} {
   const runnerStep = steps.find((step) => step.step === "runner_complete");
   const payload = runnerStep?.payload ?? {};
   const source = typeof payload.feedback_memory_source === "string" ? payload.feedback_memory_source : "unknown";
   const dncCount = Number(payload.do_not_contact_event_count ?? 0);
+  const durationMs = Number(payload.duration_ms ?? 0);
+  const codeRevision = typeof payload.code_revision === "string" ? payload.code_revision : "";
+  const model = typeof payload.openai_model === "string" ? payload.openai_model : "";
   return {
     source,
     doNotContactEventCount: Number.isFinite(dncCount) ? dncCount : 0,
-    persistComplete: steps.some((step) => step.step === "persist_complete" && step.event_type === "supabase_persist")
+    persistComplete: steps.some((step) => step.step === "persist_complete" && step.event_type === "supabase_persist"),
+    runtimeMetadataComplete: Boolean(
+      runnerStep &&
+        payload.started_at &&
+        payload.completed_at &&
+        Number.isFinite(durationMs) &&
+        durationMs >= 0 &&
+        payload.python_version &&
+        payload.openai_agents_version &&
+        codeRevision
+    ),
+    runtimeCodeRevision: codeRevision || "unknown",
+    runtimeDurationMs: Number.isFinite(durationMs) ? durationMs : 0,
+    runtimeModel: model || "unknown"
   };
 }
 
@@ -544,6 +590,9 @@ function buildProductBlockers(
 
   if (!hasCore || !hasExploration) {
     blockers.push("Runs OpenAI Agents SDK réels Core et Exploration incomplets.");
+  }
+  for (const evidence of realEvidence.filter((item) => item.verdict === "pass" && !item.runtimeMetadataComplete)) {
+    blockers.push(`Run ${evidence.traceId} sans métadonnées runtime auditables.`);
   }
   if (!hasSupabaseCore || !hasSupabaseExploration || realEvidence.some((item) => item.sourceFile.includes("supabase-persist") && !item.persistComplete)) {
     blockers.push("Runs Agents SDK réels non prouvés avec persistance Supabase.");

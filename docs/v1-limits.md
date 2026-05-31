@@ -61,6 +61,6 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 - `artifacts/provider-comparison/latest-comparison.json` recommande un provider réel couvrant Core et Exploration à volume configuré/PRD.
 - `npm run verify:supabase` passe avec l'env serveur.
 - `--persist` cree un run lisible en Supabase via la RPC.
-- Un run reel Agents SDK utilise les feedbacks/outcomes/DNC Supabase, écrit des artefacts avec `feedback_memory_source=supabase`, et modifie les recommandations learning.
+- Un run reel Agents SDK utilise les feedbacks/outcomes/DNC Supabase, écrit des artefacts avec `feedback_memory_source=supabase`, des métadonnées runtime complètes, et modifie les recommandations learning.
 - `npm run quality:readiness` passe.
 - L'audit thermo-nuclear final ne contient plus de P1 bloquant.

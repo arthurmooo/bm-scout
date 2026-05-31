@@ -1,11 +1,16 @@
 from __future__ import annotations
 
 import os
+import subprocess
+import sys
+import time
+from datetime import UTC, datetime
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
+from .agents import agent_hosted_web_search_enabled
 from .fixtures import offline_output, seed_feedbacks
 from .memory import SupabaseConfig, SupabaseMemory
-from .agents import agent_hosted_web_search_enabled
 from .providers import build_candidate_batch_with_steps
 from .schemas import FeedbackEvent, MissionAgentOutput, MissionOutput, RunStep, ScoutMode
 
@@ -18,6 +23,8 @@ async def run_bm_scout_mission(
     persist: bool = False,
     artifacts_dir: Path | None = None,
 ) -> MissionOutput:
+    started_at = datetime.now(UTC)
+    started_perf = time.perf_counter()
     config = SupabaseConfig.from_env()
     memory = SupabaseMemory(config) if config else None
     feedbacks: list[FeedbackEvent] = []
@@ -47,6 +54,7 @@ async def run_bm_scout_mission(
                 "feedback_memory_source": memory_source,
                 "feedback_event_count": len(feedbacks),
                 "do_not_contact_event_count": sum(1 for feedback in feedbacks if feedback.kind == "do_not_contact"),
+                **runtime_metadata(started_at, started_perf, real=real),
             },
         ),
         *output.run_steps,
@@ -155,3 +163,47 @@ def agent_max_turns() -> int:
     except ValueError:
         return 6
     return max(3, min(value, 10))
+
+
+def runtime_metadata(started_at: datetime, started_perf: float, *, real: bool) -> dict[str, object]:
+    completed_at = datetime.now(UTC)
+    return {
+        "started_at": started_at.isoformat(),
+        "completed_at": completed_at.isoformat(),
+        "duration_ms": round((time.perf_counter() - started_perf) * 1000),
+        "real_mode": real,
+        "openai_model": os.getenv("OPENAI_MODEL", "gpt-5.5") if real else None,
+        "openai_search_model": os.getenv("OPENAI_SEARCH_MODEL", os.getenv("OPENAI_MODEL", "gpt-5.5")) if real else None,
+        "bm_scout_provider": os.getenv("BM_SCOUT_PROVIDER", "auto"),
+        "agent_hosted_web_search_enabled": agent_hosted_web_search_enabled() if real else False,
+        "agent_max_turns": agent_max_turns() if real else None,
+        "worker_timeout_ms": os.getenv("BM_SCOUT_WORKER_TIMEOUT_MS"),
+        "python_version": sys.version.split()[0],
+        "openai_agents_version": package_version("openai-agents"),
+        "openai_sdk_version": package_version("openai"),
+        "code_revision": code_revision(),
+    }
+
+
+def package_version(package_name: str) -> str:
+    try:
+        return version(package_name)
+    except PackageNotFoundError:
+        return "unknown"
+
+
+def code_revision() -> str:
+    configured = os.getenv("BM_SCOUT_CODE_REVISION") or os.getenv("GITHUB_SHA") or os.getenv("VERCEL_GIT_COMMIT_SHA")
+    if configured:
+        return configured[:40]
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "--short=12", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+    except Exception:
+        return "unknown"
+    return result.stdout.strip() or "unknown"

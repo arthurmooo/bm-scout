@@ -32,7 +32,7 @@ from bm_scout_worker.providers import (
 )
 from bm_scout_worker.provider_audit import compare_providers, parse_provider_list, provider_unavailable_reason
 from bm_scout_worker.quality import mission_blockers
-from bm_scout_worker.runner import agent_max_turns, run_bm_scout_mission
+from bm_scout_worker.runner import agent_max_turns, code_revision, run_bm_scout_mission
 from bm_scout_worker.schemas import FeedbackEvent, OutreachPack, QualityGate, RunStep, ScoutLead, StructuredInsights
 from bm_scout_worker.tool_recorder import capture_tool_calls, compact_payload
 
@@ -51,6 +51,12 @@ def test_runner_records_memory_source_metadata() -> None:
 
     assert runner_step.payload["feedback_memory_source"] == "offline_fixture"
     assert runner_step.payload["do_not_contact_event_count"] == 0
+    assert isinstance(runner_step.payload["duration_ms"], int)
+    assert runner_step.payload["started_at"]
+    assert runner_step.payload["completed_at"]
+    assert runner_step.payload["python_version"]
+    assert runner_step.payload["openai_agents_version"] != ""
+    assert runner_step.payload["code_revision"] != ""
 
 
 def test_exploration_does_not_generate_direct_outreach() -> None:
@@ -259,6 +265,13 @@ def test_agents_sdk_max_turns_is_bounded(monkeypatch) -> None:
 
     monkeypatch.setenv("BM_SCOUT_AGENT_MAX_TURNS", "99")
     assert agent_max_turns() == 10
+
+
+def test_code_revision_prefers_explicit_runtime_revision(monkeypatch) -> None:
+    monkeypatch.setenv("BM_SCOUT_CODE_REVISION", "abc123runtime")
+    monkeypatch.setenv("GITHUB_SHA", "github-sha")
+
+    assert code_revision() == "abc123runtime"
 
 
 def test_default_queries_cover_prd_volume_scan_surface() -> None:

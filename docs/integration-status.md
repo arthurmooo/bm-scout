@@ -42,7 +42,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Provider OpenAI web : utilise le tool officiel Responses API `{ "type": "web_search" }`, conserve les sources/traces, parse JSON ou sources web, et n'utilise pas OpenAI récursivement pour les recherches jobs sauf opt-in `BM_SCOUT_OPENAI_SEARCH_JOBS=1`.
 - Provider SerpAPI : `BM_SCOUT_PROVIDER=serpapi` ou sélection auto via `SERPAPI_API_KEY`, parsing des `organic_results`, filtrage des sources faibles et run step `serpapi_search`.
 - `search_jobs` n'est plus décoratif : le provider web cherche des sources recrutement publiques, les transforme en preuves et les trace dans `run_steps`.
-- Scripts `worker:real:*` : exécution reproductible Core/Exploration réelle, avec artefacts `latest-real-*.json` consommés par `quality:readiness`.
+- Scripts `worker:real:*` : exécution reproductible Core/Exploration réelle, avec artefacts `latest-real-*.json` consommés par `quality:readiness`, incluant modèle, provider, versions SDK, révision code, timestamps et durée.
 - Mémoire feedback TS : rejet lead, pénalité secteur, bonus angle validé, régénération anti-générique.
 - Mémoire feedback worker : chargement feedbacks/outcomes Supabase avec contexte entreprise/segment/site, chargement direct de `scout_do_not_contact`, blocage DNC/rejets par domaine/hash email, pénalités segments faibles, bonus angles validés et régénération anti-générique dans le provider Python.
 - Worker Pydantic : contrat Observé/Inféré/Incertain, email confidence, run steps.
@@ -78,13 +78,13 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 ## Vérifications exécutées
 
-- `npm run test` : 53 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/email incertain bloquée, indexes FK Supabase, index anti-doublon, policy Auth BM Scout et actions Romu.
+- `npm run test` : 58 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/email incertain bloquée, indexes FK Supabase, index anti-doublon, policy Auth BM Scout et actions Romu.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.
 - `npm run quality:runs` : pass fixture, décision produit `production_not_ready`.
-- `npm run quality:readiness` : fail attendu, décision produit `production_not_ready`. Les anciens artefacts réels ne suffisent plus à prouver le learning si la mémoire ne vient pas de Supabase et si aucun DNC Supabase n'est chargé.
-- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 52 tests pass, dont provider SerpAPI, provider OpenAI web, schéma strict Agents SDK, hosted web search opt-in, max turns borné, contexte/verbosité OpenAI compatibles, surface de requêtes PRD, DNC table/domaine/hash email, seuil Core validable, fallback jobs, parsing sources, comparaison provider et anti-faux-positif PRD sur smoke Core seul.
+- `npm run quality:readiness` : fail attendu, décision produit `production_not_ready`. Les anciens artefacts réels ne suffisent plus à prouver le learning si la mémoire ne vient pas de Supabase, si aucun DNC Supabase n'est chargé ou si les métadonnées runtime sont absentes.
+- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 53 tests pass, dont provider SerpAPI, provider OpenAI web, schéma strict Agents SDK, hosted web search opt-in, max turns borné, métadonnées runtime, contexte/verbosité OpenAI compatibles, surface de requêtes PRD, DNC table/domaine/hash email, seuil Core validable, fallback jobs, parsing sources, comparaison provider et anti-faux-positif PRD sur smoke Core seul.
 - `npm run verify:supabase` vérifie maintenant aussi `scout_agent_tasks`, `scout_feedback`, `scout_outcomes`, `scout_do_not_contact`, `scout_run_steps` et `scout_action_events`.
 - Avec `OPENAI_API_KEY` présent en env, `OPENAI_MODEL=gpt-4.1-mini`, `OPENAI_SEARCH_MODEL=gpt-4.1-mini` et `BM_SCOUT_FETCH_LIMIT=3`, `npm run provider:compare -- --providers=openai_web --modes=core,exploration` : pass réel. Core atteint `15/15`, Exploration atteint `100/100`, `openai_web` est recommandé et `prd_volume_proven=true`.
 - Avec `OPENAI_API_KEY` présent en env, `OPENAI_MODEL=gpt-4.1-mini`, `OPENAI_SEARCH_MODEL=gpt-4.1-mini`, `BM_SCOUT_PROVIDER=openai_web` et `BM_SCOUT_FETCH_LIMIT=2`, `npm run worker:real:core` : pass réel Agents SDK, artefact `latest-real-core.json`, 2 leads retenus, 5 lessons.
