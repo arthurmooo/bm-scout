@@ -307,7 +307,7 @@ def test_openai_search_context_and_output_tokens_are_safe_defaults(monkeypatch) 
 def test_agents_sdk_hosted_web_search_is_opt_in(monkeypatch) -> None:
     monkeypatch.delenv("BM_SCOUT_AGENT_HOSTED_WEB_SEARCH", raising=False)
 
-    manager = build_manager_agent("gpt-5.5")
+    manager = build_manager_agent("gpt-4.1-mini")
     tool_names = [getattr(tool, "name", "") for tool in manager.tools]
 
     assert agent_hosted_web_search_enabled() is False
@@ -317,7 +317,7 @@ def test_agents_sdk_hosted_web_search_is_opt_in(monkeypatch) -> None:
     assert "summarize_learning" in tool_names
 
     monkeypatch.setenv("BM_SCOUT_AGENT_HOSTED_WEB_SEARCH", "1")
-    manager_with_hosted_search = build_manager_agent("gpt-5.5")
+    manager_with_hosted_search = build_manager_agent("gpt-4.1-mini")
 
     assert agent_hosted_web_search_enabled() is True
     assert "web_search" in [getattr(tool, "name", "") for tool in manager_with_hosted_search.tools]
@@ -817,13 +817,15 @@ def test_openai_provider_requires_hosted_web_search_call(monkeypatch) -> None:
             self.responses = FakeResponses()
 
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    monkeypatch.setenv("OPENAI_SEARCH_MODEL", "gpt-4.1-mini")
+    monkeypatch.delenv("OPENAI_SEARCH_MODEL", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
     monkeypatch.setattr("openai.OpenAI", FakeOpenAI)
 
     provider = OpenAIWebResearchProvider(["conseil M&A France"])
     results = provider.search_web("conseil M&A France", "fr", 1)
 
     assert results[0].url == "https://www.deloitte.com/fr/fr/services/mergers-and-acquisitions.html"
+    assert captured["model"] == "gpt-4.1-mini"
     assert captured["tool_choice"] == "required"
     assert captured["max_tool_calls"] == 1
     assert captured["store"] is False

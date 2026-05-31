@@ -53,7 +53,7 @@ Variables serveur :
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `BM_SCOUT_AUTH_MODE=internal|auto|demo` ; utiliser `internal` hors démo, `demo` seulement en local/test.
 - `OPENAI_API_KEY`
-- `OPENAI_MODEL` optionnel, par défaut `gpt-5.5`
+- `OPENAI_MODEL` optionnel, par défaut `gpt-4.1-mini`
 - `OPENAI_SEARCH_MODEL` optionnel pour la découverte web OpenAI, par défaut `OPENAI_MODEL`
 - `OPENAI_SEARCH_CONTEXT_SIZE=low|medium|high` optionnel, par défaut `medium`
 - `OPENAI_SEARCH_MAX_OUTPUT_TOKENS` optionnel, par défaut `2400`

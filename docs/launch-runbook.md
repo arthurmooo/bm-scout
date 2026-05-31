@@ -14,7 +14,7 @@ Statut : `production_not_ready`. Socle utilisable pour demo interne, pas pour d�
   - `BM_SCOUT_AUTH_MODE=internal` hors démo ; `BM_SCOUT_AUTH_MODE=demo` seulement pour test local/fixtures
   - `OPENAI_API_KEY`
   - `SERPAPI_API_KEY` optionnel pour utiliser SerpAPI comme recherche SERP réelle
-  - `OPENAI_MODEL` optionnel, par defaut `gpt-5.5`
+  - `OPENAI_MODEL` optionnel, par defaut `gpt-4.1-mini`
   - `OPENAI_SEARCH_MODEL` optionnel pour la recherche web OpenAI
   - `OPENAI_SEARCH_CONTEXT_SIZE=low|medium|high` optionnel, par défaut `medium`
   - `OPENAI_SEARCH_MAX_OUTPUT_TOKENS` optionnel, par défaut `2400`

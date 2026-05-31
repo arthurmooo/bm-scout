@@ -91,7 +91,7 @@ async def _run_with_agents_sdk(mode: ScoutMode, *, include_weak: bool, feedbacks
     from .agents import build_manager_agent
     from .tool_recorder import capture_tool_calls
 
-    model = os.getenv("OPENAI_MODEL", "gpt-5.5")
+    model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
     hosted_web_search_enabled = agent_hosted_web_search_enabled()
     manager = build_manager_agent(model, hosted_web_search_enabled=hosted_web_search_enabled)
     candidate_batch = build_candidate_batch_with_steps(
@@ -235,8 +235,8 @@ def runtime_metadata(started_at: datetime, started_perf: float, *, real: bool) -
         "completed_at": completed_at.isoformat(),
         "duration_ms": round((time.perf_counter() - started_perf) * 1000),
         "real_mode": real,
-        "openai_model": os.getenv("OPENAI_MODEL", "gpt-5.5") if real else None,
-        "openai_search_model": os.getenv("OPENAI_SEARCH_MODEL", os.getenv("OPENAI_MODEL", "gpt-5.5")) if real else None,
+        "openai_model": os.getenv("OPENAI_MODEL", "gpt-4.1-mini") if real else None,
+        "openai_search_model": os.getenv("OPENAI_SEARCH_MODEL", os.getenv("OPENAI_MODEL", "gpt-4.1-mini")) if real else None,
         "bm_scout_provider": os.getenv("BM_SCOUT_PROVIDER", "auto"),
         "agent_hosted_web_search_enabled": agent_hosted_web_search_enabled() if real else False,
         "agent_max_turns": agent_max_turns() if real else None,

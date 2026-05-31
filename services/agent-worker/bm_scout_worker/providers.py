@@ -527,7 +527,7 @@ class OpenAIWebResearchProvider(OpenWebResearchProvider):
             return []
         from openai import OpenAI
 
-        model = os.getenv("OPENAI_SEARCH_MODEL", os.getenv("OPENAI_MODEL", "gpt-5.5"))
+        model = os.getenv("OPENAI_SEARCH_MODEL", os.getenv("OPENAI_MODEL", "gpt-4.1-mini"))
         client = OpenAI()
         try:
             response = client.responses.create(
