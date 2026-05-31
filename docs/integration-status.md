@@ -51,7 +51,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Mémoire feedback TS : rejet lead, pénalité secteur, bonus angle validé, régénération anti-générique.
 - Mémoire feedback worker : chargement feedbacks/outcomes Supabase avec contexte entreprise/segment/site, chargement direct de `scout_do_not_contact`, blocage DNC/rejets par domaine/hash email, pénalités segments faibles, bonus angles validés et régénération anti-générique dans le provider Python.
 - Run steps feedback worker : chaque application de mémoire produit un step `apply_feedback_memory`, puis un agrégat `feedback_memory_effects` comptant les impacts score, blocage, DNC, message régénéré, angle renforcé et delta segment.
-- Script `feedback:evidence` : seed contrôlé Supabase feedback/outcome/DNC, run Core Agents SDK persisté et artefact `artifacts/feedback-loop/latest-feedback-loop.json` pour prouver la causalité feedback et une synthèse Learning 3-5 apprentissages, sans prétendre prouver la recherche marché.
+- Script `feedback:evidence` : seed contrôlé Supabase feedback/outcome/DNC, run Core Agents SDK persisté avec `BM_SCOUT_EVIDENCE_PURPOSE=feedback_loop` et artefact `artifacts/feedback-loop/latest-feedback-loop.json` pour prouver la causalité feedback et une synthèse Learning 3-5 apprentissages, sans prétendre prouver la recherche marché.
 - `quality:readiness` distingue maintenant le provider runtime réel : `configured` peut servir à une preuve feedback contrôlée, mais seuls `openai_web`, `serpapi` ou `web` comptent pour les runs marché Core/Exploration et les volumes PRD.
 - Worker Pydantic : contrat Observé/Inféré/Incertain, email confidence, run steps.
 - Email confidence worker : un email public nominatif sourcé devient `usable/high`, un email générique reste `verify/medium`, un pattern observé reste `verify/low`, et l'absence d'email reste `not_usable` sans pattern inventé.
@@ -90,7 +90,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 ## Vérifications exécutées
 
-- `npm run test` : 87 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/outcome négatif/email incertain bloquée, routines DNC/followup lançables, indexes FK Supabase, index anti-doublon, fusion Supabase company par `external_id`/domaine, preuve `verify:supabase` de fusion RPC avec cleanup, cron readiness couvrant les 6 routines P0, worker réel persisté refusé sous volume PRD, policy Auth BM Scout, actions Romu, provider runtime des preuves et scénario `feedback:evidence`.
+- `npm run test` : 88 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/outcome négatif/email incertain bloquée, routines DNC/followup lançables, indexes FK Supabase, index anti-doublon, fusion Supabase company par `external_id`/domaine, preuve `verify:supabase` de fusion RPC avec cleanup, cron readiness couvrant les 6 routines P0, worker réel persisté refusé sous volume PRD, exception explicite `feedback_loop` pour la preuve causale contrôlée, policy Auth BM Scout, actions Romu, provider runtime des preuves et scénario `feedback:evidence`.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.

@@ -306,6 +306,19 @@ describe("agent task runner", () => {
     expect(workerReadinessBlockers("core", { real: false, persist: true }, { scanned_count: 1, run_steps: [] })).toEqual([]);
   });
 
+  it("n'impose pas le volume PRD au scénario feedback loop contrôlé", () => {
+    expect(
+      workerReadinessBlockers(
+        "core",
+        { real: true, persist: true, env: { BM_SCOUT_EVIDENCE_PURPOSE: "feedback_loop", BM_SCOUT_CORE_TARGET: "15" } },
+        {
+          scanned_count: 3,
+          run_steps: [{ step: "persist_complete", event_type: "supabase_persist" }]
+        }
+      )
+    ).toEqual([]);
+  });
+
   it("ecrase l'artefact attendu avec un verdict fail si le worker ne retourne pas de JSON", async () => {
     const artifactsDir = await mkdtemp(join(tmpdir(), "bm-scout-worker-fail-"));
 

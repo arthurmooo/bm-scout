@@ -508,17 +508,23 @@ export function workerReadinessBlockers(
 ): string[] {
   if (!options.real || options.persist === false) return [];
 
-  const target = requiredWorkerScanTarget(mode, options.env);
-  const scannedCount = Number(output.scanned_count ?? 0);
   const blockers: string[] = [];
-  if (!Number.isFinite(scannedCount) || scannedCount < target) {
-    blockers.push(`Volume PRD ${mode} non prouvé : ${Number.isFinite(scannedCount) ? scannedCount : 0}/${target} comptes scannés.`);
+  if (!isControlledFeedbackEvidence(options.env)) {
+    const target = requiredWorkerScanTarget(mode, options.env);
+    const scannedCount = Number(output.scanned_count ?? 0);
+    if (!Number.isFinite(scannedCount) || scannedCount < target) {
+      blockers.push(`Volume PRD ${mode} non prouvé : ${Number.isFinite(scannedCount) ? scannedCount : 0}/${target} comptes scannés.`);
+    }
   }
   const persistComplete = output.run_steps?.some((step) => step.step === "persist_complete" && step.event_type === "supabase_persist");
   if (!persistComplete) {
     blockers.push("Persistance Supabase non prouvée : step persist_complete absent.");
   }
   return blockers;
+}
+
+function isControlledFeedbackEvidence(env: Record<string, string> = {}): boolean {
+  return (env.BM_SCOUT_EVIDENCE_PURPOSE ?? process.env.BM_SCOUT_EVIDENCE_PURPOSE) === "feedback_loop";
 }
 
 function requiredWorkerScanTarget(mode: "core" | "exploration", env: Record<string, string> = {}): number {

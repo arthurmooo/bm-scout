@@ -88,6 +88,7 @@ export function feedbackLoopScenarioSeeds(companies = FEEDBACK_LOOP_SCENARIO_COM
 export function feedbackLoopWorkerEnv(companies = FEEDBACK_LOOP_SCENARIO_COMPANIES): Record<string, string> {
   return {
     BM_SCOUT_PROVIDER: "configured",
+    BM_SCOUT_EVIDENCE_PURPOSE: "feedback_loop",
     BM_SCOUT_REAL_SEEDS: JSON.stringify(feedbackLoopScenarioSeeds(companies)),
     BM_SCOUT_FETCH_TIMEOUT_SECONDS: process.env.BM_SCOUT_FETCH_TIMEOUT_SECONDS ?? "8",
     BM_SCOUT_AGENT_MAX_TURNS: process.env.BM_SCOUT_AGENT_MAX_TURNS ?? "6"

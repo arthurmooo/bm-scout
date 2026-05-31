@@ -11,6 +11,7 @@ describe("feedback loop evidence", () => {
     const env = feedbackLoopWorkerEnv();
 
     expect(env.BM_SCOUT_PROVIDER).toBe("configured");
+    expect(env.BM_SCOUT_EVIDENCE_PURPOSE).toBe("feedback_loop");
     expect(JSON.parse(env.BM_SCOUT_REAL_SEEDS)).toEqual(feedbackLoopScenarioSeeds());
     expect(feedbackLoopScenarioSeeds()).toHaveLength(3);
   });

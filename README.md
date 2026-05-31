@@ -83,6 +83,7 @@ Les tâches Core/Exploration transmettent leurs objectifs au worker : `coreWeekl
 `agent:tasks:recover-stale` marque comme failed les tâches `running` depuis plus de 90 minutes avant de consommer la queue offline ; utiliser `-- --stale-minutes=...` pour ajuster. Si une tâche stale est récupérée, la commande sort en échec pour rendre l'incident visible.
 `agent:cron:evidence` est le wrapper utilisé par GitHub Actions : il met en file les routines dues, consomme jusqu'à 10 tâches, écrit `artifacts/agent-tasks/latest-ci-run.json` et échoue si le run n'est pas une vraie preuve `agent:tasks:real` avec secrets, les 6 routines P0 complétées et des traces worker Core/Exploration.
 `feedback:evidence` seed un scénario contrôlé dans Supabase (`scout_feedback`, `scout_outcomes`, `scout_do_not_contact`), lance un worker Agents SDK Core persisté, écrit `artifacts/feedback-loop/latest-feedback-loop.json` et vérifie que `feedback_memory_effects` montre un impact score/message/blocage/angle ainsi qu'une synthèse Learning de 3 à 5 apprentissages exploitant feedback Romu + do-not-contact. Ce scénario utilise `BM_SCOUT_PROVIDER=configured` et ne compte donc pas comme preuve de recherche marché ou de volume PRD.
+Ce scénario porte aussi `BM_SCOUT_EVIDENCE_PURPOSE=feedback_loop` : il doit prouver la causalité mémoire et la persistance, pas le scan 15/100.
 `provider:compare` compare SerpAPI, OpenAI web et fallback web sur Core/Exploration et écrit `artifacts/provider-comparison/latest-comparison.json`.
 
 ## Tests
