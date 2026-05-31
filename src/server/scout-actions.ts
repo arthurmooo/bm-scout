@@ -179,7 +179,7 @@ export async function recordScoutAction(input: ScoutActionInput): Promise<ScoutA
     }
   }
 
-  if (companyId && !mutationError) {
+  if (!routineType && companyId && !mutationError) {
     try {
       mutationTrace = await applyLeadMutation(input, companyId);
     } catch (error) {

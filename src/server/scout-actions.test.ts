@@ -72,6 +72,33 @@ describe("scout actions", () => {
     ).toBe(true);
   });
 
+  it("ne transforme pas un lancement de routine avec leadId en mutation de lead", async () => {
+    reset();
+
+    const result = await recordScoutAction({ action: "launch_core", leadId: "core-cambon" });
+
+    expect(result.ok).toBe(true);
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        table: "scout_agent_tasks",
+        op: "insert",
+        payload: expect.objectContaining({ type: "weekly_core_research", status: "queued" })
+      })
+    );
+    expect(calls).not.toContainEqual({ table: "scout_companies", op: "update", payload: { verdict: "validate" } });
+    expect(calls.some((call) => call.table === "scout_feedback")).toBe(false);
+    expect(
+      calls.some(
+        (call) =>
+          call.table === "scout_action_events" &&
+          call.op === "insert" &&
+          JSON.stringify(call.payload).includes('"leadId":"core-cambon"') &&
+          JSON.stringify(call.payload).includes('"taskId":"task-1"') &&
+          JSON.stringify(call.payload).includes('"taskType":"weekly_core_research"')
+      )
+    ).toBe(true);
+  });
+
   it("trace un echec de mise en file de routine", async () => {
     reset();
     state.taskInsertError = true;
