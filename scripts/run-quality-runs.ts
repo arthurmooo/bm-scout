@@ -496,7 +496,15 @@ function buildProductBlockers(
   const hasLearningFromFeedback = realEvidence.some((item) => item.mode === "core" && item.learningUsesFeedback);
   blockers.push("production_not_ready: le runner agent_tasks et le cron GitHub Actions existent, mais aucun run CI avec secrets ne les prouve encore.");
   blockers.push("production_not_ready: les providers SerpAPI/OpenAI web/fallback public existent, mais la recherche marche web/jobs/email n'est pas encore prouvee a volume PRD.");
-  if (!providerEvidence || providerEvidence.verdict !== "pass" || !providerEvidence.recommendedDefault) {
+  const providerModes = new Set(providerEvidence?.modes ?? []);
+  const hasFullProviderScope = providerModes.has("core") && providerModes.has("exploration");
+  if (
+    !providerEvidence ||
+    providerEvidence.verdict !== "pass" ||
+    !providerEvidence.recommendedDefault ||
+    !providerEvidence.prdVolumeProven ||
+    !hasFullProviderScope
+  ) {
     blockers.push("production_not_ready: la couverture SerpAPI vs OpenAI web/fallback public doit etre mesuree avant de choisir le provider par defaut.");
   }
 

@@ -9,9 +9,10 @@ Verdict : `production_not_ready`.
 1. La recherche réelle existe maintenant via OpenAI `web_search` et fallback public, mais elle n'est pas encore prouvée à volume PRD.
    - Risque : le produit ressemble encore à une démo agentique bien formée.
    - Remède : exécuter Core/Exploration réels à volume, comparer sources/shortlists entre SerpAPI, OpenAI web et fallback public.
+   - Garde-fou ajouté : une comparaison Core seule reste un smoke technique, mais ne peut plus produire `prd_volume_proven=true`.
 
-2. Le runner consomme une queue et un cron GitHub Actions est versionné, mais aucune exécution CI avec secrets n'est encore prouvée.
-   - Risque : proactivité configurable, mais pas encore démontrée en production.
+2. Le scheduler met maintenant en file les 6 routines P0 de façon idempotente et le runner consomme une queue, mais aucune exécution CI avec secrets n'est encore prouvée.
+   - Risque : proactivité structurée, mais pas encore démontrée en production.
    - Remède : exécuter le workflow avec secrets et vérifier les transitions sur le projet interne.
 
 3. La feedback loop causale existe localement côté TS et worker Python, mais elle n'est pas encore prouvée en run réel Supabase à volume.
@@ -25,6 +26,7 @@ Verdict : `production_not_ready`.
 ## Ce qui est plus sain après la passe
 
 - Les routines sont dans un module dédié, pas dispersées dans l'UI.
+- Le scheduler de cron couvre maintenant `dnc_check` et `followup_review`, pas seulement les 4 actions lançables depuis l'UI.
 - Les tâches `queued` peuvent maintenant passer par un runner `running -> completed/blocked/failed`.
 - Les routines Daily Brief, Learning Review, DNC check et followup review ne restent plus bloquées par défaut : elles lisent le runtime Supabase et refusent les fixtures comme preuve opérationnelle.
 - Le worker réel ne retombe plus silencieusement sur fixtures et expose `WebSearchTool` OpenAI plus 8 tools métier Agents SDK.

@@ -59,6 +59,28 @@ export function createScheduledTasks(
   );
 }
 
+export function createDueScheduledTasks(
+  now: Date = new Date(),
+  config: RoutineConfig = DEFAULT_ROUTINE_CONFIG,
+  options: { task?: AgentTaskType; timeZone?: string } = {}
+): AgentTask[] {
+  const tasks = createScheduledTasks(now, config);
+  if (options.task) return tasks.filter((task) => task.type === options.task);
+  return tasks.filter((task) => isRoutineDue(task.type, now, options.timeZone));
+}
+
+export function isRoutineDue(type: AgentTaskType, now: Date = new Date(), timeZone = "Europe/Paris"): boolean {
+  const weekday = weekdayName(now, timeZone);
+  const isBusinessDay = ["Mon", "Tue", "Wed", "Thu", "Fri"].includes(weekday);
+  if (!isBusinessDay) return false;
+
+  if (type === "weekly_core_research" || type === "weekly_exploration_scan" || type === "learning_review") {
+    return weekday === "Mon";
+  }
+
+  return type === "daily_brief" || type === "dnc_check" || type === "followup_review";
+}
+
 export function buildTasksFromRuns(
   runs: ScoutRun[],
   now: Date = new Date(),
@@ -199,6 +221,10 @@ function withOffset(date: Date, hours: number): string {
   const value = new Date(date);
   value.setHours(8 + hours, 15, 0, 0);
   return value.toISOString();
+}
+
+function weekdayName(date: Date, timeZone: string): string {
+  return new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone }).format(date);
 }
 
 function latestRun(runs: ScoutRun[], mode: "core" | "exploration"): ScoutRun | undefined {

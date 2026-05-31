@@ -20,6 +20,7 @@ from .providers import (
 from .schemas import RunStep, ScoutLead, ScoutMode
 
 ProviderAuditStatus = Literal["pass", "fail", "unavailable"]
+PRD_MODES: set[ScoutMode] = {"core", "exploration"}
 
 
 @dataclass
@@ -187,12 +188,18 @@ def comparison_blockers(results: list[ProviderModeAudit], modes: list[ScoutMode]
             blockers.append(f"Aucun provider réel ne passe le smoke {mode}.")
     if not recommended_default_provider(results, modes):
         blockers.append("Aucun provider ne couvre tous les modes demandés.")
-    if not prd_volume_proven(results, modes):
-        blockers.append("Aucun provider ne prouve les volumes configurés/PRD sur tous les modes demandés.")
+    if not requested_modes_volume_proven(results, modes):
+        blockers.append("Aucun provider ne prouve les volumes configurés sur tous les modes demandés.")
     return blockers
 
 
 def prd_volume_proven(results: list[ProviderModeAudit], modes: list[ScoutMode]) -> bool:
+    if set(modes) != PRD_MODES:
+        return False
+    return requested_modes_volume_proven(results, modes)
+
+
+def requested_modes_volume_proven(results: list[ProviderModeAudit], modes: list[ScoutMode]) -> bool:
     return all(
         any(item.mode == mode and item.status == "pass" and item.scan_target_reached for item in results)
         for mode in modes

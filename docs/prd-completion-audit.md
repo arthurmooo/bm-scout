@@ -10,7 +10,7 @@ Verdict courant : `production_not_ready`.
 | --- | --- | --- |
 | Console interne orientée décision Romu | Partiel | `src/ui/ScoutDashboard.tsx`, build OK |
 | Séparation Core / Exploration | Partiel | `ScoutMode`, fixtures, workflows locaux |
-| Proactivité réelle | Partiel | `scout_agent_tasks` appliqué Supabase, scheduler local, runner queue Core/Exploration + routines brief/learning/DNC/followup déterministes, cron GitHub Actions versionné mais non prouvé |
+| Proactivité réelle | Partiel | `scout_agent_tasks` appliqué Supabase, scheduler local idempotent des 6 routines P0, runner queue Core/Exploration + routines brief/learning/DNC/followup déterministes, cron GitHub Actions versionné mais non prouvé |
 | 15 leads Core / semaine | Non prouvé | Objectif paramétré, pas de run réel à volume |
 | 100 comptes Exploration scannés | Non prouvé | Objectif paramétré, pas de run réel à volume |
 | Vraie recherche marché | Partiel | Provider SerpAPI + OpenAI `web_search` + fallback web public + job search minimal + tools métier, pas encore prouvé à volume |
@@ -24,11 +24,11 @@ Verdict courant : `production_not_ready`.
 | Run steps/tool calls auditables | Partiel | RPC écrit run start/lead saved/worker steps ; provider + function tools Agents SDK poussent des étapes compactées ; scripts `worker:real:*` produisent les artefacts readiness |
 | Supabase mémoire | Partiel | Schéma/RPC/actions, env runtime non vérifiée ici |
 | RLS / sécurité interne | Partiel | Policies Supabase restreintes par `app_metadata`, service role serveur, advisor sécurité à 0 lint ; Auth SSR UI/API branchée, claims réels Romu/Arthur encore à poser et vérifier dans Supabase |
-| Documentation honnête | Couvert dans cette passe | README + docs en `production_not_ready` |
+| Documentation honnête | Couvert dans cette passe | README + docs en `production_not_ready`, gate provider corrigé pour empêcher un smoke Core seul de prouver les volumes PRD |
 
 ## P0 corrigés partiellement
 
-- P0.1 Proactivité : table tasks, statuts, types de tâches, scheduler local, lancement manuel, runner de queue, routines brief/learning/DNC/followup et workflow cron GitHub Actions posés.
+- P0.1 Proactivité : table tasks, statuts, types de tâches, scheduler local idempotent couvrant les 6 routines P0, lancement manuel, runner de queue, routines brief/learning/DNC/followup et workflow cron GitHub Actions posés.
 - P0.2/P0.3 Preuve runs réels : harnais `worker:real:*` ajouté pour produire les artefacts `latest-real-*.json` sans passer par fixtures.
 - P0.4 Do-not-contact : gate déterministe ajouté côté TS, worker offline et DB.
 - P0.5 Feedback loop : mémoire locale causale ajoutée côté TS et worker provider pour rejet, pénalité secteur, bonus angle, anti-générique et DNC.

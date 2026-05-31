@@ -55,13 +55,14 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - `quality:runs` reste un harnais fixture.
 - `demoSnapshot()` reste le fallback sans env Supabase serveur.
 - Le worker réel peut découvrir des candidats sans seeds via SerpAPI, OpenAI `web_search` ou fallback web public, mais ce n'est pas encore prouvé à volume PRD.
+- Une comparaison provider Core seule ne peut plus déclarer les volumes PRD prouvés ; `prd_volume_proven` exige Core + Exploration.
 - Les providers `search_web`, `fetch_company_site`, `search_jobs`, `find_public_emails`, `dedupe_company` existent ; `search_jobs` reste minimal et la robustesse search dépend encore des sources publiques.
 - Les volumes 15 Core / 100 Exploration sont paramétrés mais non prouvés en run réel.
 - Le feedback influence le moteur TS et le provider Python en tests locaux, mais il n'est pas encore prouvé sur un run réel Supabase à volume.
 
 ## Réellement end-to-end aujourd'hui
 
-- Scheduler dry-run reproductible : `npm run agent:schedule`.
+- Scheduler reproductible : `npm run agent:schedule` affiche le plan et les tâches dues ; `agent:schedule:run` met en file les 6 routines P0 quand elles sont dues, avec déduplication journalière sauf `--force`.
 - Runner queue reproductible : `npm run agent:tasks:offline` ou `npm run agent:tasks:real` avec env Supabase serveur ; les routines brief/learning/DNC/followup ne s'appuient pas sur les fixtures demo.
 - Artefacts de run réel reproductibles : `npm run worker:real:core`, `npm run worker:real:exploration`, puis variantes `:persist` avec env Supabase.
 - Actions API persistantes si `NEXT_PUBLIC_SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` existent ; si Auth SSR est configurée, l'API exige aussi un compte interne BM Scout.
@@ -73,17 +74,18 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 ## Vérifications exécutées
 
-- `npm run test` : 36 tests pass, dont policy Auth BM Scout.
+- `npm run test` : 42 tests pass, dont scheduler idempotent, policy Auth BM Scout et actions Romu.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.
 - `npm run quality:runs` : pass fixture, décision produit `production_not_ready`.
 - `npm run quality:readiness` : fail attendu, décision produit `production_not_ready`.
-- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 40 tests pass, dont provider SerpAPI, provider OpenAI web, fallback jobs, parsing sources et comparaison provider.
-- Avec `OPENAI_API_KEY` présent en env et `BM_SCOUT_FETCH_LIMIT=5`, `npm run provider:compare -- --providers=openai_web --modes=core` : pass réel, Core découvre 15 candidats, enrichit 5 comptes et 5 passent QC.
+- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 41 tests pass, dont provider SerpAPI, provider OpenAI web, fallback jobs, parsing sources, comparaison provider et anti-faux-positif PRD sur smoke Core seul.
+- Avec `OPENAI_API_KEY` présent en env et `BM_SCOUT_FETCH_LIMIT=3`, `npm run provider:compare -- --providers=openai_web --modes=core` : pass réel, Core découvre 15 candidats, enrichit 3 comptes et 3 passent QC ; `prd_volume_proven=false` car ce smoke n'inclut pas Exploration.
 - Avec `OPENAI_API_KEY` présent en env et `BM_SCOUT_FETCH_LIMIT=5`, `npm run provider:compare -- --providers=openai_web --modes=exploration` : fail attendu côté volume, Exploration découvre 36/100 comptes, produit une shortlist de 5 avec 2 pass QC et bloque les messages directs. Conclusion : OpenAI `web_search` est utile pour Core/enrichissement ciblé, mais SerpAPI reste à brancher pour prouver le scan large 100 comptes.
 - Import Agents SDK manager : 13 tools disponibles, dont `WebSearchTool` et 8 tools métier provider.
-- `npm run agent:schedule` : pass, 6 routines planifiées.
+- `npm run agent:schedule -- --now=2026-06-01T06:00:00.000Z` : pass, 6 routines planifiées et 6 routines dues le lundi ouvré.
+- `npm run agent:schedule:run -- --now=2026-06-01T06:00:00.000Z` sans env serveur : fail attendu avec message env Supabase requis.
 - `npm run agent:tasks` sans env serveur : fail attendu avec message env Supabase requis.
 - `npm exec tsx -- scripts/run-agent-worker-evidence.ts --offline --mode=core` : pass, artefact `latest-offline-core.json` écrit.
 - `npm run test:e2e` : pass, 2 scénarios Playwright ; le smoke force `BM_SCOUT_AUTH_MODE=demo`, vérifie dashboard/actions et page login interne.

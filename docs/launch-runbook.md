@@ -104,10 +104,23 @@ Planifier sans persister :
 npm run agent:schedule
 ```
 
-Mettre en file les routines supportées dans Supabase :
+Mettre en file les routines dues dans Supabase :
 
 ```bash
 npm run agent:schedule:run
+```
+
+Le scheduler évite les doublons de même journée pour une tâche non annulée. Cadence actuelle :
+
+- lundi ouvré : `weekly_core_research`, `weekly_exploration_scan`, `daily_brief`, `learning_review`, `dnc_check`, `followup_review` ;
+- autres jours ouvrés : `daily_brief`, `dnc_check`, `followup_review` ;
+- week-end : aucune tâche, sauf lancement manuel ciblé.
+
+Lancement ciblé ou rerun assumé :
+
+```bash
+npm run agent:schedule:run -- --task=dnc_check
+npm run agent:schedule:run -- --task=weekly_core_research --force
 ```
 
 Lire la queue sans exécuter :
@@ -123,7 +136,7 @@ npm run agent:tasks:offline
 npm run agent:tasks:real
 ```
 
-Limite actuelle : le runner est reproductible, mais le cron production reste à brancher. `agent:tasks:real` lance le worker OpenAI Agents SDK et requiert `OPENAI_API_KEY`.
+Limite actuelle : le scheduler sait mettre en file les 6 routines P0, mais le cron production reste à prouver avec secrets. `agent:tasks:real` lance le worker OpenAI Agents SDK et requiert `OPENAI_API_KEY`.
 Les actions Romu de feedback et outcome écrivent `scout_feedback` / `scout_outcomes`, puis les runs suivants les rechargent via le worker. Cela doit être prouvé par comparaison avant/après sur un run Supabase réel avant tout statut pilote.
 
 ## Comparer les providers de recherche
@@ -138,10 +151,11 @@ La commande écrit :
 - `artifacts/provider-comparison/latest-comparison.md`
 
 Elle compare `serpapi`, `openai_web` et `web` sur Core et Exploration. Sans `SERPAPI_API_KEY` ou `OPENAI_API_KEY`, ces providers sont marqués `unavailable` au lieu de retomber silencieusement sur les fixtures. Le statut `pass` de cette comparaison ne suffit pas pour déclarer BM Scout prêt : il faut encore des runs Agents SDK réels, persistés, à volume PRD.
+Un smoke ciblé `--modes=core` peut passer pour vérifier OpenAI web, mais il marque volontairement `prd_volume_proven=false` tant que Core et Exploration n'ont pas été mesurés ensemble.
 
 Résultat actuel avec OpenAI web seul :
 
-- Core borné (`BM_SCOUT_FETCH_LIMIT=5`) : pass, 15 candidats découverts, 5 enrichis, 5 pass QC.
+- Core borné (`BM_SCOUT_FETCH_LIMIT=3`) : pass, 15 candidats découverts, 3 enrichis, 3 pass QC ; preuve utile mais `prd_volume_proven=false` car Exploration n'est pas incluse dans ce smoke.
 - Exploration bornée (`BM_SCOUT_FETCH_LIMIT=5`) : qualité shortlist partielle, mais volume fail, 36/100 comptes découverts.
 
 Décision actuelle : OpenAI `web_search` est utilisable pour Core et l'enrichissement ciblé. Pour le scan large Exploration 100 comptes, brancher SerpAPI puis comparer avant de choisir le provider par défaut.
