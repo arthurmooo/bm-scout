@@ -48,19 +48,21 @@ export function buildFeedbackMemory(feedbacks: FeedbackEvent[], knownLeads: Scou
       memory.leadBlockReasons.set(feedback.leadId, "Do-not-contact issu du feedback Romu.");
     }
 
-    if (feedback.kind === "bad_lead" || note.includes("a exclure") || note.includes("à exclure")) {
+    if (feedback.kind === "bad_lead" || feedback.kind === "negative_outcome" || note.includes("a exclure") || note.includes("à exclure")) {
       memory.rejectedLeadIds.add(feedback.leadId);
       memory.leadBlockReasons.set(
         feedback.leadId,
-        "Lead déjà rejeté par Romu : ne pas le remettre sans enrichissement explicite."
+        feedback.kind === "negative_outcome"
+          ? "Outcome négatif Romu : ne pas relancer sans preuve nouvelle et accord explicite."
+          : "Lead déjà rejeté par Romu : ne pas le remettre sans enrichissement explicite."
       );
     }
 
-    if (lead && (feedback.kind === "bad_lead" || negativeSectorKeywords.some((keyword) => note.includes(keyword)))) {
+    if (lead && (feedback.kind === "bad_lead" || feedback.kind === "negative_outcome" || negativeSectorKeywords.some((keyword) => note.includes(keyword)))) {
       incrementSegmentDelta(memory.segmentScoreDeltas, lead.segment, -18);
     }
 
-    if (lead && (feedback.kind === "good_lead" || positiveSectorKeywords.some((keyword) => note.includes(keyword)))) {
+    if (lead && (feedback.kind === "good_lead" || feedback.kind === "positive_outcome" || positiveSectorKeywords.some((keyword) => note.includes(keyword)))) {
       incrementSegmentDelta(memory.segmentScoreDeltas, lead.segment, 6);
     }
 

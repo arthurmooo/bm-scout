@@ -102,6 +102,26 @@ describe("quality gates", () => {
     expect(run.rejected.find((lead) => lead.id === "core-in-extenso")?.rejectionReason).toContain("Lead déjà rejeté");
   });
 
+  it("bloque un lead avec outcome negatif comme une relance interdite", () => {
+    const feedbacks: FeedbackEvent[] = [
+      {
+        id: "outcome-negative-cambon",
+        leadId: "core-cambon",
+        kind: "negative_outcome",
+        note: "Réponse négative : ne pas relancer.",
+        createdAt: new Date().toISOString()
+      }
+    ];
+
+    const run = runScoutMission("core", { feedbacks });
+    const blocked = run.rejected.find((lead) => lead.id === "core-cambon");
+
+    expect(run.leads.some((lead) => lead.id === "core-cambon")).toBe(false);
+    expect(blocked?.qualityDecision).toBe("blocked");
+    expect(blocked?.rejectionReason).toContain("Outcome négatif");
+    expect(blocked?.outreach.followUp.toLowerCase()).toContain("bloqué");
+  });
+
   it("renforce un angle valide et regenere un message trop generique", () => {
     const run = runScoutMission("core", { feedbacks: seedFeedbacks() });
     const cambon = run.leads.find((lead) => lead.id === "core-cambon");

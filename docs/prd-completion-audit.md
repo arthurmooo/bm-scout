@@ -18,7 +18,7 @@ Verdict courant : `production_not_ready`.
 | Observé / Inféré / Incertain | Couvert en socle | Types TS, worker Pydantic, QC Observé/evidence, colonne `structured_insights` Supabase |
 | Messages personnalisés | Partiel | QC fixture, pas de preuve provider réel à volume |
 | Aucun envoi automatique | Couvert | Pas d'endpoint d'envoi ; actions de copie seulement |
-| Do-not-contact hard gate | Couvert en socle | QC TS, worker offline, chargement direct `scout_do_not_contact` côté worker, trigger DB, action DNC |
+| Do-not-contact hard gate | Couvert en socle | QC TS, worker offline, chargement direct `scout_do_not_contact` côté worker, trigger DB, action DNC, blocage outcome négatif |
 | Feedback loop influente | Partiel | Effet scoring/message prouvé par tests locaux TS + worker provider ; actions feedback/outcome écrivent la mémoire Supabase ; pas encore prouvé par run réel Supabase à volume |
 | Actions UI fonctionnelles | Partiel | API actions + traces + feedback/outcomes + centre à valider, smoke Playwright + Browser intégré passés en mode local ; persistance réelle dépend encore de l'env Supabase |
 | Run steps/tool calls auditables | Partiel | RPC écrit run start/lead saved/worker steps ; provider + function tools Agents SDK poussent des étapes compactées ; scripts `worker:real:*` produisent les artefacts readiness |

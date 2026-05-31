@@ -35,6 +35,7 @@ type OutcomeActionEffect = {
   value: ScoutOutcomeValue;
   defaultNote: string;
   companyPatch?: (note: string) => CompanyPatch;
+  hardGateFollowUps?: boolean;
 };
 
 type MessageChannel = "email" | "follow_up" | "linkedin";
@@ -99,7 +100,8 @@ const OUTCOME_ACTIONS: Partial<Record<LeadActionType, OutcomeActionEffect>> = {
   outcome_negative: {
     value: "negative",
     defaultNote: "Réponse négative.",
-    companyPatch: (note) => ({ verdict: "reject", rejection_reason: note })
+    companyPatch: (note) => ({ verdict: "reject", quality_decision: "blocked", rejection_reason: note }),
+    hardGateFollowUps: true
   },
   outcome_positive: {
     value: "interested",
@@ -292,6 +294,7 @@ async function applyLeadMutation(input: ScoutActionInput, companyId: string): Pr
       })
     );
     if (outcome.companyPatch) await updateCompany(companyId, outcome.companyPatch(note));
+    if (outcome.hardGateFollowUps) await hardGateFutureContactAfterNegativeOutcome(companyId, note);
   }
 }
 
@@ -328,6 +331,7 @@ async function assertMessageCopyAllowed(companyId: string, channel: MessageChann
   if (message.status === "blocked" || message.body.toLowerCase().startsWith("brouillon blo")) {
     throw new Error("Copie bloquée : message non autorisé par le Quality Control.");
   }
+  await assertNoBlockingOutcome(companyId);
   if ((channel === "email" || channel === "follow_up") && message.scout_contacts?.email_status !== "usable") {
     throw new Error("Copie bloquée : email contact à vérifier ou non utilisable.");
   }
@@ -341,6 +345,22 @@ async function assertMessageCopyAllowed(companyId: string, channel: MessageChann
 
   if (dncError) throw new Error(`Vérification do-not-contact impossible: ${dncError.message}`);
   if (isDnc) throw new Error("Copie bloquée : cible do-not-contact.");
+}
+
+async function assertNoBlockingOutcome(companyId: string): Promise<void> {
+  const client = createServerSupabaseClient();
+  if (!client) return;
+  const { data, error } = await client
+    .from("scout_outcomes")
+    .select("id,outcome,note")
+    .eq("company_id", companyId)
+    .in("outcome", ["negative"])
+    .order("occurred_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw new Error(`Vérification outcome impossible: ${error.message}`);
+  if (data) throw new Error("Copie bloquée : outcome négatif / opt-out déjà enregistré.");
 }
 
 async function markMessagesUsed(companyId: string): Promise<void> {
@@ -368,6 +388,22 @@ async function rejectUnblockedMessages(companyId: string): Promise<void> {
       .eq("company_id", companyId)
       .neq("status", "blocked")
   );
+}
+
+async function hardGateFutureContactAfterNegativeOutcome(companyId: string, note: string): Promise<void> {
+  const client = createServerSupabaseClient();
+  if (!client) return;
+  await checked(
+    client.from("scout_do_not_contact").insert({
+      scope: "company",
+      company_id: companyId,
+      source: "reply",
+      reason: note
+    })
+  );
+  await checked(client.from("scout_messages").update({ status: "blocked" }).eq("company_id", companyId).neq("status", "blocked"));
+  await insertFeedback(companyId, "negative_outcome", note);
+  await insertFeedback(companyId, "do_not_contact", `Outcome négatif / opt-out : ${note}`);
 }
 
 async function updateCompany(companyId: string, patch: CompanyPatch): Promise<void> {

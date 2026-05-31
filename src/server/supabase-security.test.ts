@@ -78,6 +78,18 @@ describe("supabase security posture", () => {
       expect(migration).toContain(`create index if not exists ${indexName}`);
     }
   });
+
+  it("hard-gate les messages apres outcome negatif cote base", () => {
+    const migration = readMigration("block_messages_after_negative_outcome");
+
+    expect(migration).toContain("public.scout_prevent_blocking_outcome_message()");
+    expect(migration).toContain("Negative outcome gate");
+    expect(migration).toContain("outcome.outcome = 'negative'");
+    expect(migration).toContain("create trigger scout_messages_prevent_blocking_outcome");
+    expect(migration).toContain("public.scout_block_messages_after_negative_outcome()");
+    expect(migration).toContain("create trigger scout_outcomes_block_messages");
+    expect(migration).toContain("set status = 'blocked'");
+  });
 });
 
 function readMigration(name: string): string {

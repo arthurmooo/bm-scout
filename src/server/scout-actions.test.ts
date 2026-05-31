@@ -8,6 +8,7 @@ const { calls } = vi.hoisted(() => ({
 const { state } = vi.hoisted(() => ({
   state: {
     dnc: false,
+    blockingOutcome: false,
     messageStatus: "proposed",
     messageBody: "Bonjour, message spécifique.",
     emailStatus: "usable" as "usable" | "verify" | "not_usable"
@@ -134,6 +135,55 @@ describe("scout actions", () => {
     expect(calls).toContainEqual({ table: "scout_companies", op: "update", payload: { verdict: "validate" } });
   });
 
+  it("hard-gate les relances apres un outcome negatif", async () => {
+    reset();
+
+    const result = await recordScoutAction({
+      action: "outcome_negative",
+      leadId: "core-cambon",
+      note: "Réponse négative : ne pas relancer."
+    });
+
+    expect(result.ok).toBe(true);
+    expect(calls).toContainEqual({
+      table: "scout_outcomes",
+      op: "insert",
+      payload: {
+        company_id: "company-1",
+        outcome: "negative",
+        note: "Réponse négative : ne pas relancer."
+      }
+    });
+    expect(calls).toContainEqual({
+      table: "scout_companies",
+      op: "update",
+      payload: {
+        verdict: "reject",
+        quality_decision: "blocked",
+        rejection_reason: "Réponse négative : ne pas relancer."
+      }
+    });
+    expect(calls).toContainEqual({
+      table: "scout_do_not_contact",
+      op: "insert",
+      payload: {
+        scope: "company",
+        company_id: "company-1",
+        source: "reply",
+        reason: "Réponse négative : ne pas relancer."
+      }
+    });
+    expect(calls).toContainEqual({ table: "scout_messages", op: "update", payload: { status: "blocked" } });
+    expect(
+      calls.some(
+        (call) =>
+          call.table === "scout_feedback" &&
+          call.op === "insert" &&
+          JSON.stringify(call.payload).includes("do_not_contact")
+      )
+    ).toBe(true);
+  });
+
   it("marque les messages comme utilises sans envoi automatique", async () => {
     reset();
 
@@ -182,6 +232,18 @@ describe("scout actions", () => {
           JSON.stringify(call.payload).includes("Copie bloquée")
       )
     ).toBe(true);
+  });
+
+  it("bloque la copie si un outcome negatif existe meme sans DNC explicite", async () => {
+    reset();
+    state.blockingOutcome = true;
+
+    const result = await recordScoutAction({ action: "copy_follow_up", leadId: "core-cambon" });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("outcome négatif");
+    expect(calls).not.toContainEqual({ table: "scout_messages", op: "update", payload: { status: "copied" } });
+    expect(calls.some((call) => call.table === "rpc:scout_is_do_not_contact")).toBe(false);
   });
 
   it("bloque la copie d'un brouillon QC bloque", async () => {
@@ -234,6 +296,7 @@ describe("scout actions", () => {
 function reset() {
   calls.length = 0;
   state.dnc = false;
+  state.blockingOutcome = false;
   state.messageStatus = "proposed";
   state.messageBody = "Bonjour, message spécifique.";
   state.emailStatus = "usable";
@@ -246,6 +309,7 @@ function fakeTable(table: string) {
     select: () => chain,
     or: () => chain,
     order: () => chain,
+    in: () => chain,
     limit: () => chain,
     maybeSingle: () => ({ data: singleRow(table), error: null }),
     eq: () => chain,
@@ -272,6 +336,9 @@ function singleRow(table: string) {
       scout_contacts: { email: "romu@example.com", email_status: state.emailStatus, email_type: "public_named" },
       scout_companies: { domain: "example.com" }
     };
+  }
+  if (table === "scout_outcomes") {
+    return state.blockingOutcome ? { id: "outcome-1", outcome: "negative", note: "Réponse négative." } : null;
   }
   return { id: "company-1", domain: "example.com" };
 }

@@ -18,8 +18,8 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 - Workflow GitHub Actions `.github/workflows/bm-scout-agent-tasks.yml` pour cron/dispatch, à activer avec secrets.
 - Actions UI branchées sur une API serveur : valider, rejeter, enrichir, copier, DNC, lancer routines. Les copies ne sont écrites dans le presse-papiers qu'après validation serveur.
 - Feedbacks et outcomes Romu persistés dans `scout_feedback` / `scout_outcomes` : bon/mauvais lead, bon angle, message générique, RDV, positif/négatif, timing, mauvais interlocuteur.
-- DNC hard gate côté qualité TS, côté worker offline et côté DB pour empêcher un message non bloqué sur une cible DNC.
-- Feedback memory TS + worker provider : mauvais lead/secteur pénalisé, angle validé renforcé, message générique régénéré, DNC bloquant, contexte entreprise/segment et table `scout_do_not_contact` chargés depuis Supabase.
+- DNC hard gate côté qualité TS, côté worker offline et côté DB pour empêcher un message non bloqué sur une cible DNC ou un outcome négatif.
+- Feedback memory TS + worker provider : mauvais lead/secteur/outcome négatif pénalisé, angle validé renforcé, message générique régénéré, DNC bloquant, contexte entreprise/segment et table `scout_do_not_contact` chargés depuis Supabase.
 - Observé/Inféré/Incertain, email confidence, run steps provider et tool calls Agents SDK persistés via Supabase/RPC.
 - RLS Supabase durcie : policies `authenticated` restreintes aux rôles internes via `app_metadata`, service role réservée au serveur/worker, advisor sécurité Supabase sans lint après migration.
 - Auth interne Supabase SSR branchée : login magic link, refresh cookies via proxy Next, API actions bloquée si l'utilisateur n'a pas de claim `app_metadata` BM Scout. Le mode démo local reste explicite via `BM_SCOUT_AUTH_MODE=demo`.
