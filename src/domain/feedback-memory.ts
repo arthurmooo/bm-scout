@@ -1,8 +1,18 @@
 import { evaluateLead, markLeadDoNotContact } from "./quality";
 import type { FeedbackEvent, ScoutLead } from "./types";
 
-const negativeSectorKeywords = ["mauvais secteur", "hors icp", "trop petit", "douleur faible"];
-const positiveSectorKeywords = ["tres bon", "très bon", "bon secteur", "fort potentiel"];
+const negativeSectorKeywords = ["mauvais secteur", "hors icp", "trop petit", "douleur faible", "pas assez source", "pas assez sourcé"];
+const positiveSectorKeywords = ["tres bon", "très bon", "bon secteur", "bon timing", "bon contact", "fort potentiel"];
+const messageRewriteKeywords = [
+  "trop generique",
+  "trop générique",
+  "a raccourcir",
+  "à raccourcir",
+  "mauvais angle",
+  "trop ia",
+  "trop commercial",
+  "pas assez direct"
+];
 const angleKeywords = [
   "deal-by-deal",
   "deal",
@@ -70,7 +80,7 @@ export function buildFeedbackMemory(feedbacks: FeedbackEvent[], knownLeads: Scou
       memory.preferredAngles.push(...extractAngles(feedback.note));
     }
 
-    if (feedback.kind === "generic_message" || note.includes("trop generique") || note.includes("trop générique")) {
+    if (feedback.kind === "generic_message" || messageRewriteKeywords.some((keyword) => note.includes(keyword))) {
       memory.genericMessageFeedback = true;
     }
   }

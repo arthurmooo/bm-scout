@@ -19,8 +19,8 @@ Verdict courant : `production_not_ready`.
 | Messages personnalisés | Partiel | QC fixture, pas de preuve provider réel à volume |
 | Aucun envoi automatique | Couvert | Pas d'endpoint d'envoi ; actions de copie seulement |
 | Do-not-contact hard gate | Couvert en socle | QC TS, worker offline, chargement direct `scout_do_not_contact` côté worker, trigger DB, action DNC, blocage outcome négatif |
-| Feedback loop influente | Partiel | Effet scoring/message/blocage/angle prouvé par tests locaux TS + worker provider et compteurs `feedback_memory_effects` ; scénario `feedback:evidence` reproductible pour Supabase avec Learning 3-5 apprentissages ; pas encore exécuté avec secrets ni prouvé sur run marché à volume |
-| Actions UI fonctionnelles | Partiel | API actions + traces + feedback/outcomes + centre à valider + décisions avancées + 6 routines P0 lançables, smoke Playwright/Browser repassés ; persistance réelle dépend encore de l'env Supabase |
+| Feedback loop influente | Partiel | Effet scoring/message/blocage/angle prouvé par tests locaux TS + worker provider, outcomes neutres non bloquants et compteurs `feedback_memory_effects` ; scénario `feedback:evidence` reproductible pour Supabase avec Learning 3-5 apprentissages ; pas encore exécuté avec secrets ni prouvé sur run marché à volume |
+| Actions UI fonctionnelles | Partiel | API actions + traces + feedback/outcomes + raisons Romu en 1 clic + centre à valider + décisions avancées + 6 routines P0 lançables, smoke Playwright/Browser repassés ; persistance réelle dépend encore de l'env Supabase |
 | Run steps/tool calls auditables | Partiel | RPC écrit run start/lead saved/worker steps ; provider + function tools Agents SDK poussent des étapes compactées ; scripts `worker:real:*` produisent les artefacts readiness |
 | Supabase mémoire | Partiel | Schéma/RPC/actions, env runtime non vérifiée ici |
 | Déduplication robuste | Partiel | Provider renforcé avec clés domaine, domaine enregistrable, identité légale+pays/ville, LinkedIn et identifiant public ; RPC Supabase fusionne désormais par `external_id` ou domaine et priorise Core ; rétro-merge historique complet encore non traité |

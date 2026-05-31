@@ -529,6 +529,30 @@ def test_provider_feedback_memory_blocks_rejected_company() -> None:
     assert any(step.step == "apply_feedback_memory" for step in provider.run_steps)
 
 
+def test_provider_feedback_memory_does_not_block_neutral_outcome() -> None:
+    provider = ConfiguredWebResearchProvider(
+        [CompanySeed(company="Neutral M&A", website="https://neutral.example", segment="Conseil M&A")]
+    )
+    provider.fetch_company_site = lambda _url: "M&A transaction reporting document client team"
+    feedbacks = [
+        FeedbackEvent(
+            id="outcome-no-response",
+            lead_id="neutral.example",
+            kind="neutral_outcome",
+            note="Pas de réponse : à surveiller sans opt-out.",
+            created_at="2026-05-30T10:00:00+00:00",
+            website="https://neutral.example",
+            segment="Conseil M&A",
+        )
+    ]
+
+    lead = provider.build_candidates("core", feedback_events=feedbacks)[0]
+
+    assert lead.quality_decision != "blocked"
+    assert lead.verdict != "reject"
+    assert "do-not-contact" not in lead.outreach.cold_email.lower()
+
+
 def test_provider_feedback_memory_penalizes_weak_segment_without_exact_reject() -> None:
     provider = ConfiguredWebResearchProvider(
         [CompanySeed(company="Another Finance Ops", website="https://another.example", segment="Finance ops")]

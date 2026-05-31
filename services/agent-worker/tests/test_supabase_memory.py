@@ -6,7 +6,7 @@ from hashlib import sha256
 from unittest.mock import patch
 
 from bm_scout_worker.fixtures import offline_output
-from bm_scout_worker.memory import SupabaseConfig, SupabaseMemory
+from bm_scout_worker.memory import SupabaseConfig, SupabaseMemory, outcome_feedback_kind
 from bm_scout_worker.providers import CompanySeed, ConfiguredWebResearchProvider
 from bm_scout_worker.runner import run_bm_scout_mission
 from bm_scout_worker.schemas import FeedbackEvent
@@ -187,3 +187,13 @@ def test_supabase_memory_loads_feedback_outcomes_and_dnc() -> None:
     assert events[1].note == "Réponse positive."
     assert events[1].company_name == "Cambon Partners"
     assert events[1].segment == "Conseil M&A"
+
+
+def test_outcome_feedback_kind_keeps_non_blocking_outcomes_neutral() -> None:
+    assert outcome_feedback_kind("interested", "Réponse positive.") == "positive_outcome"
+    assert outcome_feedback_kind("meeting_booked", "RDV pris.") == "positive_outcome"
+    assert outcome_feedback_kind("negative", "Réponse négative : ne pas relancer.") == "negative_outcome"
+    assert outcome_feedback_kind("no_response", "Pas de réponse.") == "neutral_outcome"
+    assert outcome_feedback_kind("not_now", "Timing mauvais : à retenter plus tard.") == "neutral_outcome"
+    assert outcome_feedback_kind("not_relevant", "Mauvais interlocuteur.") == "neutral_outcome"
+    assert outcome_feedback_kind("not_relevant", "Douleur non confirmée.") == "negative_outcome"

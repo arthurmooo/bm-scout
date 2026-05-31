@@ -29,7 +29,7 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 
 - Supabase stocke runs, companies, contacts, preuves, scores, fiches, messages, feedbacks, outcomes, do-not-contact, lessons, email confidence, insights structurés et run steps.
 - Le worker ne fabrique pas d'email : nominatif public sourcé = `usable/high`, générique public = `verify/medium`, pattern observé = `verify/low`, absence ou no-reply = `not_usable`.
-- Les feedbacks/outcomes Romu et les entrées do-not-contact sont persistés par l'API serveur et relus par le worker, mais l'effet à volume doit encore être démontré par runs réels persistés avec compteurs d'impact non nuls.
+- Les feedbacks/outcomes Romu et les entrées do-not-contact sont persistés par l'API serveur et relus par le worker. Les outcomes neutres restent neutres dans la mémoire, mais l'effet à volume doit encore être démontré par runs réels persistés avec compteurs d'impact non nuls.
 - La persistance worker passe par RPC transactionnelle, mais doit etre reverifiee dans chaque env avant demo.
 - La console lit Supabase cote serveur si `SUPABASE_SERVICE_ROLE_KEY` existe. Elle n'affiche les fixtures demo que sans env Supabase serveur ; une base Supabase vide reste affichée comme vide.
 - Le dedoublonnage provider utilise maintenant domaine, domaine enregistrable, identité légale+pays/ville, LinkedIn et identifiant public si disponible. La persistance Supabase fusionne les nouvelles companies par `external_id` ou domaine et priorise Core sur Exploration ; la rétro-fusion d'anciens doublons historiques n'est pas encore industrialisée.

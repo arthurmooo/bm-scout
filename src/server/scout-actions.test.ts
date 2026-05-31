@@ -33,6 +33,15 @@ describe("scout actions", () => {
 
     expect(result.ok).toBe(true);
     expect(calls).toContainEqual({ table: "scout_companies", op: "update", payload: { verdict: "validate" } });
+    expect(calls).toContainEqual({
+      table: "scout_feedback",
+      op: "insert",
+      payload: {
+        company_id: "company-1",
+        kind: "good_lead",
+        note: "Lead validé par Romu."
+      }
+    });
     expect(calls.some((call) => call.table === "scout_action_events" && call.op === "insert")).toBe(true);
   });
 
@@ -119,6 +128,65 @@ describe("scout actions", () => {
         note: "Très bon angle reporting deal-by-deal."
       }
     });
+  });
+
+  it("persiste les rejets et exclusions comme feedbacks bad_lead exploitables", async () => {
+    reset();
+
+    const rejected = await recordScoutAction({
+      action: "reject_lead",
+      leadId: "core-cambon",
+      reason: "Mauvais secteur pour cette semaine."
+    });
+    const excluded = await recordScoutAction({
+      action: "exclude_lead",
+      leadId: "core-cambon",
+      reason: "À exclure : déjà contacté."
+    });
+
+    expect(rejected.ok).toBe(true);
+    expect(excluded.ok).toBe(true);
+    expect(calls).toContainEqual({
+      table: "scout_feedback",
+      op: "insert",
+      payload: {
+        company_id: "company-1",
+        kind: "bad_lead",
+        note: "Mauvais secteur pour cette semaine."
+      }
+    });
+    expect(calls).toContainEqual({
+      table: "scout_feedback",
+      op: "insert",
+      payload: {
+        company_id: "company-1",
+        kind: "bad_lead",
+        note: "À exclure : déjà contacté."
+      }
+    });
+  });
+
+  it("place un lead en surveillance sans l'assimiler a un opt-out", async () => {
+    reset();
+
+    const result = await recordScoutAction({
+      action: "watch_lead",
+      leadId: "core-cambon",
+      note: "À surveiller : à retenter plus tard."
+    });
+
+    expect(result.ok).toBe(true);
+    expect(calls).toContainEqual({ table: "scout_companies", op: "update", payload: { verdict: "watch" } });
+    expect(calls).toContainEqual({
+      table: "scout_outcomes",
+      op: "insert",
+      payload: {
+        company_id: "company-1",
+        outcome: "not_now",
+        note: "À surveiller : à retenter plus tard."
+      }
+    });
+    expect(calls.some((call) => call.table === "scout_do_not_contact")).toBe(false);
   });
 
   it("rejette les messages quand Romu signale un message trop generique", async () => {

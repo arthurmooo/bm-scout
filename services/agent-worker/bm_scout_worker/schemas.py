@@ -14,6 +14,7 @@ FeedbackKind = Literal[
     "good_angle",
     "positive_outcome",
     "negative_outcome",
+    "neutral_outcome",
     "do_not_contact",
 ]
 

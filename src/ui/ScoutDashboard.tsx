@@ -15,8 +15,41 @@ import {
   UserX,
   X
 } from "lucide-react";
-import type { AgentTask, ScoutLead, ScoutSnapshot, StructuredInsights } from "@/domain/types";
+import type { ReactNode } from "react";
+import type { AgentTask, LeadActionType, ScoutLead, ScoutSnapshot, StructuredInsights } from "@/domain/types";
 import { ScoutActionButton } from "./ScoutActionButton";
+
+type QuickFeedbackAction = {
+  label: string;
+  action: LeadActionType;
+  note?: string;
+  reason?: string;
+  danger?: boolean;
+};
+
+const leadFeedbackActions: QuickFeedbackAction[] = [
+  { label: "Très bon", action: "feedback_good_lead", note: "Très bon lead : fort potentiel, bon secteur, bon timing." },
+  { label: "Bon secteur", action: "feedback_good_lead", note: "Bon secteur : à renforcer dans le scoring." },
+  { label: "Bon contact", action: "feedback_good_lead", note: "Bon contact : persona exploitable pour Romu." },
+  { label: "Trop petit", action: "feedback_bad_lead", note: "Mauvais lead : trop petit." },
+  { label: "Mauvais secteur", action: "feedback_bad_lead", note: "Mauvais secteur pour BM Scout." },
+  { label: "Douleur faible", action: "feedback_bad_lead", note: "Mauvais lead : douleur faible." },
+  { label: "Peu sourcé", action: "feedback_bad_lead", note: "Mauvais lead : pas assez sourcé.", danger: true },
+  { label: "Déjà contacté", action: "feedback_bad_lead", note: "Mauvais lead : déjà contacté.", danger: true },
+  { label: "À surveiller", action: "watch_lead", note: "À surveiller : à retenter plus tard." },
+  { label: "À exclure", action: "exclude_lead", reason: "À exclure : feedback Romu.", danger: true }
+];
+
+const messageFeedbackActions: QuickFeedbackAction[] = [
+  { label: "Utilisable", action: "feedback_good_angle", note: "Message utilisable tel quel : ton direct et angle pertinent." },
+  { label: "Très bon angle", action: "feedback_good_angle", note: "Très bon angle : reporting, documents et relances." },
+  { label: "À raccourcir", action: "feedback_generic_message", note: "Message à raccourcir." },
+  { label: "Générique", action: "feedback_generic_message", note: "Message trop générique." },
+  { label: "Mauvais angle", action: "feedback_generic_message", note: "Message mauvais angle." },
+  { label: "Trop IA", action: "feedback_generic_message", note: "Message trop IA." },
+  { label: "Trop commercial", action: "feedback_generic_message", note: "Message trop commercial." },
+  { label: "Pas direct", action: "feedback_generic_message", note: "Message pas assez direct." }
+];
 
 const navItems = [
   { label: "Aujourd'hui", icon: CircleDot, active: true },
@@ -181,12 +214,46 @@ function PrimaryLead({ lead }: { lead: ScoutLead }) {
           <ScoutActionButton className="button compact danger" action="exclude_lead" leadId={lead.id} reason="Exclusion manuelle Romu."><Ban size={15} /> Exclure</ScoutActionButton>
         </div>
       </details>
+      <QuickFeedbackPanel lead={lead} title="Raisons lead" icon={<CircleDot size={15} />} actions={leadFeedbackActions} />
+      <QuickFeedbackPanel lead={lead} title="Feedback message" icon={<Clipboard size={15} />} actions={messageFeedbackActions} />
       <details className="deep-card">
         <summary><FileText size={17} /> Fiche profonde</summary>
         <p>{lead.deepCard}</p>
         <InsightBlock lead={lead} />
       </details>
     </article>
+  );
+}
+
+function QuickFeedbackPanel({
+  lead,
+  title,
+  icon,
+  actions
+}: {
+  lead: ScoutLead;
+  title: string;
+  icon: ReactNode;
+  actions: QuickFeedbackAction[];
+}) {
+  return (
+    <details className="secondary-actions">
+      <summary>{icon}{title}</summary>
+      <div className="secondary-action-grid">
+        {actions.map((item) => (
+          <ScoutActionButton
+            className={`button compact ${item.danger ? "danger" : ""}`}
+            action={item.action}
+            leadId={lead.id}
+            note={item.note}
+            reason={item.reason}
+            key={`${item.action}-${item.label}`}
+          >
+            {item.danger ? <X size={15} /> : <Check size={15} />} {item.label}
+          </ScoutActionButton>
+        ))}
+      </div>
+    </details>
   );
 }
 

@@ -1,7 +1,15 @@
 export type ScoutMode = "core" | "exploration";
 export type LeadVerdict = "validate" | "enrich" | "watch" | "reject";
 export type QualityDecision = "pass" | "needs_enrichment" | "blocked";
-export type FeedbackKind = "good_lead" | "bad_lead" | "generic_message" | "good_angle" | "positive_outcome" | "negative_outcome" | "do_not_contact";
+export type FeedbackKind =
+  | "good_lead"
+  | "bad_lead"
+  | "generic_message"
+  | "good_angle"
+  | "positive_outcome"
+  | "negative_outcome"
+  | "neutral_outcome"
+  | "do_not_contact";
 export type ProductReadiness = "demo_ready" | "pilot_candidate" | "production_not_ready" | "ready_for_internal_test_only";
 export type AgentTaskStatus = "queued" | "running" | "blocked" | "completed" | "failed" | "cancelled";
 export type AgentTaskType =

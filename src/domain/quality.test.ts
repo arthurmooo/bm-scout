@@ -122,6 +122,25 @@ describe("quality gates", () => {
     expect(blocked?.outreach.followUp.toLowerCase()).toContain("bloqué");
   });
 
+  it("ne traite pas un outcome neutre comme un rejet ou un opt-out", () => {
+    const source = coreCandidates[0];
+    const feedbacks: FeedbackEvent[] = [
+      {
+        id: "outcome-no-response",
+        leadId: source.id,
+        kind: "neutral_outcome",
+        note: "Pas de réponse : à surveiller sans opt-out.",
+        createdAt: new Date().toISOString()
+      }
+    ];
+
+    const run = runScoutMission("core", { feedbacks });
+    const lead = run.leads.find((item) => item.id === source.id);
+
+    expect(lead).toBeDefined();
+    expect(run.rejected.find((item) => item.id === source.id)?.rejectionReason).toBeUndefined();
+  });
+
   it("renforce un angle valide et regenere un message trop generique", () => {
     const run = runScoutMission("core", { feedbacks: seedFeedbacks() });
     const cambon = run.leads.find((lead) => lead.id === "core-cambon");

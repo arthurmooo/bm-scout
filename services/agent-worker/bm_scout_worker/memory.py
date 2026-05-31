@@ -83,13 +83,14 @@ class SupabaseMemory:
 
     def _outcome_event(self, row: dict[str, Any]) -> FeedbackEvent:
         outcome = str(row.get("outcome") or "")
-        kind: FeedbackKind = "positive_outcome" if outcome in {"interested", "meeting_booked"} else "negative_outcome"
+        note = str(row.get("note") or f"Outcome: {outcome}")
+        kind = outcome_feedback_kind(outcome, note)
         company = self._company_context(row)
         return FeedbackEvent(
             id=f"outcome-{row['id']}",
             lead_id=str(row.get("company_id") or "unknown"),
             kind=kind,
-            note=str(row.get("note") or f"Outcome: {outcome}"),
+            note=note,
             created_at=row["occurred_at"],
             company_name=company.get("name"),
             segment=company.get("segment"),
@@ -145,3 +146,14 @@ class SupabaseMemory:
             body = error.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"Supabase request failed for {path}: {error.code} {body}") from error
         return json.loads(body) if body else None
+
+
+def outcome_feedback_kind(outcome: str, note: str) -> FeedbackKind:
+    if outcome in {"interested", "meeting_booked"}:
+        return "positive_outcome"
+    if outcome == "negative":
+        return "negative_outcome"
+    normalized_note = note.lower()
+    if outcome == "not_relevant" and ("douleur non" in normalized_note or "pain not" in normalized_note):
+        return "negative_outcome"
+    return "neutral_outcome"

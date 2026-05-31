@@ -223,25 +223,37 @@ async function applyLeadMutation(input: ScoutActionInput, companyId: string): Pr
 
   if (input.action === "validate_lead") {
     await checked(client.from("scout_companies").update({ verdict: "validate" }).eq("id", companyId));
+    await insertFeedback(companyId, "good_lead", input.note ?? input.reason ?? "Lead validé par Romu.");
   }
   if (input.action === "reject_lead") {
+    const note = input.reason ?? input.note ?? "Rejet manuel Romu.";
     await checked(
       client
         .from("scout_companies")
-        .update({ verdict: "reject", rejection_reason: input.reason ?? input.note ?? "Rejet manuel Romu." })
+        .update({ verdict: "reject", rejection_reason: note })
         .eq("id", companyId)
     );
+    await insertFeedback(companyId, "bad_lead", note);
   }
   if (input.action === "watch_lead") {
     await checked(client.from("scout_companies").update({ verdict: "watch" }).eq("id", companyId));
+    await checked(
+      client.from("scout_outcomes").insert({
+        company_id: companyId,
+        outcome: "not_now",
+        note: input.note ?? input.reason ?? "À surveiller : décision Romu sans rejet."
+      })
+    );
   }
   if (input.action === "exclude_lead") {
+    const note = input.reason ?? "Exclusion manuelle Romu.";
     await checked(
       client
         .from("scout_companies")
-        .update({ verdict: "reject", rejection_reason: input.reason ?? "Exclusion manuelle Romu." })
+        .update({ verdict: "reject", rejection_reason: note })
         .eq("id", companyId)
     );
+    await insertFeedback(companyId, "bad_lead", note);
   }
   if (input.action === "request_enrichment") {
     await checked(client.from("scout_companies").update({ verdict: "enrich", quality_decision: "needs_enrichment" }).eq("id", companyId));

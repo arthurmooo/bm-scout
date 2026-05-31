@@ -8,8 +8,18 @@ from urllib.parse import urlparse
 
 from .schemas import FeedbackEvent, OutreachPack, QualityGate, ScoutLead
 
-NEGATIVE_SECTOR_KEYWORDS = ("mauvais secteur", "hors icp", "trop petit", "douleur faible")
-POSITIVE_SECTOR_KEYWORDS = ("tres bon", "très bon", "bon secteur", "fort potentiel")
+NEGATIVE_SECTOR_KEYWORDS = ("mauvais secteur", "hors icp", "trop petit", "douleur faible", "pas assez source", "pas assez sourcé")
+POSITIVE_SECTOR_KEYWORDS = ("tres bon", "très bon", "bon secteur", "bon timing", "bon contact", "fort potentiel")
+MESSAGE_REWRITE_KEYWORDS = (
+    "trop generique",
+    "trop générique",
+    "a raccourcir",
+    "à raccourcir",
+    "mauvais angle",
+    "trop ia",
+    "trop commercial",
+    "pas assez direct",
+)
 ANGLE_KEYWORDS = (
     "deal-by-deal",
     "deal",
@@ -62,7 +72,7 @@ def build_provider_feedback_memory(feedbacks: list[FeedbackEvent]) -> ProviderFe
         if feedback.kind == "good_angle":
             memory.preferred_angles.extend(extract_angles(feedback.note))
 
-        if feedback.kind == "generic_message" or "trop generique" in note or "trop générique" in note:
+        if feedback.kind == "generic_message" or has_keyword(note, MESSAGE_REWRITE_KEYWORDS):
             memory.generic_message_feedback = True
 
     memory.preferred_angles = list(dict.fromkeys(memory.preferred_angles))
