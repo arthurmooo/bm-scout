@@ -40,6 +40,13 @@ type OutcomeActionEffect = {
 
 type MessageChannel = "email" | "follow_up" | "linkedin";
 
+type ActionMutationTrace = {
+  messageId?: string;
+  messageIds?: string[];
+  channel?: MessageChannel;
+  channels?: MessageChannel[];
+};
+
 const ACTION_LABELS: Record<LeadActionType, string> = {
   validate_lead: "Lead validé.",
   reject_lead: "Lead rejeté.",
@@ -172,9 +179,10 @@ export async function recordScoutAction(input: ScoutActionInput): Promise<ScoutA
   }
 
   let mutationError: string | null = null;
+  let mutationTrace: ActionMutationTrace | null = null;
   if (companyId) {
     try {
-      await applyLeadMutation(input, companyId);
+      mutationTrace = await applyLeadMutation(input, companyId);
     } catch (error) {
       mutationError = error instanceof Error ? error.message : String(error);
     }
@@ -182,11 +190,13 @@ export async function recordScoutAction(input: ScoutActionInput): Promise<ScoutA
 
   const { error } = await client.from("scout_action_events").insert({
     company_id: companyId,
+    message_id: mutationTrace?.messageId ?? null,
     action: input.action,
     note: input.note ?? input.reason ?? ACTION_LABELS[input.action],
     payload: {
       leadId: input.leadId ?? null,
       reason: input.reason ?? null,
+      mutation: mutationTrace,
       ok: mutationError === null,
       error: mutationError
     }
@@ -217,9 +227,9 @@ async function resolveCompanyId(leadId: string): Promise<string | null> {
   return data?.id ?? null;
 }
 
-async function applyLeadMutation(input: ScoutActionInput, companyId: string): Promise<void> {
+async function applyLeadMutation(input: ScoutActionInput, companyId: string): Promise<ActionMutationTrace | null> {
   const client = createServerSupabaseClient();
-  if (!client) return;
+  if (!client) return null;
 
   if (input.action === "validate_lead") {
     await checked(client.from("scout_companies").update({ verdict: "validate" }).eq("id", companyId));
@@ -276,10 +286,10 @@ async function applyLeadMutation(input: ScoutActionInput, companyId: string): Pr
     await checked(client.from("scout_messages").update({ status: "blocked" }).eq("company_id", companyId));
     await insertFeedback(companyId, "do_not_contact", input.reason ?? input.note ?? "Do-not-contact manuel Romu.");
   }
-  if (input.action === "copy_email") await markMessageCopied(companyId, "email");
-  if (input.action === "copy_follow_up") await markMessageCopied(companyId, "follow_up");
-  if (input.action === "copy_linkedin") await markMessageCopied(companyId, "linkedin");
-  if (input.action === "mark_message_used") await markMessagesUsed(companyId);
+  if (input.action === "copy_email") return markMessageCopied(companyId, "email");
+  if (input.action === "copy_follow_up") return markMessageCopied(companyId, "follow_up");
+  if (input.action === "copy_linkedin") return markMessageCopied(companyId, "linkedin");
+  if (input.action === "mark_message_used") return markMessagesUsed(companyId);
   if (input.action === "rerun_qc") {
     await checked(
       client
@@ -310,25 +320,27 @@ async function applyLeadMutation(input: ScoutActionInput, companyId: string): Pr
     if (outcome.companyPatch) await updateCompany(companyId, outcome.companyPatch(note));
     if (outcome.hardGateFollowUps) await hardGateFutureContactAfterNegativeOutcome(companyId, note);
   }
+
+  return null;
 }
 
-async function markMessageCopied(companyId: string, channel: MessageChannel): Promise<void> {
+async function markMessageCopied(companyId: string, channel: MessageChannel): Promise<ActionMutationTrace> {
   const client = createServerSupabaseClient();
-  if (!client) return;
-  await assertMessageCopyAllowed(companyId, channel);
+  if (!client) return {};
+  const message = await assertMessageCopyAllowed(companyId, channel);
   await checked(
     client
       .from("scout_messages")
       .update({ status: "copied" })
-      .eq("company_id", companyId)
-      .eq("channel", channel)
+      .eq("id", message.id)
       .neq("status", "blocked")
   );
+  return { messageId: message.id, channel };
 }
 
-async function assertMessageCopyAllowed(companyId: string, channel: MessageChannel): Promise<void> {
+async function assertMessageCopyAllowed(companyId: string, channel: MessageChannel): Promise<CopyableMessageRow> {
   const client = createServerSupabaseClient();
-  if (!client) return;
+  if (!client) throw new Error("Vérification message impossible : client Supabase serveur absent.");
 
   const { data, error } = await client
     .from("scout_messages")
@@ -359,6 +371,7 @@ async function assertMessageCopyAllowed(companyId: string, channel: MessageChann
 
   if (dncError) throw new Error(`Vérification do-not-contact impossible: ${dncError.message}`);
   if (isDnc) throw new Error("Copie bloquée : cible do-not-contact.");
+  return message;
 }
 
 async function assertNoBlockingOutcome(companyId: string): Promise<void> {
@@ -377,19 +390,23 @@ async function assertNoBlockingOutcome(companyId: string): Promise<void> {
   if (data) throw new Error("Copie bloquée : outcome négatif / opt-out déjà enregistré.");
 }
 
-async function markMessagesUsed(companyId: string): Promise<void> {
+async function markMessagesUsed(companyId: string): Promise<ActionMutationTrace> {
   const client = createServerSupabaseClient();
-  if (!client) return;
-  await assertMessageCopyAllowed(companyId, "email");
-  await assertMessageCopyAllowed(companyId, "follow_up");
-  await assertMessageCopyAllowed(companyId, "linkedin");
+  if (!client) return {};
+  const messages = await Promise.all([
+    assertMessageCopyAllowed(companyId, "email"),
+    assertMessageCopyAllowed(companyId, "follow_up"),
+    assertMessageCopyAllowed(companyId, "linkedin")
+  ]);
+  const messageIds = Array.from(new Set(messages.map((message) => message.id)));
   await checked(
     client
       .from("scout_messages")
       .update({ status: "approved" })
-      .eq("company_id", companyId)
+      .in("id", messageIds)
       .neq("status", "blocked")
   );
+  return { messageIds, channels: ["email", "follow_up", "linkedin"] };
 }
 
 async function rejectUnblockedMessages(companyId: string): Promise<void> {

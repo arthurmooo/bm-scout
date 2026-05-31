@@ -289,6 +289,15 @@ describe("scout actions", () => {
 
     expect(result.ok).toBe(true);
     expect(calls).toContainEqual({ table: "scout_messages", op: "update", payload: { status: "approved" } });
+    expect(calls).toContainEqual({ table: "scout_messages", op: "in", payload: { column: "id", values: ["message-1"] } });
+    expect(
+      calls.some(
+        (call) =>
+          call.table === "scout_action_events" &&
+          call.op === "insert" &&
+          JSON.stringify(call.payload).includes('"messageIds":["message-1"]')
+      )
+    ).toBe(true);
     expect(calls.some((call) => JSON.stringify(call.payload).includes("sent"))).toBe(false);
   });
 
@@ -388,6 +397,17 @@ describe("scout actions", () => {
 
     expect(result.ok).toBe(true);
     expect(calls).toContainEqual({ table: "scout_messages", op: "update", payload: { status: "copied" } });
+    expect(calls).toContainEqual({ table: "scout_messages", op: "eq", payload: { column: "id", value: "message-1" } });
+    expect(
+      calls.some(
+        (call) =>
+          call.table === "scout_action_events" &&
+          call.op === "insert" &&
+          JSON.stringify(call.payload).includes('"message_id":"message-1"') &&
+          JSON.stringify(call.payload).includes('"channel":"linkedin"') &&
+          JSON.stringify(call.payload).includes('"messageId":"message-1"')
+      )
+    ).toBe(true);
   });
 });
 
@@ -407,10 +427,16 @@ function fakeTable(table: string) {
     select: () => chain,
     or: () => chain,
     order: () => chain,
-    in: () => chain,
+    in: (column: string, values: unknown[]) => {
+      calls.push({ table, op: "in", payload: { column, values } });
+      return chain;
+    },
     limit: () => chain,
     maybeSingle: () => ({ data: singleRow(table), error: null }),
-    eq: () => chain,
+    eq: (column: string, value: unknown) => {
+      calls.push({ table, op: "eq", payload: { column, value } });
+      return chain;
+    },
     neq: () => chain,
     insert: (payload: unknown) => {
       calls.push({ table, op: "insert", payload });
