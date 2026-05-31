@@ -32,7 +32,7 @@ from bm_scout_worker.providers import (
 )
 from bm_scout_worker.provider_audit import compare_providers, parse_provider_list, provider_unavailable_reason
 from bm_scout_worker.quality import mission_blockers
-from bm_scout_worker.runner import agent_max_turns, code_revision, run_bm_scout_mission
+from bm_scout_worker.runner import agent_max_turns, code_revision, derive_provider_scanned_count, run_bm_scout_mission
 from bm_scout_worker.schemas import FeedbackEvent, OutreachPack, QualityGate, RunStep, ScoutLead, StructuredInsights
 from bm_scout_worker.tool_recorder import capture_tool_calls, compact_payload
 
@@ -57,6 +57,16 @@ def test_runner_records_memory_source_metadata() -> None:
     assert runner_step.payload["python_version"]
     assert runner_step.payload["openai_agents_version"] != ""
     assert runner_step.payload["code_revision"] != ""
+
+
+def test_runner_derives_scanned_count_from_provider_discovery() -> None:
+    steps = [
+        RunStep(agent_name="bm_scout_provider", step="search_web", event_type="tool_call", payload={"discovered_count": 100}),
+        RunStep(agent_name="bm_scout_provider", step="candidate_batch", event_type="tool_call", payload={"candidate_count": 12}),
+    ]
+
+    assert derive_provider_scanned_count(steps, fallback=12) == 100
+    assert derive_provider_scanned_count([], fallback=12) == 12
 
 
 def test_exploration_does_not_generate_direct_outreach() -> None:

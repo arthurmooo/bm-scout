@@ -44,6 +44,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Provider SerpAPI : `BM_SCOUT_PROVIDER=serpapi` ou sélection auto via `SERPAPI_API_KEY`, parsing des `organic_results`, filtrage des sources faibles et run step `serpapi_search`.
 - `search_jobs` n'est plus décoratif : le provider web cherche des sources recrutement publiques, les transforme en preuves et les trace dans `run_steps`.
 - Scripts `worker:real:*` : exécution reproductible Core/Exploration réelle, avec artefacts `latest-real-*.json` consommés par `quality:readiness`, incluant modèle, provider, versions SDK, révision code, timestamps et durée. Un artefact réel ne compte pas pour la readiness si sa révision ne correspond pas au commit courant.
+- Les routines Core/Exploration transmettent maintenant leurs objectifs payload au worker Python ; le worker dérive `scanned_count` des steps provider `discovered_count`, et `quality:readiness` exige Core >= 15 scannés et Exploration >= 100 scannés.
 - Mémoire feedback TS : rejet lead, pénalité secteur, bonus angle validé, régénération anti-générique.
 - Mémoire feedback worker : chargement feedbacks/outcomes Supabase avec contexte entreprise/segment/site, chargement direct de `scout_do_not_contact`, blocage DNC/rejets par domaine/hash email, pénalités segments faibles, bonus angles validés et régénération anti-générique dans le provider Python.
 - Worker Pydantic : contrat Observé/Inféré/Incertain, email confidence, run steps.

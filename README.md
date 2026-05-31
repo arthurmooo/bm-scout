@@ -77,6 +77,7 @@ npm run provider:compare
 
 `agent:schedule` affiche le plan sans persistance. `agent:schedule:run` met des tâches en file dans Supabase si l'env serveur est configurée.
 `agent:tasks` lit la queue Supabase sans exécuter. `agent:tasks:offline` consomme la queue avec le worker déterministe. `agent:tasks:real` consomme la queue avec OpenAI Agents SDK et `--persist`.
+Les tâches Core/Exploration transmettent leurs objectifs au worker : `coreWeeklyTarget` devient `BM_SCOUT_CORE_TARGET`, `explorationScanTarget` devient `BM_SCOUT_EXPLORATION_SCAN_TARGET` et `explorationShortlistTarget` borne `BM_SCOUT_FETCH_LIMIT`.
 `agent:tasks:recover-stale` marque comme failed les tâches `running` depuis plus de 90 minutes avant de consommer la queue offline ; utiliser `-- --stale-minutes=...` pour ajuster. Si une tâche stale est récupérée, la commande sort en échec pour rendre l'incident visible.
 `agent:cron:evidence` est le wrapper utilisé par GitHub Actions : il met en file les routines dues, consomme jusqu'à 10 tâches, écrit `artifacts/agent-tasks/latest-ci-run.json` et échoue si le run n'est pas une vraie preuve `agent:tasks:real` avec secrets.
 `provider:compare` compare SerpAPI, OpenAI web et fallback web sur Core/Exploration et écrit `artifacts/provider-comparison/latest-comparison.json`.
@@ -95,6 +96,7 @@ npm run provider:compare
 ```
 
 `quality:runs` valide seulement le socle fixture. `quality:readiness` doit rester bloquant tant que BM Scout est `production_not_ready`; les artefacts réels doivent indiquer une mémoire Supabase, un DNC Supabase chargé, des métadonnées runtime auditables et une révision code compatible avec le commit courant pour prouver le learning runtime.
+Les artefacts worker réels ne comptent plus pour la readiness s'ils ne prouvent pas `scanned_count >= 15` en Core et `scanned_count >= 100` en Exploration.
 `quality:readiness` attend aussi un artefact cron GitHub Actions `artifacts/agent-tasks/latest-ci-run.json` en mode `real`, avec secrets Supabase/OpenAI présents, transitions `completed`, zéro tâche récupérée/échouée/bloquée et révision courante.
 `verify:supabase` écrit aussi `artifacts/supabase-runtime/latest-verify.json`. `quality:readiness` peut utiliser cet artefact si l'env Supabase serveur n'est pas présente au moment du gate, mais uniquement si l'artefact est `pass`, porte la révision courante, contient des compteurs runtime complets et n'a pas été produit par un worktree `-dirty`.
 `provider:compare` est un gate de recherche réelle : sans `SERPAPI_API_KEY` ou `OPENAI_API_KEY`, un échec est attendu et doit rester visible. Sa preuve `latest-comparison.json` doit aussi porter une révision code courante pour compter dans `quality:readiness`.

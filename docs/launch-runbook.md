@@ -148,6 +148,8 @@ npm run agent:tasks:recover-stale
 
 `agent:tasks:recover-stale` récupère d'abord les tâches `running` depuis plus de 90 minutes en les marquant `failed`, puis consomme la queue offline. Si une tâche stale est récupérée, la commande sort non-zero pour alerter sur l'incident. Pour un seuil différent : `npm run agent:tasks:offline -- --recover-stale --stale-minutes=30`.
 
+Le runner transmet les volumes de `scout_agent_tasks.payload` au worker Python : Core utilise `BM_SCOUT_CORE_TARGET`, Exploration utilise `BM_SCOUT_EXPLORATION_SCAN_TARGET` et borne le fetch par `explorationShortlistTarget`.
+
 Limite actuelle : le scheduler sait mettre en file les 6 routines P0, mais le cron production reste à prouver avec secrets. `agent:tasks:real` lance le worker OpenAI Agents SDK et requiert `OPENAI_API_KEY`.
 Les actions Romu de feedback et outcome écrivent `scout_feedback` / `scout_outcomes`, puis les runs suivants les rechargent via le worker. Cela doit être prouvé par comparaison avant/après sur un run Supabase réel avant tout statut pilote.
 
@@ -263,6 +265,7 @@ npm run quality:readiness
 ```
 
 `quality:readiness` doit echouer tant que la V1 n'a pas les preuves runtime serveur completes. Il ne faut pas contourner ce gate en interpretant `quality:runs` comme une validation produit.
+Les artefacts `latest-real-*.json` doivent prouver `scanned_count >= 15` pour Core et `scanned_count >= 100` pour Exploration. Un run réel réduit par seeds trop courtes ou un smoke provider ne suffit pas à lever le blocker de volume PRD.
 `verify:supabase` écrit `artifacts/supabase-runtime/latest-verify.json` à chaque exécution, y compris en échec d'env. `quality:readiness` accepte cette preuve uniquement si elle est `pass`, générée par la révision courante, non `-dirty`, avec runs, leads, rejets QC, lessons, tasks, feedbacks, outcomes, DNC, run steps, traces et actions Romu persistés.
 
 ## Decision de lancement

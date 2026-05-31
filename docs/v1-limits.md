@@ -22,6 +22,7 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 - OpenAI `web_search` est branché et testé sur Core et Exploration. Dernier smoke provider réel : `15/15` comptes Core et `100/100` comptes Exploration découverts avec shortlist bornée.
 - `provider:compare` mesure la couverture des providers, mais ne remplace pas un run Agents SDK persisté ni une validation commerciale Romu.
 - Les volumes PRD 15 Core / 100 Exploration sont prouvés côté comparaison provider OpenAI web, pas encore comme routine persistée Supabase/cron.
+- Les tâches Core/Exploration transmettent maintenant leurs objectifs au worker Python, et `quality:readiness` refuse les artefacts réels dont `scanned_count` reste sous 15/100.
 
 ## Limites data
 

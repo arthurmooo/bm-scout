@@ -152,8 +152,22 @@ Contraintes de sortie :
         output = final_output.to_mission_output()
     else:
         output = MissionAgentOutput.model_validate(final_output).to_mission_output()
+    output.scanned_count = derive_provider_scanned_count(candidate_batch.run_steps, fallback=len(candidates))
+    output.kept_count = len(output.leads)
+    output.rejected_count = len(output.rejected)
     output.run_steps = [provider_step, *candidate_batch.run_steps, *tool_steps, *output.run_steps]
     return output
+
+
+def derive_provider_scanned_count(run_steps: list[RunStep], *, fallback: int) -> int:
+    discovered_counts = [
+        int(step.payload["discovered_count"])
+        for step in run_steps
+        if step.step == "search_web" and isinstance(step.payload.get("discovered_count"), int)
+    ]
+    if discovered_counts:
+        return max(discovered_counts)
+    return fallback
 
 
 def agent_max_turns() -> int:

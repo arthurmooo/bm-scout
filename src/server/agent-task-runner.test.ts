@@ -14,6 +14,7 @@ import {
   createCliAgentTaskExecutor,
   processAgentTaskQueue,
   runWorkerCliForEvidence,
+  workerEnvForTask,
   workerEvidenceFileName
 } from "./agent-task-runner";
 
@@ -250,6 +251,21 @@ describe("agent task runner", () => {
       "latest-real-exploration-supabase-persist.json"
     );
     expect(workerEvidenceFileName("core", { real: false, persist: true })).toBe("latest-cli-persist-offline.json");
+  });
+
+  it("transmet les objectifs PRD des agent_tasks au worker Python", () => {
+    expect(
+      workerEnvForTask(task({ id: "task-core", type: "weekly_core_research", payload: { coreWeeklyTarget: 15 } }))
+    ).toEqual({ BM_SCOUT_CORE_TARGET: "15" });
+    expect(
+      workerEnvForTask(
+        task({
+          id: "task-exploration",
+          type: "weekly_exploration_scan",
+          payload: { explorationScanTarget: 100, explorationShortlistTarget: 12 }
+        })
+      )
+    ).toEqual({ BM_SCOUT_EXPLORATION_SCAN_TARGET: "100", BM_SCOUT_FETCH_LIMIT: "12" });
   });
 
   it("ecrase l'artefact attendu avec un verdict fail si le worker ne retourne pas de JSON", async () => {

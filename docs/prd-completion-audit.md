@@ -11,8 +11,8 @@ Verdict courant : `production_not_ready`.
 | Console interne orientée décision Romu | Partiel | `src/ui/ScoutDashboard.tsx`, build OK |
 | Séparation Core / Exploration | Partiel | `ScoutMode`, fixtures, workflows locaux |
 | Proactivité réelle | Partiel | `scout_agent_tasks` appliqué Supabase, scheduler local idempotent des 6 routines P0, index DB anti-doublon actif, runner queue Core/Exploration + routines brief/learning/DNC/followup déterministes, cron GitHub Actions avec artefact de preuve, mais non encore exécuté avec secrets |
-| 15 leads Core / semaine | Partiel | Provider OpenAI web prouve 15 candidats scannés en smoke ; pas encore un run hebdo Supabase persisté |
-| 100 comptes Exploration scannés | Partiel | Provider OpenAI web prouve 100 comptes scannés en smoke ; pas encore un run hebdo Supabase persisté |
+| 15 leads Core / semaine | Partiel | Provider OpenAI web prouve 15 candidats scannés en smoke ; les payloads agent_tasks sont transmis au worker, mais pas encore un run hebdo Supabase persisté |
+| 100 comptes Exploration scannés | Partiel | Provider OpenAI web prouve 100 comptes scannés en smoke ; les payloads agent_tasks sont transmis au worker, mais pas encore un run hebdo Supabase persisté |
 | Vraie recherche marché | Partiel | Provider SerpAPI + OpenAI `web_search` + fallback web public + job search minimal + tools métier ; OpenAI web prouvé à volume en smoke provider |
 | Fiches courtes/profondes | Partiel | Modèle et fixtures, pas encore toutes issues providers réels |
 | Observé / Inféré / Incertain | Couvert en socle | Types TS, worker Pydantic, QC Observé/evidence, colonne `structured_insights` Supabase |
@@ -30,6 +30,7 @@ Verdict courant : `production_not_ready`.
 
 - P0.1 Proactivité : table tasks, statuts, types de tâches, scheduler local idempotent couvrant les 6 routines P0, index DB anti-doublon actif, lancement manuel, runner de queue, routines brief/learning/DNC/followup et workflow cron GitHub Actions avec artefact auditable posés.
 - P0.2/P0.3 Preuve runs réels : harnais `worker:real:*` ajouté pour produire les artefacts `latest-real-*.json` sans passer par fixtures.
+- P0.2 Volumes : les objectifs `coreWeeklyTarget`, `explorationScanTarget` et `explorationShortlistTarget` sont propagés au worker ; `quality:readiness` bloque un artefact réel qui ne prouve pas Core >= 15 scannés et Exploration >= 100 scannés.
 - P0.4 Do-not-contact : gate déterministe ajouté côté TS, worker offline et DB.
 - P0.5 Feedback loop : mémoire locale causale ajoutée côté TS et worker provider pour rejet, pénalité secteur, bonus angle, anti-générique et DNC ; le worker lit maintenant feedbacks, outcomes et DNC Supabase.
 - P0.6 Actions UI : actions principales, feedbacks Romu, outcomes, copie, DNC et routines branchées à une API serveur et tracées.

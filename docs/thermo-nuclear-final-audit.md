@@ -39,6 +39,7 @@ Verdict : `production_not_ready`.
 - Le provider réel ajoute des run steps outil-par-outil pour déduplication, fetch, extraction, email discovery, evidence save et scoring.
 - Les function tools Agents SDK enregistrent leurs entrées/sorties compactées pendant `Runner.run`.
 - Les scripts `worker:real:*` et le runner de queue écrivent maintenant les artefacts `latest-real-*.json` attendus par `quality:readiness`.
+- Le runner de queue transmet les volumes PRD au worker ; le worker dérive `scanned_count` des steps provider, et la readiness vérifie explicitement les volumes Core/Exploration.
 - Un workflow GitHub Actions cron/dispatch existe pour consommer `scout_agent_tasks` et écrire une preuve `latest-ci-run.json`.
 - Les actions Romu passent par une route serveur et une table d'événements.
 - Les copies email/relance/LinkedIn ne touchent plus le presse-papiers avant validation serveur, et le serveur bloque une copie ou approbation de message DNC, QC bloquée ou email non utilisable.

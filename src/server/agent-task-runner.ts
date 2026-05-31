@@ -252,6 +252,7 @@ export interface WorkerCliOptions {
   artifactsDir?: string;
   evidenceDir?: string;
   includeWeak?: boolean;
+  env?: Record<string, string>;
   loadSnapshot?: () => Promise<ScoutSnapshot | null>;
 }
 
@@ -267,10 +268,10 @@ export function createCliAgentTaskExecutor(options: WorkerCliOptions = { real: f
   return {
     async execute(task) {
       if (task.type === "weekly_core_research") {
-        return runWorkerCli("core", options);
+        return runWorkerCli("core", optionsWithTaskPayload(options, task));
       }
       if (task.type === "weekly_exploration_scan") {
-        return runWorkerCli("exploration", options);
+        return runWorkerCli("exploration", optionsWithTaskPayload(options, task));
       }
       if (task.type === "daily_brief") {
         return executeDailyBrief(options);
@@ -475,7 +476,7 @@ export async function runWorkerCliForEvidence(
   if (options.includeWeak) args.push("--include-weak");
   if (options.persist !== false) args.push("--persist");
 
-  const result = await runProcess(pythonPath, args);
+  const result = await runProcess(pythonPath, args, options.env);
   const parsed = parseWorkerOutput(result.stdout) ?? failedWorkerOutput(mode, result);
   const evidenceFile = await writeWorkerEvidence(mode, options, parsed);
 
@@ -565,9 +566,42 @@ function defaultPythonPath(): string {
   return existsSync(localVenv) ? localVenv : "python3";
 }
 
-function runProcess(command: string, args: string[]): Promise<{ code: number | null; stdout: string; stderr: string }> {
+function optionsWithTaskPayload(options: WorkerCliOptions, task: QueuedAgentTask): WorkerCliOptions {
+  return {
+    ...options,
+    env: {
+      ...(options.env ?? {}),
+      ...workerEnvForTask(task)
+    }
+  };
+}
+
+export function workerEnvForTask(task: Pick<QueuedAgentTask, "type" | "payload">): Record<string, string> {
+  const env: Record<string, string> = {};
+  if (task.type === "weekly_core_research") {
+    env.BM_SCOUT_CORE_TARGET = String(safePositiveInt(task.payload.coreWeeklyTarget, 15));
+  }
+  if (task.type === "weekly_exploration_scan") {
+    const scanTarget = safePositiveInt(task.payload.explorationScanTarget, 100);
+    const shortlistTarget = safePositiveInt(task.payload.explorationShortlistTarget, 12);
+    env.BM_SCOUT_EXPLORATION_SCAN_TARGET = String(scanTarget);
+    env.BM_SCOUT_FETCH_LIMIT = String(Math.min(scanTarget, shortlistTarget));
+  }
+  return env;
+}
+
+function safePositiveInt(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function runProcess(
+  command: string,
+  args: string[],
+  envOverrides: Record<string, string> = {}
+): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
-    const child = spawn(command, args, { cwd: process.cwd(), env: process.env });
+    const child = spawn(command, args, { cwd: process.cwd(), env: { ...process.env, ...envOverrides } });
     const timeoutMs = workerCliTimeoutMs();
     let stdout = "";
     let stderr = "";

@@ -268,6 +268,7 @@ function renderReport(
             [
               `- ${item.name} : ${item.verdict}`,
               `trace : ${item.traceId}`,
+              `scannés : ${item.scannedCount}`,
               `leads retenus : ${item.keptCount}`,
               `rejetes : ${item.rejectedCount}`,
               `lessons : ${item.lessonCount}`,
@@ -360,6 +361,7 @@ interface RealRunnerEvidence {
   traceId: string;
   mode: "core" | "exploration";
   keptCount: number;
+  scannedCount: number;
   rejectedCount: number;
   lessonCount: number;
   finalDecision: "ready" | "not_ready";
@@ -392,6 +394,7 @@ async function loadRealRunnerEvidence(currentRevision: string): Promise<RealRunn
         trace_id?: string;
         mode?: "core" | "exploration";
         kept_count?: number;
+        scanned_count?: number;
         rejected_count?: number;
         lessons?: { lesson?: string; recommendation?: string; source?: string }[];
         final_decision?: "ready" | "not_ready";
@@ -408,6 +411,7 @@ async function loadRealRunnerEvidence(currentRevision: string): Promise<RealRunn
       traceId: payload.output.trace_id,
       mode: payload.output.mode ?? (target.name.toLowerCase().includes("exploration") ? "exploration" : "core"),
       keptCount: payload.output.kept_count ?? 0,
+      scannedCount: payload.output.scanned_count ?? 0,
       rejectedCount: payload.output.rejected_count ?? 0,
       lessonCount,
       finalDecision: payload.output.final_decision ?? "not_ready",
@@ -811,6 +815,8 @@ function buildProductBlockers(
   );
   const hasCore = eligibleRealEvidence.some((item) => item.mode === "core" && item.finalDecision === "ready");
   const hasExploration = eligibleRealEvidence.some((item) => item.mode === "exploration" && item.finalDecision === "ready");
+  const hasCoreVolume = eligibleRealEvidence.some((item) => item.mode === "core" && item.scannedCount >= 15);
+  const hasExplorationVolume = eligibleRealEvidence.some((item) => item.mode === "exploration" && item.scannedCount >= 100);
   const hasSupabaseCore = eligibleRealEvidence.some((item) => item.mode === "core" && item.sourceFile.includes("supabase-persist"));
   const hasSupabaseExploration = eligibleRealEvidence.some((item) => item.mode === "exploration" && item.sourceFile.includes("supabase-persist"));
   const hasLearningFromFeedback = eligibleRealEvidence.some(
@@ -853,6 +859,9 @@ function buildProductBlockers(
 
   if (!hasCore || !hasExploration) {
     blockers.push("Runs OpenAI Agents SDK réels Core et Exploration incomplets.");
+  }
+  if (!hasCoreVolume || !hasExplorationVolume) {
+    blockers.push("Runs OpenAI Agents SDK réels sans volumes PRD prouvés : Core >= 15 scannés et Exploration >= 100 scannés requis.");
   }
   for (const evidence of realEvidence.filter((item) => item.verdict === "pass" && !item.runtimeMetadataComplete)) {
     blockers.push(`Run ${evidence.traceId} sans métadonnées runtime auditables.`);
