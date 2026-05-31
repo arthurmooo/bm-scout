@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { createDueScheduledTasks, DEFAULT_ROUTINE_CONFIG } from "../src/domain/scheduler";
+import { createDueScheduledTasks, createScheduledTasks, DEFAULT_ROUTINE_CONFIG } from "../src/domain/scheduler";
 import type { AgentTaskType } from "../src/domain/types";
 import {
   createSupabaseAgentTaskSchedulerRepository,
@@ -42,6 +42,7 @@ interface AgentTaskCronEvidenceArtifact {
   blockedCount: number;
   failedCount: number;
   recoveredCount: number;
+  scheduleScope: "due" | "all_p0";
   requiredTaskTypes: AgentTaskType[];
   taskTypes: AgentTaskType[];
   completedTaskTypes: AgentTaskType[];
@@ -61,6 +62,7 @@ const mode: CronMode = argValue("--mode") === "offline" ? "offline" : "real";
 const limit = numberArg("--limit", 10);
 const staleMinutes = numberArg("--stale-minutes", 90);
 const recoverStale = !args.includes("--no-recover-stale");
+const allP0 = args.includes("--all-p0");
 const nowArg = argValue("--now");
 const taskArg = argValue("--task") as AgentTaskType | undefined;
 const now = nowArg ? new Date(nowArg) : new Date();
@@ -109,7 +111,9 @@ try {
   const scheduler = schedulerRepository!;
   const queueRepositoryReady = queueRepository!;
 
-  const tasks = createDueScheduledTasks(now, DEFAULT_ROUTINE_CONFIG, { task: taskArg });
+  const tasks = allP0
+    ? createScheduledTasks(now, DEFAULT_ROUTINE_CONFIG).filter((task) => !taskArg || task.type === taskArg)
+    : createDueScheduledTasks(now, DEFAULT_ROUTINE_CONFIG, { task: taskArg });
   const schedule = await enqueueScheduledAgentTasks(scheduler, tasks);
   const queue = await processAgentTaskQueue(
     queueRepositoryReady,
@@ -163,6 +167,7 @@ try {
       blockedCount: blocked.length,
       failedCount: failed.length,
       recoveredCount: queue.recovered.length,
+      scheduleScope: allP0 ? "all_p0" : "due",
       requiredTaskTypes: P0_TASK_TYPES,
       taskTypes: scheduledTaskTypes,
       completedTaskTypes,
@@ -216,6 +221,7 @@ function emptyArtifact(status: "pass" | "fail", blockers: string[]): AgentTaskCr
     blockedCount: 0,
     failedCount: 0,
     recoveredCount: 0,
+    scheduleScope: allP0 ? "all_p0" : "due",
     requiredTaskTypes: P0_TASK_TYPES,
     taskTypes: [],
     completedTaskTypes: [],

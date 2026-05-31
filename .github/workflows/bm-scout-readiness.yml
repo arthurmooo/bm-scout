@@ -1,0 +1,96 @@
+name: BM Scout readiness evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: "Research provider for real market runs"
+        required: true
+        default: "auto"
+        type: choice
+        options:
+          - auto
+          - openai_web
+          - serpapi
+          - web
+      run_workers:
+        description: "Run persisted Core and Exploration workers"
+        required: true
+        default: true
+        type: boolean
+      run_cron:
+        description: "Run full P0 agent_tasks evidence"
+        required: true
+        default: true
+        type: boolean
+
+jobs:
+  readiness-evidence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4.1-mini' }}
+      OPENAI_SEARCH_MODEL: ${{ vars.OPENAI_SEARCH_MODEL || vars.OPENAI_MODEL || 'gpt-4.1-mini' }}
+      BM_SCOUT_PROVIDER: ${{ inputs.provider }}
+      BM_SCOUT_SEARCH_QUERIES: ${{ vars.BM_SCOUT_SEARCH_QUERIES }}
+      BM_SCOUT_WORKER_TIMEOUT_MS: ${{ vars.BM_SCOUT_WORKER_TIMEOUT_MS || '900000' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - run: python -m venv .venv
+      - run: .venv/bin/python -m pip install -e "services/agent-worker[dev]"
+      - name: Static gates
+        run: |
+          npm run test
+          npm run typecheck
+          npm run lint
+          npm run worker:test
+          npm run build
+      - name: Provider comparison
+        continue-on-error: true
+        run: npm run provider:compare
+      - name: Feedback loop evidence
+        continue-on-error: true
+        run: npm run feedback:evidence
+      - name: Persisted Core worker evidence
+        if: ${{ inputs.run_workers }}
+        continue-on-error: true
+        run: npm run worker:real:core:persist
+      - name: Persisted Exploration worker evidence
+        if: ${{ inputs.run_workers }}
+        continue-on-error: true
+        run: npm run worker:real:exploration:persist
+      - name: Full P0 cron evidence
+        if: ${{ inputs.run_cron }}
+        continue-on-error: true
+        run: npm run agent:cron:evidence -- --mode=real --limit=10 --stale-minutes=90 --all-p0
+      - name: Supabase runtime verification
+        continue-on-error: true
+        run: npm run verify:supabase
+      - name: Final readiness gate
+        run: npm run quality:readiness
+      - name: Upload readiness artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bm-scout-readiness-evidence
+          path: |
+            artifacts/agent-worker-real/*.json
+            artifacts/agent-tasks/*.json
+            artifacts/feedback-loop/*.json
+            artifacts/provider-comparison/*.json
+            artifacts/supabase-runtime/*.json
+            artifacts/quality-runs/*.json
+            artifacts/quality-runs/*.md
+          if-no-files-found: warn

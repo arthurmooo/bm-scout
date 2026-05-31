@@ -60,6 +60,7 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 
 - Le cron GitHub Actions consomme vraiment `scout_agent_tasks` via `agent:tasks:real` avec secrets configurés, complète les 6 routines P0 et produit des traces worker Core/Exploration.
 - `artifacts/agent-tasks/latest-ci-run.json` vient d'une exécution GitHub Actions `real`, sur la révision courante, avec transitions `completed` et zéro tâche échouée/bloquée/récupérée.
+- Le workflow manuel `BM Scout readiness evidence` produit les artefacts provider, feedback, worker persisté, cron, Supabase runtime et quality final sur la révision courante.
 - `BM_SCOUT_AUTH_MODE=internal` est activé hors démo, avec `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` et comptes internes autorisés.
 - Les providers reels dépassent les seeds configurées, scannent réellement le marché et prouvent la qualité des sources ; OpenAI web est prouvé en smoke Core/Exploration à volume PRD, SerpAPI reste à brancher pour comparaison provider.
 - `artifacts/provider-comparison/latest-comparison.json` recommande un provider réel couvrant Core et Exploration à volume configuré/PRD, avec métadonnées runtime et révision code courante.

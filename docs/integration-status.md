@@ -26,6 +26,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Runner de queue : `src/server/agent-task-runner.ts` et `scripts/run-agent-task-queue.ts`, avec claim `queued -> running` conditionné au statut, récupération explicite des tâches `running` trop anciennes, et transitions terminales limitées aux tâches encore `running`, pour éviter deux runners, un process mort ou une annulation écrasée.
 - Routines non-worker : Daily Brief, Learning Review, DNC check et followup review lisent le snapshot Supabase runtime, produisent un résumé actionnable ou se bloquent si aucun run persistant n'existe.
 - Cron GitHub Actions versionné : `.github/workflows/bm-scout-agent-tasks.yml`, maintenant branché sur `agent:cron:evidence` avec artefact `artifacts/agent-tasks/latest-ci-run.json`, qui doit prouver les 6 routines P0 complétées et les traces worker Core/Exploration.
+- Workflow manuel readiness complet : `.github/workflows/bm-scout-readiness.yml` lance tests, provider comparison, feedback loop, workers persistés, cron `--all-p0`, `verify:supabase` et `quality:readiness`, puis upload tous les artefacts.
 - Tests scheduler avec routines Core, Exploration, Daily Brief, Learning, DNC, followup.
 - Migration Supabase `20260530210927_agent_tasks_and_actions.sql`.
 - Migration Supabase `20260531030736_agent_tasks_active_dedupe.sql` : index unique partiel pour empêcher deux tâches `queued/running` identiques sur le même créneau.
@@ -91,7 +92,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 ## Vérifications exécutées
 
-- `npm run test` : 89 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/outcome négatif/email incertain bloquée, routines DNC/followup lançables, indexes FK Supabase, index anti-doublon, fusion Supabase company par `external_id`/domaine, preuve `verify:supabase` de fusion RPC avec cleanup, cron readiness couvrant les 6 routines P0, worker réel persisté refusé sous volume PRD, exception explicite `feedback_loop` pour la preuve causale contrôlée, affichage inéligible des anciens artefacts `pass`, policy Auth BM Scout, actions Romu, provider runtime des preuves et scénario `feedback:evidence`.
+- `npm run test` : 91 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/outcome négatif/email incertain bloquée, routines DNC/followup lançables, indexes FK Supabase, index anti-doublon, fusion Supabase company par `external_id`/domaine, preuve `verify:supabase` de fusion RPC avec cleanup, cron readiness couvrant les 6 routines P0, workflow GitHub readiness complet, worker réel persisté refusé sous volume PRD, exception explicite `feedback_loop` pour la preuve causale contrôlée, affichage inéligible des anciens artefacts `pass`, policy Auth BM Scout, actions Romu, provider runtime des preuves et scénario `feedback:evidence`.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.
@@ -123,5 +124,5 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 2. Ajouter `SERPAPI_API_KEY`, relancer `npm run provider:compare`, puis comparer couverture, coût et qualité des sources contre OpenAI web avant choix par défaut.
 3. Prouver les volumes PRD 15 Core / 100 Exploration en run Agents SDK persisté Supabase, pas seulement en smoke provider.
 4. Exécuter `npm run feedback:evidence` avec secrets serveur pour produire une preuve Supabase de causalité feedback, puis prouver la même mémoire sur runs marché Core/Exploration à volume.
-5. Exécuter le cron GitHub Actions avec secrets, télécharger `bm-scout-agent-task-evidence` et vérifier les transitions `queued -> completed` pour les 6 routines P0, avec traces Core/Exploration.
+5. Exécuter le workflow GitHub Actions `BM Scout readiness evidence` avec secrets, télécharger `bm-scout-readiness-evidence` et vérifier que `quality:readiness` est le gate final.
 6. Affecter les claims Supabase réels aux comptes Romu/Arthur et valider le parcours magic link sur le projet interne.

@@ -179,6 +179,8 @@ Le workflow `.github/workflows/bm-scout-agent-tasks.yml` planifie les jours ouvr
 
 Le déclenchement manuel reste possible en mode `real` ou `offline`, mais seul un artefact GitHub Actions en mode `real`, avec secrets Supabase + OpenAI, les 6 routines P0 complétées, des traces worker Core/Exploration, transitions `completed` et révision courante peut compter dans `quality:readiness`.
 
+Le workflow `.github/workflows/bm-scout-readiness.yml` est le run manuel de preuve complète. Il exécute les tests statiques, `provider:compare`, `feedback:evidence`, les workers Core/Exploration persistés, `agent:cron:evidence -- --all-p0`, `verify:supabase`, puis `quality:readiness`. Les étapes de preuve sont en `continue-on-error` pour uploader tous les artefacts ; seul le gate final décide si la branche est éligible.
+
 Secrets requis :
 
 - `NEXT_PUBLIC_SUPABASE_URL`
