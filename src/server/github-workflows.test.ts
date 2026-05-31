@@ -65,7 +65,10 @@ describe("github readiness workflows", () => {
     expect(workflow).toContain('npm run agent:cron:evidence -- --mode="$MODE" --limit=10 --stale-minutes=90');
     expect(blockerScript).toContain("latest-ci-run.json");
     expect(blockerScript).toContain("OpenAI preflight échoué");
-    expect(blockerScript).toContain("agent_tasks real non lancé");
+    expect(blockerScript).toContain("createScheduledTasks");
+    expect(blockerScript).toContain("enqueueScheduledAgentTasks");
+    expect(blockerScript).toContain("processScheduledOpenAiBlockedTasks");
+    expect(blockerScript).toContain("agent_tasks real partiellement bloqué");
     expect(blockerScript).toContain("weekly_core_research");
     expect(blockerScript).toContain("weekly_exploration_scan");
   });
