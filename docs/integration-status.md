@@ -6,7 +6,7 @@ Date : 2026-05-31
 
 Statut : `production_not_ready`.
 
-Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la démo en socle plus pilotable : tâches proactives, traces d'actions, DNC hard gate, feedback memory causale, Observé/Inféré/Incertain full-stack, auth interne SSR et dashboard moins fictif. Ce n'est pas encore un employé IA complet : la recherche web SerpAPI/OpenAI/fallback public existe, mais les volumes PRD et le cron production restent à prouver.
+Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la démo en socle plus pilotable : tâches proactives, traces d'actions, DNC hard gate, feedback memory causale, Observé/Inféré/Incertain full-stack, auth interne SSR et dashboard moins fictif. Ce n'est pas encore un employé IA complet : le provider OpenAI web prouve maintenant les volumes PRD en smoke, mais le cron production, la persistance Supabase réelle et la feedback loop runtime restent à prouver.
 
 ## Décisions reprises de l'audit
 
@@ -56,7 +56,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 - `quality:runs` reste un harnais fixture.
 - `demoSnapshot()` reste le fallback sans env Supabase serveur. Avec Supabase configuré mais vide, la console affiche un état runtime vide et les tâches, jamais les fixtures comme vérité produit.
-- Le worker réel peut découvrir des candidats sans seeds via SerpAPI, OpenAI `web_search` ou fallback web public, mais ce n'est pas encore prouvé à volume PRD.
+- Le worker réel peut découvrir des candidats sans seeds via SerpAPI, OpenAI `web_search` ou fallback web public ; OpenAI web est prouvé à volume PRD en comparaison provider, mais pas encore en run Agents SDK persisté Supabase à volume.
 - Une comparaison provider Core seule ne peut plus déclarer les volumes PRD prouvés ; `prd_volume_proven` exige Core + Exploration.
 - Les providers `search_web`, `fetch_company_site`, `search_jobs`, `find_public_emails`, `dedupe_company` existent ; `search_jobs` reste minimal et la robustesse search dépend encore des sources publiques.
 - Les volumes 15 Core / 100 Exploration sont paramétrés mais non prouvés en run réel.
@@ -84,8 +84,8 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - `npm run build` : pass.
 - `npm run quality:runs` : pass fixture, décision produit `production_not_ready`.
 - `npm run quality:readiness` : fail attendu, décision produit `production_not_ready`.
-- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 44 tests pass, dont provider SerpAPI, provider OpenAI web, schéma strict Agents SDK, verbosité OpenAI compatible, seuil Core validable, fallback jobs, parsing sources, comparaison provider et anti-faux-positif PRD sur smoke Core seul.
-- Avec `OPENAI_API_KEY` présent en env, `OPENAI_MODEL=gpt-4.1-mini`, `OPENAI_SEARCH_MODEL=gpt-4.1-mini` et `BM_SCOUT_FETCH_LIMIT=3`, `npm run provider:compare -- --providers=openai_web --modes=core,exploration` : smoke réel exécuté. Core passe QC avec 14 candidats découverts sur 15 attendus, Exploration passe QC avec 75 candidats découverts sur 100 attendus ; `openai_web` est recommandé, mais `prd_volume_proven=false`.
+- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 46 tests pass, dont provider SerpAPI, provider OpenAI web, schéma strict Agents SDK, contexte/verbosité OpenAI compatibles, surface de requêtes PRD, seuil Core validable, fallback jobs, parsing sources, comparaison provider et anti-faux-positif PRD sur smoke Core seul.
+- Avec `OPENAI_API_KEY` présent en env, `OPENAI_MODEL=gpt-4.1-mini`, `OPENAI_SEARCH_MODEL=gpt-4.1-mini` et `BM_SCOUT_FETCH_LIMIT=3`, `npm run provider:compare -- --providers=openai_web --modes=core,exploration` : pass réel. Core atteint `15/15`, Exploration atteint `100/100`, `openai_web` est recommandé et `prd_volume_proven=true`.
 - Avec `OPENAI_API_KEY` présent en env, `OPENAI_MODEL=gpt-4.1-mini`, `OPENAI_SEARCH_MODEL=gpt-4.1-mini`, `BM_SCOUT_PROVIDER=openai_web` et `BM_SCOUT_FETCH_LIMIT=2`, `npm run worker:real:core` : pass réel Agents SDK, artefact `latest-real-core.json`, 2 leads retenus, 5 lessons.
 - Avec les mêmes env, `npm run worker:real:exploration` : pass réel Agents SDK, artefact `latest-real-exploration.json`, 2 leads retenus, 5 lessons, aucun message direct.
 - Import Agents SDK manager : 13 tools disponibles, dont `WebSearchTool` et 8 tools métier provider.
@@ -105,7 +105,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 1. Fournir l'env service role au runner local/cron et tester `agent:tasks:offline` contre Supabase.
 2. Ajouter `SERPAPI_API_KEY`, relancer `npm run provider:compare`, puis comparer couverture, coût et qualité des sources contre OpenAI web avant choix par défaut.
-3. Prouver les volumes PRD 15 Core / 100 Exploration avec artefacts réels, notamment Exploration 100 comptes.
+3. Prouver les volumes PRD 15 Core / 100 Exploration en run Agents SDK persisté Supabase, pas seulement en smoke provider.
 4. Prouver la feedback loop sur scoring, messages et recommandations dans un run réel Supabase.
 5. Exécuter le cron GitHub Actions avec secrets et vérifier les transitions `queued -> completed`.
 6. Affecter les claims Supabase réels aux comptes Romu/Arthur et valider le parcours magic link sur le projet interne.

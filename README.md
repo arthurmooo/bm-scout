@@ -29,8 +29,8 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 ## Ce qui n'est pas encore prêt
 
 - Cron GitHub Actions versionné, mais pas encore prouvé par un run CI avec secrets.
-- Pas de preuve volume 15 Core / 100 Exploration en run réel.
-- Recherche marché réelle encore limitée : le worker peut utiliser SerpAPI, OpenAI `web_search` ou un fallback web public avec job search minimal, mais les volumes PRD et la qualité des sources restent à prouver en run réel.
+- La comparaison provider OpenAI web prouve désormais le scan PRD 15 Core / 100 Exploration, mais pas encore un run Agents SDK persisté Supabase à ce volume.
+- Recherche marché réelle encore limitée : le worker peut utiliser SerpAPI, OpenAI `web_search` ou un fallback web public avec job search minimal ; la couverture OpenAI est prouvée en smoke provider, mais la qualité commerciale des sources reste à valider sur runs persistés.
 - Feedback loop prouvée localement côté TS et worker Python, pas encore validée sur un run réel Supabase à volume.
 - `quality:readiness` échoue volontairement tant que ces preuves ne sont pas là.
 - Attribution réelle des comptes Romu/Arthur dans Supabase Auth à faire dans le dashboard projet : `app_metadata.bm_scout_role`, `app_metadata.bm_scout_roles` ou `app_metadata.bm_scout_access`.
@@ -51,6 +51,8 @@ Variables serveur :
 - `OPENAI_API_KEY`
 - `OPENAI_MODEL` optionnel, par défaut `gpt-5.5`
 - `OPENAI_SEARCH_MODEL` optionnel pour la découverte web OpenAI, par défaut `OPENAI_MODEL`
+- `OPENAI_SEARCH_CONTEXT_SIZE=low|medium|high` optionnel, par défaut `medium`
+- `OPENAI_SEARCH_MAX_OUTPUT_TOKENS` optionnel, par défaut `2400`
 - `SERPAPI_API_KEY` optionnel ; si présent, `auto` choisit SerpAPI avant OpenAI web.
 - `BM_SCOUT_PROVIDER=auto|serpapi|openai_web|web|configured|demo`, par défaut `auto`
 - `BM_SCOUT_SEARCH_QUERIES` optionnel pour piloter les requêtes web, format JSON ou `;`
@@ -87,7 +89,7 @@ npm run provider:compare
 
 `quality:runs` valide seulement le socle fixture. `quality:readiness` doit rester bloquant tant que BM Scout est `production_not_ready`.
 `provider:compare` est un gate de recherche réelle : sans `SERPAPI_API_KEY` ou `OPENAI_API_KEY`, un échec est attendu et doit rester visible.
-OpenAI a bien un tool officiel de recherche web via Responses API (`web_search`) et le provider `openai_web` l'utilise. Dans les smokes réels actuels, OpenAI web passe Core et Exploration en qualité, mais reste sous les volumes PRD (`14/15` Core, `75/100` Exploration) ; SerpAPI reste à brancher pour comparer le scan large.
+OpenAI a bien un tool officiel de recherche web via Responses API (`web_search`) et le provider `openai_web` l'utilise. Dans le dernier smoke réel provider, OpenAI web passe Core et Exploration à volume PRD (`15/15` Core, `100/100` Exploration) ; SerpAPI reste utile pour comparer coût, stabilité et qualité des sources.
 
 ## Worker agentique
 
@@ -106,7 +108,7 @@ cd services/agent-worker
 La persistance `--persist` passe par la RPC Supabase transactionnelle `scout_persist_mission_output`.
 Le chemin réel expose le `WebSearchTool` hébergé OpenAI dans l'orchestration Agents SDK, plus les tools métier `search_web`, `fetch_company_site`, `extract_company_signals`, `search_jobs`, `find_public_emails`, `dedupe_company`, `score_candidate`, `save_evidence`.
 Les scripts `worker:real:*` écrivent les artefacts `artifacts/agent-worker-real/latest-real-*.json` consommés par `quality:readiness`.
-SerpAPI est branché derrière le même contrat métier que `openai_web`. En `auto`, `BM_SCOUT_REAL_SEEDS` reste prioritaire, puis `SERPAPI_API_KEY`, puis OpenAI web, puis le fallback web public. OpenAI web est utile pour Core et l'enrichissement ciblé ; SerpAPI ou des requêtes mieux calibrées restent nécessaires pour prouver les volumes PRD.
+SerpAPI est branché derrière le même contrat métier que `openai_web`. En `auto`, `BM_SCOUT_REAL_SEEDS` reste prioritaire, puis `SERPAPI_API_KEY`, puis OpenAI web, puis le fallback web public. OpenAI web couvre déjà le smoke volume PRD ; SerpAPI reste à comparer avant un choix définitif de provider par défaut.
 
 ## Documentation
 

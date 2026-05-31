@@ -379,11 +379,17 @@ class OpenAIWebResearchProvider(OpenWebResearchProvider):
             response = client.responses.create(
                 model=model,
                 input=openai_search_prompt(query, region, limit),
-                tools=[{"type": "web_search", "search_context_size": "low", "user_location": openai_user_location(region)}],
+                tools=[
+                    {
+                        "type": "web_search",
+                        "search_context_size": openai_search_context_size(),
+                        "user_location": openai_user_location(region),
+                    }
+                ],
                 tool_choice="auto",
                 include=["web_search_call.action.sources"],
                 max_tool_calls=1,
-                max_output_tokens=1200,
+                max_output_tokens=openai_search_max_output_tokens(),
                 store=False,
                 text={"verbosity": openai_text_verbosity()},
                 timeout=float(os.getenv("OPENAI_SEARCH_TIMEOUT_SECONDS", "45")),
@@ -593,17 +599,24 @@ def default_search_queries(mode: ScoutMode) -> list[str]:
         return [
             "conseil M&A transaction services France",
             "cabinet corporate finance fusion acquisition France",
-            "deal advisory transaction services Paris"
+            "deal advisory transaction services Paris",
+            "boutique M&A corporate finance dirigeants PME France",
+            "transaction services due diligence financière cabinet France",
         ]
     return [
         "opérations formation B2B inscriptions documents relances France",
         "finance operations reporting multi sites documents France",
-        "services B2B processus documents relances CRM France",
         "cabinet expertise comptable collecte pièces relances clients France",
         "gestion patrimoine immobilier documents reporting investisseurs France",
         "asset management immobilier reporting portefeuille investisseurs France",
         "conseil RH paie onboarding documents relances France",
         "organisme formation Qualiopi dossiers apprenants relances France",
+        "externalisation DAF reporting consolidation PME multi sites France",
+        "administrateur de biens reporting propriétaires relances documents France",
+        "courtier assurance entreprise conformité dossiers renouvellement France",
+        "conseil paie onboarding salariés documents relances clients France",
+        "gestionnaire patrimoine immobilier reporting investisseurs documents France",
+        "cabinet audit commissariat comptes collecte pièces clients France",
     ]
 
 
@@ -660,6 +673,20 @@ Contraintes :
 def openai_text_verbosity() -> str:
     configured = os.getenv("OPENAI_TEXT_VERBOSITY", "").strip()
     return configured or "medium"
+
+
+def openai_search_context_size() -> str:
+    configured = os.getenv("OPENAI_SEARCH_CONTEXT_SIZE", "").strip()
+    return configured if configured in {"low", "medium", "high"} else "medium"
+
+
+def openai_search_max_output_tokens() -> int:
+    configured = os.getenv("OPENAI_SEARCH_MAX_OUTPUT_TOKENS", "").strip()
+    try:
+        value = int(configured or "2400")
+    except ValueError:
+        value = 2400
+    return max(800, value)
 
 
 def parse_openai_search_results(text: str, limit: int) -> list[SearchResult]:

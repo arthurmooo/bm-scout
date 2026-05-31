@@ -11,9 +11,9 @@ Verdict courant : `production_not_ready`.
 | Console interne orientée décision Romu | Partiel | `src/ui/ScoutDashboard.tsx`, build OK |
 | Séparation Core / Exploration | Partiel | `ScoutMode`, fixtures, workflows locaux |
 | Proactivité réelle | Partiel | `scout_agent_tasks` appliqué Supabase, scheduler local idempotent des 6 routines P0, index DB anti-doublon actif, runner queue Core/Exploration + routines brief/learning/DNC/followup déterministes, cron GitHub Actions versionné mais non prouvé |
-| 15 leads Core / semaine | Non prouvé | Objectif paramétré, pas de run réel à volume |
-| 100 comptes Exploration scannés | Non prouvé | Objectif paramétré, pas de run réel à volume |
-| Vraie recherche marché | Partiel | Provider SerpAPI + OpenAI `web_search` + fallback web public + job search minimal + tools métier, pas encore prouvé à volume |
+| 15 leads Core / semaine | Partiel | Provider OpenAI web prouve 15 candidats scannés en smoke ; pas encore un run hebdo Supabase persisté |
+| 100 comptes Exploration scannés | Partiel | Provider OpenAI web prouve 100 comptes scannés en smoke ; pas encore un run hebdo Supabase persisté |
+| Vraie recherche marché | Partiel | Provider SerpAPI + OpenAI `web_search` + fallback web public + job search minimal + tools métier ; OpenAI web prouvé à volume en smoke provider |
 | Fiches courtes/profondes | Partiel | Modèle et fixtures, pas encore toutes issues providers réels |
 | Observé / Inféré / Incertain | Couvert en socle | Types TS, worker Pydantic, QC Observé/evidence, colonne `structured_insights` Supabase |
 | Messages personnalisés | Partiel | QC fixture, pas de preuve provider réel à volume |
@@ -40,8 +40,8 @@ Verdict courant : `production_not_ready`.
 ## P0 encore ouverts
 
 - P0.1 : cron GitHub Actions non encore exécuté avec secrets ; transitions production à tester.
-- P0.2 Workflows Core/Exploration réels : les volumes PRD ne sont pas prouvés.
-- P0.3 Suppression de la dépendance fixtures : provider SerpAPI/OpenAI web/fallback public branché, search autonome à volume restant à prouver.
+- P0.2 Workflows Core/Exploration réels : les volumes PRD sont prouvés côté provider OpenAI web, mais pas encore comme runs persistés Supabase.
+- P0.3 Suppression de la dépendance fixtures : provider SerpAPI/OpenAI web/fallback public branché, search autonome à volume prouvé côté OpenAI web.
 - P0.5 Feedback loop réelle : impact causal prouvé localement dans TS et le worker Python, à prouver avec feedbacks/outcomes Supabase réels à volume.
 - P0.7 : socle full-stack ajouté, à valider sur runs réels persistés.
 - P1.6 : parcours magic link à vérifier avec les vrais comptes Supabase et leurs `app_metadata`.

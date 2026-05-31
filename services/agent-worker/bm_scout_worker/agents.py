@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from agents import Agent, GuardrailFunctionOutput, RunContextWrapper, WebSearchTool, output_guardrail
 
+from .providers import openai_search_context_size
 from .quality import mission_blockers
 from .schemas import MissionAgentOutput
 from .tools import (
@@ -68,7 +69,7 @@ async def bm_scout_output_quality(
 
 
 def build_manager_agent(model: str) -> Agent[None]:
-    hosted_web_search = WebSearchTool(search_context_size="low", external_web_access=True)
+    hosted_web_search = WebSearchTool(search_context_size=openai_search_context_size(), external_web_access=True)
     core_agent = Agent(
         name="Core Research Agent",
         handoff_description="Recherche et qualification Core BM.",

@@ -17,7 +17,10 @@ from bm_scout_worker.providers import (
     SearchResult,
     SerpApiResearchProvider,
     build_candidate_batch,
+    default_search_queries,
     is_company_related_result,
+    openai_search_context_size,
+    openai_search_max_output_tokens,
     openai_text_verbosity,
     parse_company_seeds,
     parse_duckduckgo_lite_results,
@@ -197,6 +200,34 @@ def test_openai_web_search_verbosity_defaults_to_model_compatible_medium(monkeyp
     monkeypatch.setenv("OPENAI_TEXT_VERBOSITY", "low")
 
     assert openai_text_verbosity() == "low"
+
+
+def test_openai_search_context_and_output_tokens_are_safe_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_SEARCH_CONTEXT_SIZE", raising=False)
+    monkeypatch.delenv("OPENAI_SEARCH_MAX_OUTPUT_TOKENS", raising=False)
+
+    assert openai_search_context_size() == "medium"
+    assert openai_search_max_output_tokens() == 2400
+
+    monkeypatch.setenv("OPENAI_SEARCH_CONTEXT_SIZE", "bad")
+    monkeypatch.setenv("OPENAI_SEARCH_MAX_OUTPUT_TOKENS", "not-a-number")
+
+    assert openai_search_context_size() == "medium"
+    assert openai_search_max_output_tokens() == 2400
+
+    monkeypatch.setenv("OPENAI_SEARCH_CONTEXT_SIZE", "high")
+    monkeypatch.setenv("OPENAI_SEARCH_MAX_OUTPUT_TOKENS", "400")
+
+    assert openai_search_context_size() == "high"
+    assert openai_search_max_output_tokens() == 800
+
+
+def test_default_queries_cover_prd_volume_scan_surface() -> None:
+    assert len(default_search_queries("core")) >= 5
+    assert len(default_search_queries("exploration")) >= 12
+    assert any("M&A" in query or "corporate finance" in query for query in default_search_queries("core"))
+    assert any("DAF" in query for query in default_search_queries("exploration"))
+    assert any("immobilier" in query for query in default_search_queries("exploration"))
 
 
 def test_auto_provider_prefers_serpapi_when_key_is_present(monkeypatch) -> None:

@@ -6,9 +6,9 @@ Verdict : `production_not_ready`.
 
 ## Findings prioritaires
 
-1. La recherche réelle existe maintenant via OpenAI `web_search` et fallback public, mais elle n'est pas encore prouvée à volume PRD.
-   - Risque : le produit ressemble encore à une démo agentique bien formée.
-   - Remède : exécuter Core/Exploration réels à volume, comparer sources/shortlists entre SerpAPI, OpenAI web et fallback public.
+1. La recherche réelle OpenAI `web_search` prouve maintenant les volumes PRD en smoke provider, mais pas encore en routine Agents SDK persistée Supabase.
+   - Risque : le provider est crédible, mais la preuve opérationnelle bout-en-bout reste incomplète.
+   - Remède : exécuter Core/Exploration réels persistés à volume, comparer sources/shortlists entre SerpAPI, OpenAI web et fallback public.
    - Garde-fou ajouté : une comparaison Core seule reste un smoke technique, mais ne peut plus produire `prd_volume_proven=true`.
 
 2. Le scheduler met maintenant en file les 6 routines P0 de façon idempotente et le runner consomme une queue, mais aucune exécution CI avec secrets n'est encore prouvée.
@@ -46,7 +46,7 @@ Verdict : `production_not_ready`.
 - Le DNC est un gate déterministe côté TS, worker offline et DB.
 - `quality:readiness` ne peut plus transformer des fixtures en claim de readiness.
 - Le dashboard ne contient plus de routine codée en dur.
-- Le provider OpenAI web est branché et testé avec une verbosité compatible `gpt-4.1-mini`, mais le dernier smoke réel reste sous les volumes PRD (`14/15` Core, `75/100` Exploration).
+- Le provider OpenAI web est branché et testé avec contexte `medium`, verbosité compatible `gpt-4.1-mini` et surface de requêtes élargie ; le dernier smoke réel atteint les volumes PRD (`15/15` Core, `100/100` Exploration).
 - Les runs réels Agents SDK Core et Exploration passent sans persistance Supabase, après séparation du schéma strict modèle et du `MissionOutput` runtime avec `run_steps`.
 
 ## Tests exécutés
@@ -65,9 +65,9 @@ Verdict : `production_not_ready`.
 - Tests actions TS : feedback bon angle, message générique, outcome RDV et DNC vers mémoire couverts.
 - Tests sécurité Supabase : policies RLS internes, absence de service role côté client, fermeture RPC security definer.
 - Import manager Agents SDK : 13 tools dont `WebSearchTool` et 8 tools métier.
-- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 44 tests
+- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 46 tests
 - Supabase interne : migrations feedback/outcome et RLS appliquées ; advisor sécurité à 0 lint.
 
 ## Décision
 
-Ne pas approuver comme V1 prête. La branche est acceptable comme étape de correction P0/P1, mais doit encore prouver le cron GitHub Actions avec secrets, la recherche réelle autonome à volume, les volumes PRD et la feedback loop sur données Supabase réelles.
+Ne pas approuver comme V1 prête. La branche est acceptable comme étape de correction P0/P1, mais doit encore prouver le cron GitHub Actions avec secrets, les volumes PRD en runs persistés Supabase et la feedback loop sur données Supabase réelles.

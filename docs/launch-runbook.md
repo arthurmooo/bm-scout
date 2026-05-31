@@ -16,6 +16,8 @@ Statut : `production_not_ready`. Socle utilisable pour demo interne, pas pour d�
   - `SERPAPI_API_KEY` optionnel pour utiliser SerpAPI comme recherche SERP réelle
   - `OPENAI_MODEL` optionnel, par defaut `gpt-5.5`
   - `OPENAI_SEARCH_MODEL` optionnel pour la recherche web OpenAI
+  - `OPENAI_SEARCH_CONTEXT_SIZE=low|medium|high` optionnel, par défaut `medium`
+  - `OPENAI_SEARCH_MAX_OUTPUT_TOKENS` optionnel, par défaut `2400`
 - `BM_SCOUT_PROVIDER=auto|serpapi|openai_web|web|configured|demo`
 - `BM_SCOUT_SEARCH_QUERIES` optionnel pour piloter les requêtes web
 - `BM_SCOUT_REAL_SEEDS` pour le mode `configured`
@@ -157,10 +159,9 @@ Un smoke ciblé `--modes=core` peut passer pour vérifier OpenAI web, mais il ma
 
 Résultat actuel avec OpenAI web seul :
 
-- Core borné (`BM_SCOUT_FETCH_LIMIT=3`) : pass, 15 candidats découverts, 3 enrichis, 3 pass QC ; preuve utile mais `prd_volume_proven=false` car Exploration n'est pas incluse dans ce smoke.
-- Exploration bornée (`BM_SCOUT_FETCH_LIMIT=5`) : qualité shortlist partielle, mais volume fail, 36/100 comptes découverts.
+- Core + Exploration (`BM_SCOUT_FETCH_LIMIT=3`) : pass, Core `15/15`, Exploration `100/100`, `prd_volume_proven=true`, provider recommandé `openai_web`.
 
-Décision actuelle : OpenAI `web_search` est utilisable pour Core et l'enrichissement ciblé. Pour le scan large Exploration 100 comptes, brancher SerpAPI puis comparer avant de choisir le provider par défaut.
+Décision actuelle : OpenAI `web_search` prouve maintenant le scan large en smoke provider. Brancher SerpAPI reste utile pour comparer coût, stabilité et qualité des sources avant de choisir le provider par défaut.
 
 ## Cron GitHub Actions
 
