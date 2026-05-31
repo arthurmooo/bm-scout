@@ -141,7 +141,10 @@ Consommer la queue :
 ```bash
 npm run agent:tasks:offline
 npm run agent:tasks:real
+npm run agent:tasks:recover-stale
 ```
+
+`agent:tasks:recover-stale` récupère d'abord les tâches `running` depuis plus de 90 minutes en les marquant `failed`, puis consomme la queue offline. Si une tâche stale est récupérée, la commande sort non-zero pour alerter sur l'incident. Pour un seuil différent : `npm run agent:tasks:offline -- --recover-stale --stale-minutes=30`.
 
 Limite actuelle : le scheduler sait mettre en file les 6 routines P0, mais le cron production reste à prouver avec secrets. `agent:tasks:real` lance le worker OpenAI Agents SDK et requiert `OPENAI_API_KEY`.
 Les actions Romu de feedback et outcome écrivent `scout_feedback` / `scout_outcomes`, puis les runs suivants les rechargent via le worker. Cela doit être prouvé par comparaison avant/après sur un run Supabase réel avant tout statut pilote.

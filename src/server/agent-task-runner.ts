@@ -24,8 +24,16 @@ export interface AgentTaskExecution {
   errorMessage?: string;
 }
 
+export interface RecoveredAgentTask {
+  id: string;
+  type: AgentTaskType;
+  startedAt?: string;
+  scheduledFor: string;
+}
+
 export interface AgentTaskRepository {
   loadQueuedTasks(options: { limit: number; taskId?: string }): Promise<QueuedAgentTask[]>;
+  recoverStaleRunningTasks(options: { staleBefore: string; limit: number }): Promise<RecoveredAgentTask[]>;
   markRunning(taskId: string): Promise<boolean>;
   markCompleted(taskId: string, execution: AgentTaskExecution): Promise<boolean>;
   markBlocked(taskId: string, execution: AgentTaskExecution): Promise<boolean>;
@@ -40,6 +48,7 @@ export interface AgentTaskExecutor {
 export interface AgentTaskQueueResult {
   ok: boolean;
   processed: AgentTaskExecutionResult[];
+  recovered: RecoveredAgentTask[];
   message: string;
 }
 
@@ -51,8 +60,9 @@ export interface AgentTaskExecutionResult extends AgentTaskExecution {
 export async function processAgentTaskQueue(
   repository: AgentTaskRepository,
   executor: AgentTaskExecutor,
-  options: { limit?: number; taskId?: string } = {}
+  options: { limit?: number; taskId?: string; recoverStaleMinutes?: number; recoverStaleLimit?: number; now?: Date } = {}
 ): Promise<AgentTaskQueueResult> {
+  const recovered = await recoverStaleRunningTasks(repository, options);
   const tasks = await repository.loadQueuedTasks({ limit: options.limit ?? 3, taskId: options.taskId });
   const processed: AgentTaskExecutionResult[] = [];
 
@@ -64,14 +74,25 @@ export async function processAgentTaskQueue(
   }
 
   return {
-    ok: processed.every((item) => item.status === "completed"),
+    ok: recovered.length === 0 && processed.every((item) => item.status === "completed"),
     processed,
-    message: processed.length
-      ? `${processed.length} tâche(s) traitée(s).`
+    recovered,
+    message: processed.length || recovered.length
+      ? `${processed.length} tâche(s) traitée(s), ${recovered.length} tâche(s) running récupérée(s).`
       : tasks.length
         ? "Aucune tâche queued disponible à réclamer."
         : "Aucune tâche queued à traiter."
   };
+}
+
+async function recoverStaleRunningTasks(
+  repository: AgentTaskRepository,
+  options: { recoverStaleMinutes?: number; recoverStaleLimit?: number; now?: Date }
+): Promise<RecoveredAgentTask[]> {
+  if (!options.recoverStaleMinutes || options.recoverStaleMinutes <= 0) return [];
+  const now = options.now ?? new Date();
+  const staleBefore = new Date(now.getTime() - options.recoverStaleMinutes * 60_000).toISOString();
+  return repository.recoverStaleRunningTasks({ staleBefore, limit: options.recoverStaleLimit ?? 10 });
 }
 
 export function createSupabaseAgentTaskRepository(): AgentTaskRepository | null {
@@ -100,6 +121,45 @@ export function createSupabaseAgentTaskRepository(): AgentTaskRepository | null 
         payload: row.payload ?? {},
         scheduledFor: row.scheduled_for
       })) as QueuedAgentTask[];
+    },
+
+    async recoverStaleRunningTasks({ staleBefore, limit }) {
+      const { data, error } = await client
+        .from("scout_agent_tasks")
+        .select("id,type,started_at,scheduled_for")
+        .eq("status", "running")
+        .lte("started_at", staleBefore)
+        .order("started_at", { ascending: true })
+        .limit(limit);
+
+      if (error) throw new Error(`Lecture agent_tasks stale impossible: ${error.message}`);
+
+      const recovered: RecoveredAgentTask[] = [];
+      for (const row of data ?? []) {
+        const { data: updated, error: updateError } = await client
+          .from("scout_agent_tasks")
+          .update({
+            status: "failed",
+            summary: "Tâche récupérée comme échouée : runner interrompu ou timeout dépassé.",
+            error_message: `Tâche running depuis ${row.started_at ?? "date inconnue"} sans finalisation avant ${staleBefore}.`,
+            completed_at: new Date().toISOString()
+          })
+          .eq("id", row.id)
+          .eq("status", "running")
+          .select("id,type,started_at,scheduled_for")
+          .maybeSingle();
+
+        if (updateError) throw new Error(`Récupération agent_task stale impossible: ${updateError.message}`);
+        if (updated?.id) {
+          recovered.push({
+            id: updated.id,
+            type: updated.type,
+            startedAt: updated.started_at ?? undefined,
+            scheduledFor: updated.scheduled_for
+          });
+        }
+      }
+      return recovered;
     },
 
     async markRunning(taskId) {
@@ -359,11 +419,7 @@ async function executeTask(
 
     const finalized = await finalizeTaskExecution(repository, task.id, withRunId);
     if (!finalized) {
-      return {
-        status: "failed",
-        summary: "Tâche non finalisée : son statut a changé pendant l'exécution.",
-        errorMessage: "Transition terminale refusée car scout_agent_tasks n'était plus running."
-      };
+      return terminalTransitionRefused();
     }
     return withRunId;
   } catch (error) {
@@ -372,9 +428,23 @@ async function executeTask(
       summary: "Tâche échouée pendant l'exécution du runner.",
       errorMessage: error instanceof Error ? error.message : String(error)
     };
-    await repository.markFailed(task.id, execution);
+    const finalized = await repository.markFailed(task.id, execution);
+    if (!finalized) return terminalTransitionRefused(execution.errorMessage);
     return execution;
   }
+}
+
+function terminalTransitionRefused(originalError?: string): AgentTaskExecution {
+  return {
+    status: "failed",
+    summary: "Tâche non finalisée : son statut a changé pendant l'exécution.",
+    errorMessage: [
+      "Transition terminale refusée car scout_agent_tasks n'était plus running.",
+      originalError ? `Erreur originale: ${originalError}` : undefined
+    ]
+      .filter(Boolean)
+      .join(" ")
+  };
 }
 
 function finalizeTaskExecution(
@@ -406,13 +476,43 @@ export async function runWorkerCliForEvidence(
   if (options.persist !== false) args.push("--persist");
 
   const result = await runProcess(pythonPath, args);
-  const parsed = parseWorkerOutput(result.stdout);
-  const evidenceFile = parsed ? await writeWorkerEvidence(mode, options, parsed) : undefined;
+  const parsed = parseWorkerOutput(result.stdout) ?? failedWorkerOutput(mode, result);
+  const evidenceFile = await writeWorkerEvidence(mode, options, parsed);
 
   return {
     ...result,
     parsed,
     evidenceFile
+  };
+}
+
+function failedWorkerOutput(
+  mode: "core" | "exploration",
+  result: { code: number | null; stdout: string; stderr: string }
+): WorkerCliOutput {
+  const error = [result.stderr, result.stdout].filter(Boolean).join("\n").slice(0, 4000);
+  return {
+    verdict: "fail",
+    blockers: [`Worker CLI ${mode} échoué sans sortie JSON valide.`],
+    output: {
+      trace_id: `trace_worker_cli_failed_${mode}`,
+      mode,
+      kept_count: 0,
+      rejected_count: 0,
+      final_decision: "not_ready",
+      run_steps: [
+        {
+          agent_name: "bm_scout_worker",
+          step: "worker_cli_failed",
+          event_type: "runner_error",
+          payload: {
+            mode,
+            code: result.code,
+            error
+          }
+        }
+      ]
+    }
   };
 }
 
@@ -526,5 +626,11 @@ interface WorkerCliOutput {
     rejected_count: number;
     final_decision?: "ready" | "not_ready";
     lessons?: { lesson?: string; recommendation?: string; source?: string }[];
+    run_steps?: Array<{
+      agent_name?: string;
+      step?: string;
+      event_type?: string;
+      payload?: Record<string, unknown>;
+    }>;
   };
 }

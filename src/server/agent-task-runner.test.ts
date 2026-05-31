@@ -1,7 +1,21 @@
+import { readFile, mkdtemp } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { ScoutLead, ScoutSnapshot } from "../domain/types";
-import type { AgentTaskExecution, AgentTaskExecutor, AgentTaskRepository, QueuedAgentTask } from "./agent-task-runner";
-import { createCliAgentTaskExecutor, processAgentTaskQueue, workerEvidenceFileName } from "./agent-task-runner";
+import type {
+  AgentTaskExecution,
+  AgentTaskExecutor,
+  AgentTaskRepository,
+  QueuedAgentTask,
+  RecoveredAgentTask
+} from "./agent-task-runner";
+import {
+  createCliAgentTaskExecutor,
+  processAgentTaskQueue,
+  runWorkerCliForEvidence,
+  workerEvidenceFileName
+} from "./agent-task-runner";
 
 describe("agent task runner", () => {
   it("consomme une tache queued et la passe en completed avec le run persiste", async () => {
@@ -77,6 +91,45 @@ describe("agent task runner", () => {
     expect(repo.transitions).toEqual(["claim-missed:task-race"]);
   });
 
+  it("recupere les taches running trop anciennes avant de consommer la queue", async () => {
+    const repo = new FakeTaskRepository([task({ id: "task-core", type: "weekly_core_research" })], {
+      staleTasks: [
+        {
+          id: "task-stale",
+          type: "weekly_exploration_scan",
+          startedAt: "2026-05-30T06:00:00.000Z",
+          scheduledFor: "2026-05-30T05:00:00.000Z"
+        }
+      ]
+    });
+
+    const result = await processAgentTaskQueue(
+      repo,
+      {
+        async execute() {
+          return {
+            status: "completed",
+            summary: "Core terminé.",
+            traceId: "trace-core"
+          };
+        }
+      },
+      { recoverStaleMinutes: 60, now: new Date("2026-05-30T08:00:00.000Z") }
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.recovered).toEqual([
+      {
+        id: "task-stale",
+        type: "weekly_exploration_scan",
+        startedAt: "2026-05-30T06:00:00.000Z",
+        scheduledFor: "2026-05-30T05:00:00.000Z"
+      }
+    ]);
+    expect(result.message).toContain("1 tâche(s) running récupérée");
+    expect(repo.transitions).toEqual(["recover-stale:2026-05-30T07:00:00.000Z:10", "running:task-core", "completed:task-core:run-core"]);
+  });
+
   it("n'ecrase pas une tache modifiee avant finalisation", async () => {
     const repo = new FakeTaskRepository([task({ id: "task-cancelled", type: "weekly_core_research" })], {
       finalizable: false
@@ -99,6 +152,28 @@ describe("agent task runner", () => {
       errorMessage: "Transition terminale refusée car scout_agent_tasks n'était plus running."
     });
     expect(repo.transitions).toEqual(["running:task-cancelled", "completed-missed:task-cancelled"]);
+  });
+
+  it("n'ecrase pas une tache modifiee quand l'executor leve une erreur", async () => {
+    const repo = new FakeTaskRepository([task({ id: "task-failed-race", type: "weekly_exploration_scan" })], {
+      finalizable: false
+    });
+
+    const result = await processAgentTaskQueue(repo, {
+      async execute() {
+        throw new Error("worker indisponible");
+      }
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.processed[0]).toMatchObject({
+      taskId: "task-failed-race",
+      status: "failed",
+      summary: "Tâche non finalisée : son statut a changé pendant l'exécution."
+    });
+    expect(result.processed[0].errorMessage).toContain("Transition terminale refusée");
+    expect(result.processed[0].errorMessage).toContain("Erreur originale: worker indisponible");
+    expect(repo.transitions).toEqual(["running:task-failed-race", "failed-missed:task-failed-race"]);
   });
 
   it("genere un daily brief depuis un snapshot runtime sans worker", async () => {
@@ -176,6 +251,31 @@ describe("agent task runner", () => {
     );
     expect(workerEvidenceFileName("core", { real: false, persist: true })).toBe("latest-cli-persist-offline.json");
   });
+
+  it("ecrase l'artefact attendu avec un verdict fail si le worker ne retourne pas de JSON", async () => {
+    const artifactsDir = await mkdtemp(join(tmpdir(), "bm-scout-worker-fail-"));
+
+    const result = await runWorkerCliForEvidence("exploration", {
+      real: true,
+      persist: false,
+      pythonPath: "/usr/bin/false",
+      artifactsDir,
+      evidenceDir: artifactsDir
+    });
+
+    expect(result.code).not.toBe(0);
+    expect(result.evidenceFile).toBe("latest-real-exploration.json");
+    expect(result.parsed?.verdict).toBe("fail");
+    expect(result.parsed?.blockers?.[0]).toContain("sans sortie JSON valide");
+
+    const payload = JSON.parse(await readFile(join(artifactsDir, result.evidenceFile ?? ""), "utf8")) as {
+      verdict?: string;
+      output?: { final_decision?: string; run_steps?: Array<{ step?: string }> };
+    };
+    expect(payload.verdict).toBe("fail");
+    expect(payload.output?.final_decision).toBe("not_ready");
+    expect(payload.output?.run_steps?.[0]?.step).toBe("worker_cli_failed");
+  });
 });
 
 class FakeTaskRepository implements AgentTaskRepository {
@@ -183,12 +283,17 @@ class FakeTaskRepository implements AgentTaskRepository {
 
   constructor(
     private readonly tasks: QueuedAgentTask[],
-    private readonly options: { claimable?: boolean; finalizable?: boolean } = {}
+    private readonly options: { claimable?: boolean; finalizable?: boolean; staleTasks?: RecoveredAgentTask[] } = {}
   ) {}
 
   async loadQueuedTasks(options: { limit: number; taskId?: string }): Promise<QueuedAgentTask[]> {
     void options;
     return this.tasks;
+  }
+
+  async recoverStaleRunningTasks(options: { staleBefore: string; limit: number }): Promise<RecoveredAgentTask[]> {
+    this.transitions.push(`recover-stale:${options.staleBefore}:${options.limit}`);
+    return this.options.staleTasks ?? [];
   }
 
   async markRunning(taskId: string): Promise<boolean> {

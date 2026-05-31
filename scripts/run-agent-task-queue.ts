@@ -8,7 +8,9 @@ const args = new Set(process.argv.slice(2));
 const dryRun = args.has("--dry-run");
 const real = args.has("--real");
 const offline = args.has("--offline");
+const recoverStale = args.has("--recover-stale");
 const limit = Number(process.argv.find((arg) => arg.startsWith("--limit="))?.split("=")[1] ?? 3);
+const staleMinutes = Number(process.argv.find((arg) => arg.startsWith("--stale-minutes="))?.split("=")[1] ?? 90);
 const taskId = process.argv.find((arg) => arg.startsWith("--task-id="))?.split("=")[1];
 
 const repository = createSupabaseAgentTaskRepository();
@@ -40,7 +42,7 @@ if (!real && !offline) {
 const result = await processAgentTaskQueue(
   repository,
   createCliAgentTaskExecutor({ real, persist: true }),
-  { limit, taskId }
+  { limit, taskId, recoverStaleMinutes: recoverStale ? staleMinutes : undefined }
 );
 
 console.log(JSON.stringify(result, null, 2));

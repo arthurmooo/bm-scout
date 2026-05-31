@@ -13,7 +13,7 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 - Worker Python OpenAI Agents SDK avec `Runner.run`, `trace`, agents spécialisés et outputs Pydantic.
 - Recherche métier provider : découverte web, fetch site, extraction signaux, job search public, emails publics, déduplication et scoring.
 - Scheduler local reproductible qui crée les routines Core, Exploration, Daily Brief, Learning, DNC check et followup review.
-- Runner de queue `scout_agent_tasks` qui claim les tâches `queued -> running`, puis les passe en `completed/blocked/failed` seulement si elles sont encore `running`.
+- Runner de queue `scout_agent_tasks` qui claim les tâches `queued -> running`, récupère explicitement les `running` trop anciennes, puis passe en `completed/blocked/failed` seulement si elles sont encore `running`.
 - Routines Daily Brief, Learning Review, DNC check et followup review exécutables depuis les runs Supabase persistés, avec blocage explicite si elles n'ont que les fixtures.
 - Workflow GitHub Actions `.github/workflows/bm-scout-agent-tasks.yml` pour cron/dispatch, à activer avec secrets.
 - Actions UI branchées sur une API serveur : valider, rejeter, enrichir, copier, DNC, lancer routines. Les copies ne sont écrites dans le presse-papiers qu'après validation serveur.
@@ -68,11 +68,13 @@ npm run agent:schedule:run
 npm run agent:tasks
 npm run agent:tasks:offline
 npm run agent:tasks:real
+npm run agent:tasks:recover-stale
 npm run provider:compare
 ```
 
 `agent:schedule` affiche le plan sans persistance. `agent:schedule:run` met des tâches en file dans Supabase si l'env serveur est configurée.
 `agent:tasks` lit la queue Supabase sans exécuter. `agent:tasks:offline` consomme la queue avec le worker déterministe. `agent:tasks:real` consomme la queue avec OpenAI Agents SDK et `--persist`.
+`agent:tasks:recover-stale` marque comme failed les tâches `running` depuis plus de 90 minutes avant de consommer la queue offline ; utiliser `-- --stale-minutes=...` pour ajuster. Si une tâche stale est récupérée, la commande sort en échec pour rendre l'incident visible.
 `provider:compare` compare SerpAPI, OpenAI web et fallback web sur Core/Exploration et écrit `artifacts/provider-comparison/latest-comparison.json`.
 
 ## Tests
