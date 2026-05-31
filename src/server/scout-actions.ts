@@ -1,5 +1,5 @@
 import { DEFAULT_ROUTINE_CONFIG, routineTypeForAction } from "../domain/scheduler";
-import type { FeedbackKind, LeadActionType, LeadVerdict, QualityDecision } from "../domain/types";
+import type { AgentTaskStatus, AgentTaskType, FeedbackKind, LeadActionType, LeadVerdict, QualityDecision } from "../domain/types";
 import { createServerSupabaseClient } from "./supabase";
 
 export interface ScoutActionInput {
@@ -46,6 +46,9 @@ type ActionMutationTrace = {
   channel?: MessageChannel;
   channels?: MessageChannel[];
   dncScopes?: string[];
+  taskId?: string;
+  taskType?: AgentTaskType;
+  taskStatus?: AgentTaskStatus;
 };
 
 const ACTION_LABELS: Record<LeadActionType, string> = {
@@ -166,22 +169,17 @@ export async function recordScoutAction(input: ScoutActionInput): Promise<ScoutA
     };
   }
 
-  if (routineType) {
-    const { error } = await client.from("scout_agent_tasks").insert({
-      type: routineType,
-      status: "queued",
-      title: ACTION_LABELS[input.action],
-      summary: input.note ?? "Routine lancée manuellement depuis la console Romu.",
-      recommendation: "Exécuter le worker/scheduler serveur, puis relire les sorties QC avant décision Romu.",
-      payload: DEFAULT_ROUTINE_CONFIG,
-      scheduled_for: new Date().toISOString()
-    });
-    if (error) return failure(error.message);
-  }
-
   let mutationError: string | null = null;
   let mutationTrace: ActionMutationTrace | null = null;
-  if (companyId) {
+  if (routineType) {
+    try {
+      mutationTrace = await enqueueRoutineTask(input, routineType);
+    } catch (error) {
+      mutationError = error instanceof Error ? error.message : String(error);
+    }
+  }
+
+  if (companyId && !mutationError) {
     try {
       mutationTrace = await applyLeadMutation(input, companyId);
     } catch (error) {
@@ -210,6 +208,32 @@ export async function recordScoutAction(input: ScoutActionInput): Promise<ScoutA
     ok: true,
     persisted: true,
     message: ACTION_LABELS[input.action]
+  };
+}
+
+async function enqueueRoutineTask(input: ScoutActionInput, routineType: AgentTaskType): Promise<ActionMutationTrace> {
+  const client = createServerSupabaseClient();
+  if (!client) return { taskType: routineType };
+  const { data, error } = await client
+    .from("scout_agent_tasks")
+    .insert({
+      type: routineType,
+      status: "queued",
+      title: ACTION_LABELS[input.action],
+      summary: input.note ?? "Routine lancée manuellement depuis la console Romu.",
+      recommendation: "Exécuter le worker/scheduler serveur, puis relire les sorties QC avant décision Romu.",
+      payload: DEFAULT_ROUTINE_CONFIG,
+      scheduled_for: new Date().toISOString()
+    })
+    .select("id,type,status")
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  const task = data as QueuedTaskRow | null;
+  return {
+    taskId: task?.id,
+    taskType: task?.type ?? routineType,
+    taskStatus: task?.status ?? "queued"
   };
 }
 
@@ -542,6 +566,12 @@ type CompanyDncTargetRow = {
 type CompanyDncTargets = {
   domain: string | null;
   contacts: ContactDncTarget[];
+};
+
+type QueuedTaskRow = {
+  id?: string;
+  type?: AgentTaskType;
+  status?: AgentTaskStatus;
 };
 
 function normalizeDomain(domain: string | null | undefined): string | null {

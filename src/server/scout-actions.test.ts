@@ -11,7 +11,9 @@ const { state } = vi.hoisted(() => ({
     blockingOutcome: false,
     messageStatus: "proposed",
     messageBody: "Bonjour, message spécifique.",
-    emailStatus: "usable" as "usable" | "verify" | "not_usable"
+    emailStatus: "usable" as "usable" | "verify" | "not_usable",
+    taskInsertError: false,
+    lastTaskPayload: null as unknown
   }
 }));
 
@@ -56,6 +58,39 @@ describe("scout actions", () => {
         table: "scout_agent_tasks",
         op: "insert",
         payload: expect.objectContaining({ type: "weekly_core_research", status: "queued" })
+      })
+    );
+    expect(
+      calls.some(
+        (call) =>
+          call.table === "scout_action_events" &&
+          call.op === "insert" &&
+          JSON.stringify(call.payload).includes('"taskId":"task-1"') &&
+          JSON.stringify(call.payload).includes('"taskType":"weekly_core_research"') &&
+          JSON.stringify(call.payload).includes('"taskStatus":"queued"')
+      )
+    ).toBe(true);
+  });
+
+  it("trace un echec de mise en file de routine", async () => {
+    reset();
+    state.taskInsertError = true;
+
+    const result = await recordScoutAction({ action: "launch_core" });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("Queue indisponible");
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        table: "scout_action_events",
+        op: "insert",
+        payload: expect.objectContaining({
+          action: "launch_core",
+          payload: expect.objectContaining({
+            ok: false,
+            error: "Queue indisponible"
+          })
+        })
       })
     );
   });
@@ -470,6 +505,8 @@ function reset() {
   state.messageStatus = "proposed";
   state.messageBody = "Bonjour, message spécifique.";
   state.emailStatus = "usable";
+  state.taskInsertError = false;
+  state.lastTaskPayload = null;
 }
 
 function fakeTable(table: string) {
@@ -484,7 +521,7 @@ function fakeTable(table: string) {
       return chain;
     },
     limit: () => chain,
-    maybeSingle: () => ({ data: singleRow(table), error: null }),
+    maybeSingle: () => singleResult(table),
     eq: (column: string, value: unknown) => {
       calls.push({ table, op: "eq", payload: { column, value } });
       return chain;
@@ -492,6 +529,7 @@ function fakeTable(table: string) {
     neq: () => chain,
     insert: (payload: unknown) => {
       calls.push({ table, op: "insert", payload });
+      if (table === "scout_agent_tasks") state.lastTaskPayload = payload;
       return chain;
     },
     update: (payload: unknown) => {
@@ -502,7 +540,18 @@ function fakeTable(table: string) {
   return chain;
 }
 
+function singleResult(table: string) {
+  if (table === "scout_agent_tasks" && state.taskInsertError) {
+    return { data: null, error: { message: "Queue indisponible" } };
+  }
+  return { data: singleRow(table), error: null };
+}
+
 function singleRow(table: string) {
+  if (table === "scout_agent_tasks") {
+    const task = state.lastTaskPayload as { type?: string; status?: string } | null;
+    return { id: "task-1", type: task?.type ?? "weekly_core_research", status: task?.status ?? "queued" };
+  }
   if (table === "scout_messages") {
     return {
       id: "message-1",
