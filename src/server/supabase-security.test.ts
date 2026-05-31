@@ -127,6 +127,16 @@ describe("supabase security posture", () => {
     expect(migration).toContain("it is not an automatic send state");
   });
 
+  it("interdit le statut approved cote base pour garantir zero envoi automatique", () => {
+    const migration = readMigration("scout_messages_no_approved_state");
+
+    expect(migration).toContain("where status = 'approved'::public.scout_message_status");
+    expect(migration).toContain("set status = 'used_manually'::public.scout_message_status");
+    expect(migration).toContain("add constraint scout_messages_no_approved_state");
+    expect(migration).toContain("check (status <> 'approved'::public.scout_message_status)");
+    expect(migration).toContain("ne peut pas approuver ou envoyer automatiquement");
+  });
+
   it("fusionne les companies persistées par external_id ou domaine en priorisant Core", () => {
     const migration = readMigration("scout_company_persistence_dedupe");
 
