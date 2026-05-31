@@ -73,13 +73,13 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 - `quality:runs` reste un harnais fixture.
 - `demoSnapshot()` reste le fallback sans env Supabase serveur. Avec Supabase configuré mais vide, la console affiche un état runtime vide et les tâches, jamais les fixtures comme vérité produit.
-- Le worker réel peut découvrir des candidats sans seeds via SerpAPI, OpenAI `web_search` ou fallback web public ; OpenAI web est prouvé à volume PRD en comparaison provider, mais pas encore en run Agents SDK persisté Supabase à volume.
+- Le worker réel peut découvrir des candidats sans seeds via SerpAPI, OpenAI `web_search` ou fallback web public ; OpenAI web est prouvé à volume PRD en comparaison provider et deux runs Agents SDK réels ont été persistés dans Supabase via MCP (`15` Core scannés, `100` Exploration scannés). Ce n'est pas encore une preuve cron CI ni une preuve `--persist` depuis l'env locale.
 - `verify:supabase` produit maintenant `artifacts/supabase-runtime/latest-verify.json`. `quality:readiness` refuse cet artefact s'il est ancien, `-dirty`, incomplet, sans actions Romu persistées, sans action Romu reliée à `scout_agent_tasks.task_id` ou sans traces Supabase.
 - `verify:supabase` exécute aussi un probe temporaire Core puis Exploration sur le même domaine via `scout_persist_mission_output`, exige une seule company conservée en Core, un run step `dedupe_decision=merged_existing`, puis vérifie que le cleanup laisse zéro company/run de probe.
 - `quality:readiness` refuse aussi le cron si l'artefact `latest-ci-run.json` n'est pas issu de GitHub Actions, pas en mode `real`, pas sur la révision courante, sans secrets Supabase/OpenAI, sans les 6 routines P0 complétées, sans traces worker Core/Exploration ou sans transition `completed`.
 - Une comparaison provider Core seule ne peut plus déclarer les volumes PRD prouvés ; `prd_volume_proven` exige Core + Exploration.
 - Les providers `search_web`, `fetch_company_site`, `search_jobs`, `find_public_emails`, `dedupe_company` existent ; `search_jobs` reste minimal et la robustesse search dépend encore des sources publiques.
-- Les volumes 15 Core / 100 Exploration sont paramétrés mais non prouvés en run réel.
+- Les volumes 15 Core / 100 Exploration sont prouvés en run réel OpenAI Agents SDK et persistés dans Supabase via MCP. Ils restent à prouver par le chemin automatisé complet : `worker:real:*:persist`, `agent:cron:evidence -- --all-p0`, `verify:supabase`, puis `quality:readiness` avec env Supabase serveur.
 - Le feedback influence le moteur TS et le provider Python en tests locaux, avec compteurs d'impact audités. Le scénario `feedback:evidence` rend la preuve Supabase reproductible et consommable par `quality:readiness` pour P0.5, mais elle doit encore être exécutée avec secrets et ne remplace pas un run marché à volume.
 
 ## Réellement end-to-end aujourd'hui
@@ -121,6 +121,9 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Supabase interne : triggers `scout_messages_prevent_blocking_outcome` et `scout_outcomes_block_messages` vérifiés en base via MCP ; advisor sécurité à 0 lint après application.
 - Supabase interne : migrations `agent_tasks_active_dedupe` et `scout_fk_covering_indexes` alignées avec l'historique distant ; index `scout_agent_tasks_active_type_schedule_uniq` et 17 indexes FK vérifiés en base via MCP.
 - Supabase interne : migration `scout_company_persistence_dedupe` appliquée ; vérification distante par scénario temporaire Core puis Exploration sur le même domaine, fusion en une seule company, priorité Core conservée, run step `dedupe_decision=merged_existing`, nettoyage confirmé.
+- Supabase interne : migrations `scout_manual_dnc_followup_routines`, `scout_message_used_manually_status` et `scout_dnc_blocks_existing_messages` appliquées via MCP ; enums `launch_dnc_check`, `launch_followup_review`, `used_manually` et triggers DNC existants vérifiés. Test rollback confirmé : un message existant passe en `blocked` quand une cible devient do-not-contact, sans ligne de test restante.
+- Supabase interne : runs OpenAI Agents SDK réels persistés via RPC `scout_persist_mission_output` depuis les artefacts courants. Core `trace-2024-06-24-BM-Scout` -> run `403e2246-d0f0-4d9f-b882-ea8be2d5322a`, 15 scannés, 3 leads, 36 run steps, 9 messages proposés. Exploration `trace-20240615-0001` -> run `3404d3f4-21fc-4dc0-9bde-e734e27e0623`, 100 scannés, 3 leads, 41 run steps, 9 messages bloqués.
+- Supabase interne : deux tâches agentiques complétées backfill MCP liées aux runs réels (`weekly_core_research`, `weekly_exploration_scan`) et deux `scout_action_events` avec `task_id`. Cette preuve améliore l'audit console, mais ne remplace pas le cron GitHub Actions réel exigé par `quality:readiness`.
 - Supabase advisor performance : plus aucun lint `unindexed_foreign_keys`; les lints restants sont `unused_index`, attendus sur une base de test à faible volume.
 - Supabase advisor sécurité : 0 lint après durcissement RLS/RPC.
 
