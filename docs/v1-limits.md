@@ -16,13 +16,14 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 
 - Le worker charge les feedbacks/outcomes Supabase et `scout_do_not_contact` si l'env serveur existe ; sans env, il repasse en seed local pour developpement.
 - Le chemin reel Agents SDK expose un provider `serpapi`, un provider `openai_web`, un fallback web public, un job search public minimal et des tools métier. Le `WebSearchTool` OpenAI est opt-in via `BM_SCOUT_AGENT_HOSTED_WEB_SEARCH=1`; par défaut la recherche réelle passe par le provider pour éviter une double recherche lente. OpenAI web est prouvé à volume PRD en smoke provider, mais pas encore en run persisté Supabase.
-- La feedback memory modifie bien scoring/message/blocage/angle en local côté TS et worker Python ; les feedbacks/outcomes/DNC Supabase chargent maintenant le contexte entreprise/segment/site/domaine/hash email, et le provider émet des compteurs `feedback_memory_effects`, mais l'effet doit encore être prouvé sur runs réels persistés.
+- La feedback memory modifie bien scoring/message/blocage/angle en local côté TS et worker Python ; les feedbacks/outcomes/DNC Supabase chargent maintenant le contexte entreprise/segment/site/domaine/hash email, le provider émet des compteurs `feedback_memory_effects`, et `feedback:evidence` prépare une preuve Supabase contrôlée. Cette preuve ne remplace pas les runs marché à volume.
 - Les agents produisent des sorties structurees, mais la qualite commerciale finale reste a valider par Romu.
 - Les recherches SerpAPI/OpenAI web/fallback public restent dependantes de la disponibilite des sources, des coûts, des rate limits et de la qualité des requêtes.
 - OpenAI `web_search` est branché et testé sur Core et Exploration. Dernier smoke provider réel : `15/15` comptes Core et `100/100` comptes Exploration découverts avec shortlist bornée.
 - `provider:compare` mesure la couverture des providers, mais ne remplace pas un run Agents SDK persisté ni une validation commerciale Romu.
 - Les volumes PRD 15 Core / 100 Exploration sont prouvés côté comparaison provider OpenAI web, pas encore comme routine persistée Supabase/cron.
 - Les tâches Core/Exploration transmettent maintenant leurs objectifs au worker Python, et `quality:readiness` refuse les artefacts réels dont `scanned_count` reste sous 15/100.
+- Les runs `configured`/`BM_SCOUT_REAL_SEEDS` ne comptent pas comme preuve de recherche marché dans `quality:readiness`; ils servent uniquement aux scénarios contrôlés comme la feedback loop.
 
 ## Limites data
 
@@ -64,6 +65,6 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 - `npm run verify:supabase` passe avec l'env serveur.
 - `artifacts/supabase-runtime/latest-verify.json` est produit par `verify:supabase`, porte la révision courante, n'est pas `-dirty`, et prouve aussi les actions Romu persistées.
 - `--persist` cree un run lisible en Supabase via la RPC.
-- Un run reel Agents SDK utilise les feedbacks/outcomes/DNC Supabase, écrit des artefacts avec `feedback_memory_source=supabase`, des compteurs `feedback_memory_effects` non nuls, des métadonnées runtime complètes, une révision code courante, et modifie les recommandations learning.
+- Un run reel Agents SDK utilise les feedbacks/outcomes/DNC Supabase, écrit des artefacts avec `feedback_memory_source=supabase`, des compteurs `feedback_memory_effects` non nuls, des métadonnées runtime complètes, une révision code courante, et modifie les recommandations learning. Pour les volumes Core/Exploration, le provider runtime doit être `openai_web`, `serpapi` ou `web`, pas `configured`.
 - `npm run quality:readiness` passe.
 - L'audit thermo-nuclear final ne contient plus de P1 bloquant.

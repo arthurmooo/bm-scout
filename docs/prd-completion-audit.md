@@ -19,7 +19,7 @@ Verdict courant : `production_not_ready`.
 | Messages personnalisés | Partiel | QC fixture, pas de preuve provider réel à volume |
 | Aucun envoi automatique | Couvert | Pas d'endpoint d'envoi ; actions de copie seulement |
 | Do-not-contact hard gate | Couvert en socle | QC TS, worker offline, chargement direct `scout_do_not_contact` côté worker, trigger DB, action DNC, blocage outcome négatif |
-| Feedback loop influente | Partiel | Effet scoring/message/blocage/angle prouvé par tests locaux TS + worker provider et compteurs `feedback_memory_effects` ; actions feedback/outcome écrivent la mémoire Supabase ; pas encore prouvé par run réel Supabase à volume |
+| Feedback loop influente | Partiel | Effet scoring/message/blocage/angle prouvé par tests locaux TS + worker provider et compteurs `feedback_memory_effects` ; scénario `feedback:evidence` reproductible pour Supabase ; pas encore exécuté avec secrets ni prouvé sur run marché à volume |
 | Actions UI fonctionnelles | Partiel | API actions + traces + feedback/outcomes + centre à valider, smoke Playwright + Browser intégré passés en mode local ; persistance réelle dépend encore de l'env Supabase |
 | Run steps/tool calls auditables | Partiel | RPC écrit run start/lead saved/worker steps ; provider + function tools Agents SDK poussent des étapes compactées ; scripts `worker:real:*` produisent les artefacts readiness |
 | Supabase mémoire | Partiel | Schéma/RPC/actions, env runtime non vérifiée ici |
@@ -32,7 +32,7 @@ Verdict courant : `production_not_ready`.
 - P0.2/P0.3 Preuve runs réels : harnais `worker:real:*` ajouté pour produire les artefacts `latest-real-*.json` sans passer par fixtures.
 - P0.2 Volumes : les objectifs `coreWeeklyTarget`, `explorationScanTarget` et `explorationShortlistTarget` sont propagés au worker ; `quality:readiness` bloque un artefact réel qui ne prouve pas Core >= 15 scannés et Exploration >= 100 scannés.
 - P0.4 Do-not-contact : gate déterministe ajouté côté TS, worker offline et DB.
-- P0.5 Feedback loop : mémoire locale causale ajoutée côté TS et worker provider pour rejet, pénalité secteur, bonus angle, anti-générique et DNC ; le worker lit maintenant feedbacks, outcomes et DNC Supabase et agrège les impacts feedback dans les run steps.
+- P0.5 Feedback loop : mémoire locale causale ajoutée côté TS et worker provider pour rejet, pénalité secteur, bonus angle, anti-générique et DNC ; le worker lit maintenant feedbacks, outcomes et DNC Supabase, agrège les impacts feedback dans les run steps, et un script `feedback:evidence` seed la mémoire avant run persisté.
 - P0.6 Actions UI : actions principales, feedbacks Romu, outcomes, copie, DNC et routines branchées à une API serveur et tracées.
 - P0.7 Observé/Inféré/Incertain : contrat TS + worker Pydantic + DB/RPC ajoutés.
 - P1.6 RLS/sécurité : policies `authenticated` resserrées, fonctions RPC security definer non publiques, advisors sécurité repassés à 0 lint.
@@ -43,7 +43,7 @@ Verdict courant : `production_not_ready`.
 - P0.1 : cron GitHub Actions non encore exécuté avec secrets ; transitions production à tester.
 - P0.2 Workflows Core/Exploration réels : les volumes PRD sont prouvés côté provider OpenAI web, mais pas encore comme runs persistés Supabase.
 - P0.3 Suppression de la dépendance fixtures : provider SerpAPI/OpenAI web/fallback public branché, search autonome à volume prouvé côté OpenAI web.
-- P0.5 Feedback loop réelle : impact causal prouvé localement dans TS et le worker Python, avec garde-fou readiness sur `feedback_memory_effects`, à prouver avec feedbacks/outcomes Supabase réels à volume.
+- P0.5 Feedback loop réelle : impact causal prouvé localement dans TS et le worker Python, avec garde-fou readiness sur `feedback_memory_effects` et script Supabase prêt ; à exécuter avec secrets puis à confirmer sur runs marché à volume.
 - P0.7 : socle full-stack ajouté, à valider sur runs réels persistés.
 - P1.6 : parcours magic link à vérifier avec les vrais comptes Supabase et leurs `app_metadata`.
 

@@ -14,6 +14,7 @@ describe("readiness evidence", () => {
           step: "runner_complete",
           payload: {
             feedback_memory_source: "supabase",
+            bm_scout_provider: "auto",
             feedback_event_count: 4,
             do_not_contact_event_count: 2,
             started_at: "2026-05-31T10:00:00.000Z",
@@ -25,6 +26,20 @@ describe("readiness evidence", () => {
             openai_agents_version: "0.6.0",
             openai_sdk_version: "2.8.1",
             code_revision: "abcdef123456"
+          }
+        },
+        {
+          step: "openai_web_search",
+          event_type: "tool_call",
+          payload: {
+            result_count: 15
+          }
+        },
+        {
+          step: "search_web",
+          event_type: "tool_call",
+          payload: {
+            discovered_count: 15
           }
         },
         {
@@ -47,6 +62,7 @@ describe("readiness evidence", () => {
 
     expect(evidence).toMatchObject({
       source: "supabase",
+      runtimeProvider: "openai_web",
       feedbackEventCount: 4,
       doNotContactEventCount: 2,
       feedbackImpactCount: 2,
@@ -63,6 +79,38 @@ describe("readiness evidence", () => {
       runtimeDurationMs: 60000,
       runtimeModel: "gpt-4.1-mini"
     });
+  });
+
+  it("ne classe pas les seeds configurées comme recherche marché réelle", () => {
+    const evidence = analyzeRunnerSteps(
+      [
+        {
+          step: "runner_complete",
+          payload: {
+            feedback_memory_source: "supabase",
+            bm_scout_provider: "auto",
+            started_at: "2026-05-31T10:00:00.000Z",
+            completed_at: "2026-05-31T10:01:00.000Z",
+            duration_ms: 1000,
+            real_mode: true,
+            python_version: "3.14.2",
+            openai_agents_version: "0.17.4",
+            openai_sdk_version: "2.14.0",
+            code_revision: "abcdef123456"
+          }
+        },
+        {
+          step: "feedback_memory",
+          event_type: "tool_call",
+          payload: {
+            feedback_event_count: 3
+          }
+        }
+      ],
+      "abcdef1234567890"
+    );
+
+    expect(evidence.runtimeProvider).toBe("configured");
   });
 
   it("refuse une preuve sans mode reel ou sans version SDK", () => {

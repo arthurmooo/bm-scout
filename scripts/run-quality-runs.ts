@@ -273,6 +273,7 @@ function renderReport(
               `rejetes : ${item.rejectedCount}`,
               `lessons : ${item.lessonCount}`,
               `mémoire : ${item.memorySource}`,
+              `provider runtime : ${item.runtimeProvider}`,
               `feedbacks mémoire : ${item.feedbackEventCount}`,
               `DNC mémoire : ${item.doNotContactEventCount}`,
               `impacts feedback : ${item.feedbackImpactCount}`,
@@ -374,6 +375,7 @@ interface RealRunnerEvidence {
   sourceFile: string;
   learningUsesFeedback: boolean;
   memorySource: string;
+  runtimeProvider: string;
   feedbackEventCount: number;
   doNotContactEventCount: number;
   feedbackImpactCount: number;
@@ -432,6 +434,7 @@ async function loadRealRunnerEvidence(currentRevision: string): Promise<RealRunn
       sourceFile: target.file,
       learningUsesFeedback: learningUsesFeedback(lessons),
       memorySource: memory.source,
+      runtimeProvider: memory.runtimeProvider,
       feedbackEventCount: memory.feedbackEventCount,
       doNotContactEventCount: memory.doNotContactEventCount,
       feedbackImpactCount: memory.feedbackImpactCount,
@@ -835,12 +838,13 @@ function buildProductBlockers(
   const eligibleRealEvidence = realEvidence.filter(
     (item) => item.verdict === "pass" && item.runtimeMetadataComplete && item.runtimeRevisionMatchesCurrent
   );
-  const hasCore = eligibleRealEvidence.some((item) => item.mode === "core" && item.finalDecision === "ready");
-  const hasExploration = eligibleRealEvidence.some((item) => item.mode === "exploration" && item.finalDecision === "ready");
-  const hasCoreVolume = eligibleRealEvidence.some((item) => item.mode === "core" && item.scannedCount >= 15);
-  const hasExplorationVolume = eligibleRealEvidence.some((item) => item.mode === "exploration" && item.scannedCount >= 100);
-  const hasSupabaseCore = eligibleRealEvidence.some((item) => item.mode === "core" && item.sourceFile.includes("supabase-persist"));
-  const hasSupabaseExploration = eligibleRealEvidence.some((item) => item.mode === "exploration" && item.sourceFile.includes("supabase-persist"));
+  const eligibleOperationalEvidence = eligibleRealEvidence.filter((item) => isOperationalResearchProvider(item.runtimeProvider));
+  const hasCore = eligibleOperationalEvidence.some((item) => item.mode === "core" && item.finalDecision === "ready");
+  const hasExploration = eligibleOperationalEvidence.some((item) => item.mode === "exploration" && item.finalDecision === "ready");
+  const hasCoreVolume = eligibleOperationalEvidence.some((item) => item.mode === "core" && item.scannedCount >= 15);
+  const hasExplorationVolume = eligibleOperationalEvidence.some((item) => item.mode === "exploration" && item.scannedCount >= 100);
+  const hasSupabaseCore = eligibleOperationalEvidence.some((item) => item.mode === "core" && item.sourceFile.includes("supabase-persist"));
+  const hasSupabaseExploration = eligibleOperationalEvidence.some((item) => item.mode === "exploration" && item.sourceFile.includes("supabase-persist"));
   const hasLearningFromFeedback = eligibleRealEvidence.some(
     (item) =>
       item.mode === "core" &&
@@ -886,10 +890,10 @@ function buildProductBlockers(
   }
 
   if (!hasCore || !hasExploration) {
-    blockers.push("Runs OpenAI Agents SDK réels Core et Exploration incomplets.");
+    blockers.push("Runs OpenAI Agents SDK réels Core et Exploration incomplets avec provider marché non configuré.");
   }
   if (!hasCoreVolume || !hasExplorationVolume) {
-    blockers.push("Runs OpenAI Agents SDK réels sans volumes PRD prouvés : Core >= 15 scannés et Exploration >= 100 scannés requis.");
+    blockers.push("Runs OpenAI Agents SDK réels sans volumes PRD prouvés par provider marché : Core >= 15 scannés et Exploration >= 100 scannés requis.");
   }
   for (const evidence of realEvidence.filter((item) => item.verdict === "pass" && !item.runtimeMetadataComplete)) {
     blockers.push(`Run ${evidence.traceId} sans métadonnées runtime auditables.`);
@@ -898,7 +902,7 @@ function buildProductBlockers(
     blockers.push(`Run ${evidence.traceId} généré par la révision ${evidence.runtimeCodeRevision}, différente du code courant.`);
   }
   if (!hasSupabaseCore || !hasSupabaseExploration || realEvidence.some((item) => item.sourceFile.includes("supabase-persist") && !item.persistComplete)) {
-    blockers.push("Runs Agents SDK réels non prouvés avec persistance Supabase.");
+    blockers.push("Runs Agents SDK réels non prouvés avec persistance Supabase et provider marché.");
   }
   if (!hasLearningFromFeedback) {
     blockers.push("Learning Agent non prouvé avec feedbacks/outcomes Supabase, do-not-contact et impact causal structuré sur lead/message/score.");
@@ -923,6 +927,10 @@ function buildProductBlockers(
     blockers.push(`Console Supabase serveur prouvée par la révision ${consoleEvidence.codeRevision}, différente du code courant.`);
   }
   return blockers;
+}
+
+function isOperationalResearchProvider(provider: string): boolean {
+  return ["openai_web", "serpapi", "web"].includes(provider.trim().toLowerCase());
 }
 
 function numberValue(value: unknown): number {

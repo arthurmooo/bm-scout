@@ -15,9 +15,9 @@ Verdict : `production_not_ready`.
    - Risque : proactivité structurée, mais pas encore démontrée en production.
    - Remède : exécuter le workflow avec secrets, télécharger l'artefact `bm-scout-agent-task-evidence` et vérifier les transitions sur le projet interne.
 
-3. La feedback loop causale existe localement côté TS et worker Python, avec compteurs d'impact, mais elle n'est pas encore prouvée en run réel Supabase à volume.
+3. La feedback loop causale existe localement côté TS et worker Python, avec compteurs d'impact et script de preuve Supabase, mais elle n'est pas encore exécutée avec secrets ni prouvée en run marché à volume.
    - Risque : les moteurs testés changent bien le scoring/message/blocage/angle, mais le pilote réel peut rester sous-exercé.
-   - Remède : exécuter Core/Exploration réels avec feedbacks/outcomes Supabase, vérifier `feedback_memory_effects.impact_count > 0` et comparer avant/après.
+   - Remède : exécuter `npm run feedback:evidence`, vérifier `feedback_memory_effects.impact_count > 0`, puis confirmer la même mémoire sur Core/Exploration réels à volume.
 
 4. Les run steps couvrent maintenant provider et function tools Agents SDK, mais le tracing OpenAI hébergé doit encore être corrélé à des runs réels persistés.
    - Risque : Arthur peut auditer les tools internes, mais pas encore prouver toute la chaîne OpenAI web/traces sur Supabase à volume.
@@ -40,6 +40,7 @@ Verdict : `production_not_ready`.
 - Les function tools Agents SDK enregistrent leurs entrées/sorties compactées pendant `Runner.run`.
 - Les scripts `worker:real:*` et le runner de queue écrivent maintenant les artefacts `latest-real-*.json` attendus par `quality:readiness`.
 - Le runner de queue transmet les volumes PRD au worker ; le worker dérive `scanned_count` des steps provider, et la readiness vérifie explicitement les volumes Core/Exploration.
+- La readiness distingue le provider runtime : `configured` ne compte plus comme preuve de recherche marché, même si le run Agents SDK est réel et persisté.
 - Un workflow GitHub Actions cron/dispatch existe pour consommer `scout_agent_tasks` et écrire une preuve `latest-ci-run.json`.
 - Les actions Romu passent par une route serveur et une table d'événements.
 - Les copies email/relance/LinkedIn ne touchent plus le presse-papiers avant validation serveur, et le serveur bloque une copie ou approbation de message DNC, QC bloquée ou email non utilisable.

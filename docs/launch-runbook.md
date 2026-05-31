@@ -258,6 +258,7 @@ npm run test
 npm run worker:test
 npm run build
 npm run quality:runs
+npm run feedback:evidence
 npm run provider:compare
 npm run agent:cron:evidence -- --mode=real --limit=10
 npm run verify:supabase
@@ -266,6 +267,7 @@ npm run quality:readiness
 
 `quality:readiness` doit echouer tant que la V1 n'a pas les preuves runtime serveur completes. Il ne faut pas contourner ce gate en interpretant `quality:runs` comme une validation produit.
 Les artefacts `latest-real-*.json` doivent prouver `scanned_count >= 15` pour Core et `scanned_count >= 100` pour Exploration. Un run réel réduit par seeds trop courtes ou un smoke provider ne suffit pas à lever le blocker de volume PRD.
+`feedback:evidence` est le run contrôlé pour P0.5 : il écrit des feedbacks/outcomes/DNC dans Supabase, force `BM_SCOUT_PROVIDER=configured`, lance Core en `--persist`, puis exige des compteurs `feedback_memory_effects`. Il prouve la causalité mémoire, pas la découverte marché ; un artefact configured ne doit pas être utilisé pour lever les blockers Core/Exploration à volume.
 `verify:supabase` écrit `artifacts/supabase-runtime/latest-verify.json` à chaque exécution, y compris en échec d'env. `quality:readiness` accepte cette preuve uniquement si elle est `pass`, générée par la révision courante, non `-dirty`, avec runs, leads, rejets QC, lessons, tasks, feedbacks, outcomes, DNC, run steps, traces et actions Romu persistés.
 
 ## Decision de lancement

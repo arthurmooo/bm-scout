@@ -6,6 +6,7 @@ export interface RunnerStepEvidence {
 
 export interface RunnerRuntimeEvidence {
   source: string;
+  runtimeProvider: string;
   feedbackEventCount: number;
   doNotContactEventCount: number;
   feedbackImpactCount: number;
@@ -93,6 +94,8 @@ export function analyzeRunnerSteps(steps: RunnerStepEvidence[], currentCodeRevis
   const runnerStep = steps.find((step) => step.step === "runner_complete");
   const payload = runnerStep?.payload ?? {};
   const source = typeof payload.feedback_memory_source === "string" ? payload.feedback_memory_source : "unknown";
+  const declaredProvider = stringValue(payload.bm_scout_provider) || "unknown";
+  const runtimeProvider = detectResearchProvider(steps, declaredProvider);
   const feedbackCount = Number(payload.feedback_event_count ?? 0);
   const dncCount = Number(payload.do_not_contact_event_count ?? 0);
   const durationMs = Number(payload.duration_ms ?? 0);
@@ -109,6 +112,7 @@ export function analyzeRunnerSteps(steps: RunnerStepEvidence[], currentCodeRevis
 
   return {
     source,
+    runtimeProvider,
     feedbackEventCount: Number.isFinite(feedbackCount) ? feedbackCount : 0,
     doNotContactEventCount: Number.isFinite(dncCount) ? dncCount : 0,
     feedbackImpactCount,
@@ -253,6 +257,15 @@ function stepNumber(steps: RunnerStepEvidence[], stepName: string, key: string):
   return steps
     .filter((step) => step.step === stepName)
     .reduce((sum, step) => sum + numberValue(step.payload?.[key]), 0);
+}
+
+function detectResearchProvider(steps: RunnerStepEvidence[], declaredProvider: string): string {
+  if (steps.some((step) => step.step === "demo_fixture_batch")) return "demo";
+  if (steps.some((step) => step.step === "openai_web_search")) return "openai_web";
+  if (steps.some((step) => step.step === "serpapi_search")) return "serpapi";
+  if (steps.some((step) => step.step === "search_web" && numericAtLeast(step.payload?.discovered_count, 1))) return "web";
+  if (steps.some((step) => step.step === "feedback_memory")) return "configured";
+  return declaredProvider || "unknown";
 }
 
 function normalizeRevision(value: string): string {

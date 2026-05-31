@@ -48,6 +48,8 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Mémoire feedback TS : rejet lead, pénalité secteur, bonus angle validé, régénération anti-générique.
 - Mémoire feedback worker : chargement feedbacks/outcomes Supabase avec contexte entreprise/segment/site, chargement direct de `scout_do_not_contact`, blocage DNC/rejets par domaine/hash email, pénalités segments faibles, bonus angles validés et régénération anti-générique dans le provider Python.
 - Run steps feedback worker : chaque application de mémoire produit un step `apply_feedback_memory`, puis un agrégat `feedback_memory_effects` comptant les impacts score, blocage, DNC, message régénéré, angle renforcé et delta segment.
+- Script `feedback:evidence` : seed contrôlé Supabase feedback/outcome/DNC, run Core Agents SDK persisté et artefact `artifacts/feedback-loop/latest-feedback-loop.json` pour prouver la causalité feedback sans prétendre prouver la recherche marché.
+- `quality:readiness` distingue maintenant le provider runtime réel : `configured` peut servir à une preuve feedback contrôlée, mais seuls `openai_web`, `serpapi` ou `web` comptent pour les runs marché Core/Exploration et les volumes PRD.
 - Worker Pydantic : contrat Observé/Inféré/Incertain, email confidence, run steps.
 - Recorder Agents SDK : les function tools poussent maintenant leurs entrées/sorties compactées dans `run_steps` pendant `Runner.run`.
 - Migration Supabase `20260530214847_bm_scout_structured_insights_email_confidence_steps.sql` appliquée au projet interne.
@@ -65,7 +67,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Une comparaison provider Core seule ne peut plus déclarer les volumes PRD prouvés ; `prd_volume_proven` exige Core + Exploration.
 - Les providers `search_web`, `fetch_company_site`, `search_jobs`, `find_public_emails`, `dedupe_company` existent ; `search_jobs` reste minimal et la robustesse search dépend encore des sources publiques.
 - Les volumes 15 Core / 100 Exploration sont paramétrés mais non prouvés en run réel.
-- Le feedback influence le moteur TS et le provider Python en tests locaux, avec compteurs d'impact audités, mais il n'est pas encore prouvé sur un run réel Supabase à volume.
+- Le feedback influence le moteur TS et le provider Python en tests locaux, avec compteurs d'impact audités. Le scénario `feedback:evidence` rend la preuve Supabase reproductible, mais elle doit encore être exécutée avec secrets et ne remplace pas un run marché à volume.
 
 ## Réellement end-to-end aujourd'hui
 
@@ -77,18 +79,18 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Auth interne : home protégée en mode `BM_SCOUT_AUTH_MODE=internal`, login magic link Supabase, fallback démo seulement si l'auth publique est absente ou explicitement forcée.
 - DNC/outcome négatif bloque côté TS, actions serveur, worker offline et triggers Supabase.
 - Les actions de copie attendent maintenant la validation serveur avant d'écrire dans le presse-papiers ; côté serveur, un message bloqué QC, une cible DNC, un outcome négatif ou un email `verify/not_usable` refuse la copie et trace l'échec. `mark_message_used` repasse par les mêmes gates avant d'approuver un message.
-- Feedback Romu influence le scoring et les messages dans le moteur TS et le worker provider testés, et le provider émet maintenant des compteurs d'impact exploitables par `quality:readiness`.
+- Feedback Romu influence le scoring et les messages dans le moteur TS et le worker provider testés, le provider émet des compteurs d'impact exploitables, et un script dédié peut produire la preuve Supabase contrôlée.
 - Run steps et email confidence sont écrits par le worker/RPC quand `--persist` est exécuté.
 - Console Next buildée avec route d'action dynamique.
 
 ## Vérifications exécutées
 
-- `npm run test` : 73 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/outcome négatif/email incertain bloquée, indexes FK Supabase, index anti-doublon, policy Auth BM Scout, actions Romu et éligibilité runtime des preuves `quality:readiness`.
+- `npm run test` : 77 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/outcome négatif/email incertain bloquée, indexes FK Supabase, index anti-doublon, policy Auth BM Scout, actions Romu, provider runtime des preuves et scénario `feedback:evidence`.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.
 - `npm run quality:runs` : pass fixture, décision produit `production_not_ready`.
-- `npm run quality:readiness` : fail attendu, décision produit `production_not_ready`. Les anciens artefacts réels ne suffisent plus à prouver le learning si la mémoire ne vient pas de Supabase, si aucun feedback/outcome Supabase ni DNC Supabase n'est chargé, si aucun impact `feedback_memory_effects` n'est mesuré, si les métadonnées runtime sont absentes ou si la révision code ne correspond pas au commit courant.
+- `npm run quality:readiness` : fail attendu, décision produit `production_not_ready`. Les anciens artefacts réels ne suffisent plus à prouver le learning si la mémoire ne vient pas de Supabase, si aucun feedback/outcome Supabase ni DNC Supabase n'est chargé, si aucun impact `feedback_memory_effects` n'est mesuré, si le provider opérationnel est seulement `configured`, si les métadonnées runtime sont absentes ou si la révision code ne correspond pas au commit courant.
 - `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 54 tests pass, dont provider SerpAPI, provider OpenAI web, schéma strict Agents SDK, hosted web search opt-in, max turns borné, métadonnées runtime, contexte/verbosité OpenAI compatibles, surface de requêtes PRD, DNC table/domaine/hash email, seuil Core validable, fallback jobs, parsing sources, comparaison provider, impact feedback structuré et anti-faux-positif PRD sur smoke Core seul.
 - `npm run verify:supabase` vérifie maintenant aussi `scout_agent_tasks`, `scout_feedback`, `scout_outcomes`, `scout_do_not_contact`, `scout_run_steps` et `scout_action_events`.
 - Avec `OPENAI_API_KEY` présent en env, `OPENAI_MODEL=gpt-4.1-mini`, `OPENAI_SEARCH_MODEL=gpt-4.1-mini` et `BM_SCOUT_FETCH_LIMIT=3`, `npm run provider:compare -- --providers=openai_web --modes=core,exploration` : pass réel. Core atteint `15/15`, Exploration atteint `100/100`, `openai_web` est recommandé et `prd_volume_proven=true`.
@@ -113,6 +115,6 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 1. Fournir l'env service role au runner local/cron et tester `agent:tasks:offline` contre Supabase.
 2. Ajouter `SERPAPI_API_KEY`, relancer `npm run provider:compare`, puis comparer couverture, coût et qualité des sources contre OpenAI web avant choix par défaut.
 3. Prouver les volumes PRD 15 Core / 100 Exploration en run Agents SDK persisté Supabase, pas seulement en smoke provider.
-4. Prouver la feedback loop sur scoring, messages, blocage DNC, angles et recommandations dans un run réel Supabase, avec `feedback_memory_effects` non nul.
+4. Exécuter `npm run feedback:evidence` avec secrets serveur pour produire une preuve Supabase de causalité feedback, puis prouver la même mémoire sur runs marché Core/Exploration à volume.
 5. Exécuter le cron GitHub Actions avec secrets, télécharger `bm-scout-agent-task-evidence` et vérifier les transitions `queued -> completed`.
 6. Affecter les claims Supabase réels aux comptes Romu/Arthur et valider le parcours magic link sur le projet interne.
