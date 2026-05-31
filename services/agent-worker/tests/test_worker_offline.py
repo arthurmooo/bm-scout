@@ -7,6 +7,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from bm_scout_worker import provider_audit
+from bm_scout_worker import runner as runner_module
 from bm_scout_worker import tools
 from bm_scout_worker.agents import agent_hosted_web_search_enabled, build_manager_agent
 from bm_scout_worker.fixtures import offline_output
@@ -354,6 +355,75 @@ def test_agents_sdk_max_turns_is_bounded(monkeypatch) -> None:
 
     monkeypatch.setenv("BM_SCOUT_AGENT_MAX_TURNS", "99")
     assert agent_max_turns() == 10
+
+
+def test_real_runner_calls_agents_sdk_and_records_trace_summary(monkeypatch) -> None:
+    import agents
+
+    calls = {}
+    fixture_output = offline_output("core")
+
+    def fake_build_candidate_batch_with_steps(*_args, **_kwargs):
+        return SimpleNamespace(
+            leads=[fixture_output.leads[0]],
+            run_steps=[
+                RunStep(
+                    agent_name="bm_scout_provider",
+                    step="search_web",
+                    event_type="tool_call",
+                    payload={"discovered_count": 15},
+                )
+            ],
+        )
+
+    class FakeTrace:
+        def __enter__(self):
+            calls["trace_entered"] = True
+            return self
+
+        def __exit__(self, *_args):
+            calls["trace_exited"] = True
+            return False
+
+    def fake_trace(name, metadata):
+        calls["trace_name"] = name
+        calls["trace_metadata"] = metadata
+        return FakeTrace()
+
+    async def fake_runner_run(manager, prompt, *, max_turns):
+        calls["runner_agent_name"] = manager.name
+        calls["runner_prompt"] = prompt
+        calls["runner_max_turns"] = max_turns
+        return SimpleNamespace(final_output=fixture_output)
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.delenv("BM_SCOUT_AGENT_HOSTED_WEB_SEARCH", raising=False)
+    monkeypatch.setattr(runner_module, "build_candidate_batch_with_steps", fake_build_candidate_batch_with_steps)
+    monkeypatch.setattr(agents, "trace", fake_trace)
+    monkeypatch.setattr(agents.Runner, "run", staticmethod(fake_runner_run))
+
+    output = asyncio.run(run_bm_scout_mission("core", real=True, persist=False))
+    sdk_step = next(step for step in output.run_steps if step.step == "agents_sdk_runner_complete")
+
+    assert calls["runner_agent_name"] == "BM Scout Manager"
+    assert calls["trace_name"] == "BM Scout V1"
+    assert calls["trace_metadata"] == {"mode": "core", "include_weak": "false"}
+    assert calls["trace_entered"] is True
+    assert calls["trace_exited"] is True
+    assert calls["runner_max_turns"] == agent_max_turns()
+    assert "Candidates JSON" in calls["runner_prompt"]
+    assert "Feedbacks Romu" in calls["runner_prompt"]
+    assert sdk_step.event_type == "agents_sdk_trace"
+    assert sdk_step.payload["runner"] == "Runner.run"
+    assert sdk_step.payload["trace_name"] == "BM Scout V1"
+    assert sdk_step.payload["manager_agent"] == "BM Scout Manager"
+    assert sdk_step.payload["manager_handoffs"] == ["quality_control_agent"]
+    assert sdk_step.payload["candidate_count"] == 1
+    assert sdk_step.payload["feedback_count"] == len(runner_module.seed_feedbacks())
+    assert sdk_step.payload["final_output_type"] == "MissionOutput"
+    assert {"run_core_research", "run_exploration", "draft_manual_outreach", "summarize_learning"} <= set(
+        sdk_step.payload["manager_tools"]
+    )
 
 
 def test_code_revision_prefers_explicit_runtime_revision(monkeypatch) -> None:

@@ -159,9 +159,79 @@ Contraintes de sortie :
     output.scanned_count = derive_provider_scanned_count(candidate_batch.run_steps, fallback=len(candidates))
     output.kept_count = len(output.leads)
     output.rejected_count = len(output.rejected)
-    output.run_steps = [provider_step, *candidate_batch.run_steps, *tool_steps, *output.run_steps]
+    output.run_steps = [
+        provider_step,
+        *candidate_batch.run_steps,
+        *tool_steps,
+        agents_sdk_runner_step(
+            manager=manager,
+            mode=mode,
+            include_weak=include_weak,
+            model=model,
+            hosted_web_search_enabled=hosted_web_search_enabled,
+            candidate_count=len(candidates),
+            feedback_count=len(feedbacks),
+            tool_call_count=len(tool_steps),
+            final_output_type=type(final_output).__name__,
+            mission_trace_id=output.trace_id,
+        ),
+        *output.run_steps,
+    ]
     normalize_rejected_outputs(output)
     return output
+
+
+def agents_sdk_runner_step(
+    *,
+    manager: object,
+    mode: ScoutMode,
+    include_weak: bool,
+    model: str,
+    hosted_web_search_enabled: bool,
+    candidate_count: int,
+    feedback_count: int,
+    tool_call_count: int,
+    final_output_type: str,
+    mission_trace_id: str,
+) -> RunStep:
+    return RunStep(
+        agent_name=object_name(manager) or "BM Scout Manager",
+        step="agents_sdk_runner_complete",
+        event_type="agents_sdk_trace",
+        payload={
+            "trace_name": "BM Scout V1",
+            "trace_metadata": {"mode": mode, "include_weak": str(include_weak).lower()},
+            "mission_trace_id": mission_trace_id,
+            "runner": "Runner.run",
+            "model": model,
+            "max_turns": agent_max_turns(),
+            "manager_agent": object_name(manager),
+            "manager_tools": object_names(getattr(manager, "tools", [])),
+            "manager_handoffs": object_names(getattr(manager, "handoffs", [])),
+            "output_type": object_name(getattr(manager, "output_type", None)),
+            "final_output_type": final_output_type,
+            "hosted_web_search_enabled": hosted_web_search_enabled,
+            "candidate_count": candidate_count,
+            "feedback_count": feedback_count,
+            "captured_tool_call_count": tool_call_count,
+        },
+    )
+
+
+def object_names(items: object) -> list[str]:
+    try:
+        values = list(items)  # type: ignore[arg-type]
+    except TypeError:
+        return []
+    return [name for item in values if (name := object_name(item))]
+
+
+def object_name(value: object) -> str | None:
+    for attr in ("name", "tool_name", "agent_name", "__name__"):
+        name = getattr(value, attr, None)
+        if isinstance(name, str) and name:
+            return name
+    return None
 
 
 def append_unselected_candidates_as_rejected(output: MissionOutput, candidates: list[ScoutLead]) -> None:
