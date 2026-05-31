@@ -12,7 +12,7 @@ on:
           - real
           - offline
   schedule:
-    - cron: "15 7 * * 1-5"
+    - cron: "30 12 * * 1-5"
 
 jobs:
   consume-agent-tasks:
@@ -39,12 +39,17 @@ jobs:
       - run: npm ci
       - run: python -m venv .venv
       - run: .venv/bin/python -m pip install -e "services/agent-worker[dev]"
-      - name: Enqueue scheduled routines
-        run: npm run agent:schedule:run
-      - name: Consume task queue
+      - name: Run cron and write readiness evidence
         run: |
+          MODE="real"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.mode }}" = "offline" ]; then
-            npm run agent:tasks:offline
-          else
-            npm run agent:tasks:real
+            MODE="offline"
           fi
+          npm run agent:cron:evidence -- --mode="$MODE" --limit=10 --stale-minutes=90
+      - name: Upload cron evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bm-scout-agent-task-evidence
+          path: artifacts/agent-tasks/*.json
+          if-no-files-found: warn

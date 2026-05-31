@@ -45,6 +45,42 @@ export interface SupabaseRuntimeEvidenceAnalysis {
   source: string;
 }
 
+export interface AgentTaskCronArtifactEvidence {
+  status?: string;
+  generated_at?: string;
+  source?: string;
+  mode?: string;
+  code_revision?: string;
+  github_run_id?: string;
+  github_sha?: string;
+  has_supabase_env?: boolean;
+  has_openai_env?: boolean;
+  dueCount?: number;
+  insertedCount?: number;
+  skippedCount?: number;
+  processedCount?: number;
+  completedCount?: number;
+  blockedCount?: number;
+  failedCount?: number;
+  recoveredCount?: number;
+  taskTypes?: string[];
+  completedTaskTypes?: string[];
+  traceIds?: string[];
+  blockers?: string[];
+  error?: string;
+}
+
+export interface AgentTaskCronEvidenceAnalysis {
+  verdict: "pass" | "fail";
+  runtimeMetadataComplete: boolean;
+  runtimeRevisionMatchesCurrent: boolean;
+  codeRevision: string;
+  blockers: string[];
+  source: string;
+  mode: string;
+  traceIds: string[];
+}
+
 export function analyzeRunnerSteps(steps: RunnerStepEvidence[], currentCodeRevision: string): RunnerRuntimeEvidence {
   const runnerStep = steps.find((step) => step.step === "runner_complete");
   const payload = runnerStep?.payload ?? {};
@@ -102,6 +138,52 @@ export function analyzeSupabaseRuntimeArtifact(
   };
 }
 
+export function analyzeAgentTaskCronArtifact(
+  payload: AgentTaskCronArtifactEvidence,
+  currentCodeRevision: string
+): AgentTaskCronEvidenceAnalysis {
+  const codeRevision = stringValue(payload.code_revision);
+  const blockers = Array.isArray(payload.blockers) ? payload.blockers.filter((item): item is string => typeof item === "string") : [];
+  const source = stringValue(payload.source) || "artifact";
+  const mode = stringValue(payload.mode) || "unknown";
+  const runtimeMetadataComplete = Boolean(
+    stringValue(payload.generated_at) &&
+      codeRevision &&
+      source === "github_actions" &&
+      mode === "real" &&
+      stringValue(payload.github_run_id) &&
+      stringValue(payload.github_sha) &&
+      payload.has_supabase_env === true &&
+      payload.has_openai_env === true &&
+      numericAtLeast(payload.dueCount, 1) &&
+      numericAtLeast(payload.insertedCount, 0) &&
+      numericAtLeast(payload.skippedCount, 0) &&
+      numericAtLeast(payload.processedCount, 1) &&
+      numericAtLeast(payload.completedCount, 1) &&
+      numericAtLeast(payload.blockedCount, 0) &&
+      numericAtLeast(payload.failedCount, 0) &&
+      numericAtLeast(payload.recoveredCount, 0) &&
+      Array.isArray(payload.taskTypes) &&
+      payload.taskTypes.length > 0 &&
+      Array.isArray(payload.completedTaskTypes) &&
+      payload.completedTaskTypes.length > 0
+  );
+  const runtimeRevisionMatchesCurrent = runtimeMetadataComplete && codeRevisionMatchesCurrent(codeRevision, currentCodeRevision);
+  const cleanExecution =
+    numberValue(payload.blockedCount) === 0 && numberValue(payload.failedCount) === 0 && numberValue(payload.recoveredCount) === 0;
+
+  return {
+    verdict: payload.status === "pass" && runtimeMetadataComplete && runtimeRevisionMatchesCurrent && cleanExecution ? "pass" : "fail",
+    runtimeMetadataComplete,
+    runtimeRevisionMatchesCurrent,
+    codeRevision: codeRevision || "unknown",
+    blockers,
+    source,
+    mode,
+    traceIds: Array.isArray(payload.traceIds) ? payload.traceIds.filter((item): item is string => typeof item === "string") : []
+  };
+}
+
 export function codeRevisionMatchesCurrent(artifactRevision: string, currentRevision: string): boolean {
   const artifact = normalizeRevision(artifactRevision);
   const current = normalizeRevision(currentRevision);
@@ -137,6 +219,10 @@ function stringValue(value: unknown): string {
 
 function numericAtLeast(value: unknown, minimum: number): boolean {
   return typeof value === "number" && Number.isFinite(value) && value >= minimum;
+}
+
+function numberValue(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 function normalizeRevision(value: string): string {

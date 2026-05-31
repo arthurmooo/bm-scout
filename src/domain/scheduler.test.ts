@@ -44,6 +44,28 @@ describe("routine scheduler", () => {
     ]);
   });
 
+  it("planifie les créneaux en heure Paris de façon indépendante du serveur", () => {
+    const summer = createScheduledTasks(new Date("2026-06-01T04:00:00.000Z"));
+    const winter = createScheduledTasks(new Date("2026-01-05T04:00:00.000Z"));
+
+    expect(summer.map((task) => task.scheduledFor)).toEqual([
+      "2026-06-01T06:15:00.000Z",
+      "2026-06-01T07:15:00.000Z",
+      "2026-06-01T08:15:00.000Z",
+      "2026-06-01T09:15:00.000Z",
+      "2026-06-01T10:15:00.000Z",
+      "2026-06-01T11:15:00.000Z"
+    ]);
+    expect(winter.map((task) => task.scheduledFor)).toEqual([
+      "2026-01-05T07:15:00.000Z",
+      "2026-01-05T08:15:00.000Z",
+      "2026-01-05T09:15:00.000Z",
+      "2026-01-05T10:15:00.000Z",
+      "2026-01-05T11:15:00.000Z",
+      "2026-01-05T12:15:00.000Z"
+    ]);
+  });
+
   it("ne met en file que les routines quotidiennes les autres jours ouvrés", () => {
     const tasks = createDueScheduledTasks(new Date("2026-06-02T06:00:00.000Z"));
 

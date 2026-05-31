@@ -15,7 +15,7 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 - Scheduler local reproductible qui crée les routines Core, Exploration, Daily Brief, Learning, DNC check et followup review.
 - Runner de queue `scout_agent_tasks` qui claim les tâches `queued -> running`, récupère explicitement les `running` trop anciennes, puis passe en `completed/blocked/failed` seulement si elles sont encore `running`.
 - Routines Daily Brief, Learning Review, DNC check et followup review exécutables depuis les runs Supabase persistés, avec blocage explicite si elles n'ont que les fixtures.
-- Workflow GitHub Actions `.github/workflows/bm-scout-agent-tasks.yml` pour cron/dispatch, à activer avec secrets.
+- Workflow GitHub Actions `.github/workflows/bm-scout-agent-tasks.yml` pour cron/dispatch, avec artefact de preuve `artifacts/agent-tasks/latest-ci-run.json`, à activer avec secrets.
 - Actions UI branchées sur une API serveur : valider, rejeter, enrichir, copier, DNC, lancer routines. Les copies ne sont écrites dans le presse-papiers qu'après validation serveur.
 - Feedbacks et outcomes Romu persistés dans `scout_feedback` / `scout_outcomes` : bon/mauvais lead, bon angle, message générique, RDV, positif/négatif, timing, mauvais interlocuteur.
 - DNC hard gate côté qualité TS, côté worker offline et côté DB pour empêcher un message non bloqué sur une cible DNC ou un outcome négatif.
@@ -71,12 +71,14 @@ npm run agent:tasks
 npm run agent:tasks:offline
 npm run agent:tasks:real
 npm run agent:tasks:recover-stale
+npm run agent:cron:evidence -- --mode=real --limit=10
 npm run provider:compare
 ```
 
 `agent:schedule` affiche le plan sans persistance. `agent:schedule:run` met des tâches en file dans Supabase si l'env serveur est configurée.
 `agent:tasks` lit la queue Supabase sans exécuter. `agent:tasks:offline` consomme la queue avec le worker déterministe. `agent:tasks:real` consomme la queue avec OpenAI Agents SDK et `--persist`.
 `agent:tasks:recover-stale` marque comme failed les tâches `running` depuis plus de 90 minutes avant de consommer la queue offline ; utiliser `-- --stale-minutes=...` pour ajuster. Si une tâche stale est récupérée, la commande sort en échec pour rendre l'incident visible.
+`agent:cron:evidence` est le wrapper utilisé par GitHub Actions : il met en file les routines dues, consomme jusqu'à 10 tâches, écrit `artifacts/agent-tasks/latest-ci-run.json` et échoue si le run n'est pas une vraie preuve `agent:tasks:real` avec secrets.
 `provider:compare` compare SerpAPI, OpenAI web et fallback web sur Core/Exploration et écrit `artifacts/provider-comparison/latest-comparison.json`.
 
 ## Tests
@@ -93,6 +95,7 @@ npm run provider:compare
 ```
 
 `quality:runs` valide seulement le socle fixture. `quality:readiness` doit rester bloquant tant que BM Scout est `production_not_ready`; les artefacts réels doivent indiquer une mémoire Supabase, un DNC Supabase chargé, des métadonnées runtime auditables et une révision code compatible avec le commit courant pour prouver le learning runtime.
+`quality:readiness` attend aussi un artefact cron GitHub Actions `artifacts/agent-tasks/latest-ci-run.json` en mode `real`, avec secrets Supabase/OpenAI présents, transitions `completed`, zéro tâche récupérée/échouée/bloquée et révision courante.
 `verify:supabase` écrit aussi `artifacts/supabase-runtime/latest-verify.json`. `quality:readiness` peut utiliser cet artefact si l'env Supabase serveur n'est pas présente au moment du gate, mais uniquement si l'artefact est `pass`, porte la révision courante, contient des compteurs runtime complets et n'a pas été produit par un worktree `-dirty`.
 `provider:compare` est un gate de recherche réelle : sans `SERPAPI_API_KEY` ou `OPENAI_API_KEY`, un échec est attendu et doit rester visible. Sa preuve `latest-comparison.json` doit aussi porter une révision code courante pour compter dans `quality:readiness`.
 OpenAI a bien un tool officiel de recherche web via Responses API (`web_search`) et le provider `openai_web` l'utilise. Dans le dernier smoke réel provider, OpenAI web passe Core et Exploration à volume PRD (`15/15` Core, `100/100` Exploration) ; SerpAPI reste utile pour comparer coût, stabilité et qualité des sources.

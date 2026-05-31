@@ -173,7 +173,9 @@ Décision actuelle : OpenAI `web_search` prouve maintenant le scan large en smok
 
 ## Cron GitHub Actions
 
-Le workflow `.github/workflows/bm-scout-agent-tasks.yml` planifie `agent:schedule:run` puis `agent:tasks:real` les jours ouvrés à 07:15 UTC, avec déclenchement manuel possible en mode `real` ou `offline`.
+Le workflow `.github/workflows/bm-scout-agent-tasks.yml` planifie les jours ouvrés à 12:30 UTC, après les six créneaux Paris 08:15 -> 13:15. Il lance `agent:cron:evidence`, qui met en file les routines dues, consomme jusqu'à 10 tâches et écrit `artifacts/agent-tasks/latest-ci-run.json`.
+
+Le déclenchement manuel reste possible en mode `real` ou `offline`, mais seul un artefact GitHub Actions en mode `real`, avec secrets Supabase + OpenAI, transitions `completed` et révision courante peut compter dans `quality:readiness`.
 
 Secrets requis :
 
@@ -193,7 +195,7 @@ Variables recommandées :
 
 Le runner exécute Core/Exploration via le worker Python, puis Daily Brief, Learning Review, DNC check et followup review via une lecture déterministe du snapshot Supabase runtime. Ces routines non-worker se bloquent explicitement si aucun run persistant n'existe, afin de ne pas transformer les fixtures demo en preuve opérationnelle.
 
-Le workflow est versionné, mais BM Scout reste `production_not_ready` tant qu'aucune exécution GitHub Actions réelle avec secrets n'a prouvé les transitions `queued -> completed`.
+Le workflow est versionné, mais BM Scout reste `production_not_ready` tant qu'aucune exécution GitHub Actions réelle avec secrets n'a produit un artefact `latest-ci-run.json` valide prouvant les transitions `queued -> completed`.
 
 ## Lancer le worker
 
@@ -255,6 +257,7 @@ npm run worker:test
 npm run build
 npm run quality:runs
 npm run provider:compare
+npm run agent:cron:evidence -- --mode=real --limit=10
 npm run verify:supabase
 npm run quality:readiness
 ```

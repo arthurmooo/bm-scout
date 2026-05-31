@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { analyzeRunnerSteps, analyzeSupabaseRuntimeArtifact, codeRevisionMatchesCurrent } from "./readiness-evidence";
+import {
+  analyzeAgentTaskCronArtifact,
+  analyzeRunnerSteps,
+  analyzeSupabaseRuntimeArtifact,
+  codeRevisionMatchesCurrent
+} from "./readiness-evidence";
 
 describe("readiness evidence", () => {
   it("rend eligible un runner reel avec metadata complete et revision courante", () => {
@@ -199,5 +204,125 @@ describe("readiness evidence", () => {
     expect(evidence.runtimeMetadataComplete).toBe(false);
     expect(evidence.runtimeRevisionMatchesCurrent).toBe(false);
     expect(evidence.verdict).toBe("fail");
+  });
+
+  it("accepte une preuve cron GitHub Actions réelle avec transition completed", () => {
+    const evidence = analyzeAgentTaskCronArtifact(
+      {
+        status: "pass",
+        generated_at: "2026-05-31T10:00:00.000Z",
+        source: "github_actions",
+        mode: "real",
+        code_revision: "abcdef123456",
+        github_run_id: "1001",
+        github_sha: "abcdef123456",
+        has_supabase_env: true,
+        has_openai_env: true,
+        dueCount: 6,
+        insertedCount: 6,
+        skippedCount: 0,
+        processedCount: 6,
+        completedCount: 6,
+        blockedCount: 0,
+        failedCount: 0,
+        recoveredCount: 0,
+        taskTypes: ["weekly_core_research"],
+        completedTaskTypes: ["weekly_core_research"],
+        traceIds: ["trace-core"]
+      },
+      "abcdef1234567890"
+    );
+
+    expect(evidence).toMatchObject({
+      verdict: "pass",
+      runtimeMetadataComplete: true,
+      runtimeRevisionMatchesCurrent: true,
+      source: "github_actions",
+      mode: "real",
+      traceIds: ["trace-core"]
+    });
+  });
+
+  it("refuse une preuve cron locale, offline ou ancienne", () => {
+    const local = analyzeAgentTaskCronArtifact(
+      {
+        status: "pass",
+        generated_at: "2026-05-31T10:00:00.000Z",
+        source: "local",
+        mode: "real",
+        code_revision: "abcdef123456",
+        github_run_id: "1001",
+        github_sha: "abcdef123456",
+        has_supabase_env: true,
+        has_openai_env: true,
+        dueCount: 1,
+        insertedCount: 1,
+        skippedCount: 0,
+        processedCount: 1,
+        completedCount: 1,
+        blockedCount: 0,
+        failedCount: 0,
+        recoveredCount: 0,
+        taskTypes: ["daily_brief"],
+        completedTaskTypes: ["daily_brief"]
+      },
+      "abcdef123456"
+    );
+    const offline = analyzeAgentTaskCronArtifact(
+      {
+        status: "pass",
+        generated_at: "2026-05-31T10:00:00.000Z",
+        source: "github_actions",
+        mode: "offline",
+        code_revision: "abcdef123456",
+        github_run_id: "1001",
+        github_sha: "abcdef123456",
+        has_supabase_env: true,
+        has_openai_env: true,
+        dueCount: 1,
+        insertedCount: 1,
+        skippedCount: 0,
+        processedCount: 1,
+        completedCount: 1,
+        blockedCount: 0,
+        failedCount: 0,
+        recoveredCount: 0,
+        taskTypes: ["daily_brief"],
+        completedTaskTypes: ["daily_brief"]
+      },
+      "abcdef123456"
+    );
+    const stale = analyzeAgentTaskCronArtifact(
+      {
+        status: "pass",
+        generated_at: "2026-05-31T10:00:00.000Z",
+        source: "github_actions",
+        mode: "real",
+        code_revision: "111111122222",
+        github_run_id: "1001",
+        github_sha: "111111122222",
+        has_supabase_env: true,
+        has_openai_env: true,
+        dueCount: 1,
+        insertedCount: 1,
+        skippedCount: 0,
+        processedCount: 1,
+        completedCount: 1,
+        blockedCount: 0,
+        failedCount: 0,
+        recoveredCount: 0,
+        taskTypes: ["daily_brief"],
+        completedTaskTypes: ["daily_brief"]
+      },
+      "abcdef123456"
+    );
+
+    expect(local.verdict).toBe("fail");
+    expect(local.runtimeMetadataComplete).toBe(false);
+    expect(offline.verdict).toBe("fail");
+    expect(offline.runtimeMetadataComplete).toBe(false);
+    expect(stale.runtimeMetadataComplete).toBe(true);
+    expect(stale.runtimeRevisionMatchesCurrent).toBe(false);
+    expect(stale.verdict).toBe("fail");
   });
 });

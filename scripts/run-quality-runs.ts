@@ -6,9 +6,11 @@ import { promisify } from "node:util";
 import { runScoutMission, seedFeedbacks } from "../src/domain/scout-engine";
 import type { ScoutLead, ScoutRun } from "../src/domain/types";
 import {
+  analyzeAgentTaskCronArtifact,
   analyzeRunnerSteps,
   analyzeSupabaseRuntimeArtifact,
   codeRevisionMatchesCurrent,
+  type AgentTaskCronArtifactEvidence,
   type RunnerStepEvidence,
   type SupabaseRuntimeArtifactEvidence
 } from "../src/server/readiness-evidence";
@@ -44,10 +46,11 @@ const fixtureVerdict: RunVerdict = globalBlockers.length === 0 && globalScore >=
 const currentCodeRevision = await resolveCurrentCodeRevision();
 const realRunnerEvidence = await loadRealRunnerEvidence(currentCodeRevision);
 const cliPersistEvidence = await loadCliPersistEvidence();
+const cronEvidence = await loadAgentTaskCronEvidence(currentCodeRevision);
 const supabaseConsoleEvidence = await loadSupabaseConsoleEvidence(currentCodeRevision);
 const providerComparisonEvidence = await loadProviderComparisonEvidence(currentCodeRevision);
 const readinessMode = process.argv.includes("--readiness");
-const productBlockers = buildProductBlockers(realRunnerEvidence, cliPersistEvidence, supabaseConsoleEvidence, providerComparisonEvidence);
+const productBlockers = buildProductBlockers(realRunnerEvidence, cliPersistEvidence, cronEvidence, supabaseConsoleEvidence, providerComparisonEvidence);
 const productReadiness: ProductReadiness = productBlockers.length === 0 ? "pilot_candidate" : "production_not_ready";
 
 const report = renderReport(
@@ -57,6 +60,7 @@ const report = renderReport(
   globalBlockers,
   realRunnerEvidence,
   cliPersistEvidence,
+  cronEvidence,
   supabaseConsoleEvidence,
   providerComparisonEvidence,
   currentCodeRevision
@@ -74,6 +78,7 @@ await writeFile(
       productBlockers,
       realRunnerEvidence,
       cliPersistEvidence,
+      cronEvidence,
       supabaseConsoleEvidence,
       providerComparisonEvidence,
       currentCodeRevision,
@@ -234,6 +239,7 @@ function renderReport(
   blockers: string[],
   realEvidence: RealRunnerEvidence[],
   persistEvidence: CliPersistEvidence | null,
+  cronEvidence: AgentTaskCronEvidence | null,
   consoleEvidence: SupabaseConsoleEvidence,
   providerEvidence: ProviderComparisonEvidence | null,
   currentRevision: string
@@ -283,6 +289,10 @@ function renderReport(
     persistEvidence
       ? `- CLI --persist : ${persistEvidence.verdict}; trace : ${persistEvidence.traceId}; artefact : ${persistEvidence.sourceFile}; persist artefact : ${persistEvidence.persistComplete ? "oui" : "non"}`
       : "- CLI --persist : aucune preuve locale.",
+    cronEvidence
+      ? `- Cron agent_tasks : ${cronEvidence.verdict}; source : ${cronEvidence.source}; mode : ${cronEvidence.mode}; artefact : ${cronEvidence.sourceFile}; due : ${cronEvidence.dueCount}; processed : ${cronEvidence.processedCount}; completed : ${cronEvidence.completedCount}; révision : ${cronEvidence.codeRevision}; révision courante : ${cronEvidence.runtimeRevisionMatchesCurrent ? "oui" : "non"}`
+      : "- Cron agent_tasks : aucune preuve GitHub Actions.",
+    ...(cronEvidence?.blockers.length ? cronEvidence.blockers.map((blocker) => `- Blocker cron : ${blocker}`) : []),
     `- Console serveur Supabase : ${consoleEvidence.verdict}; source : ${consoleEvidence.source}; artefact : ${consoleEvidence.sourceFile ?? "live"}; runs : ${consoleEvidence.runCount}; leads : ${consoleEvidence.leadCount}; rejetes : ${consoleEvidence.rejectedCount}; lessons : ${consoleEvidence.lessonCount}`,
     `- Console runtime : metadata ${consoleEvidence.runtimeMetadataComplete ? "oui" : "non"}; révision ${consoleEvidence.codeRevision}; révision courante ${consoleEvidence.runtimeRevisionMatchesCurrent ? "oui" : "non"}; actions : ${consoleEvidence.actionEventCount}`,
     consoleEvidence.traces.length ? `- Traces console : ${consoleEvidence.traces.join(", ")}` : "- Traces console : aucune.",
@@ -448,6 +458,72 @@ async function loadCliPersistEvidence(): Promise<CliPersistEvidence | null> {
     sourceFile,
     persistComplete: analyzeRunnerSteps(payload.output.run_steps ?? [], "unknown").persistComplete
   };
+}
+
+interface AgentTaskCronEvidence {
+  verdict: RunVerdict;
+  sourceFile: string;
+  source: string;
+  mode: string;
+  dueCount: number;
+  processedCount: number;
+  completedCount: number;
+  blockedCount: number;
+  failedCount: number;
+  recoveredCount: number;
+  traceIds: string[];
+  blockers: string[];
+  runtimeMetadataComplete: boolean;
+  runtimeRevisionMatchesCurrent: boolean;
+  codeRevision: string;
+  error?: string;
+}
+
+async function loadAgentTaskCronEvidence(currentRevision: string): Promise<AgentTaskCronEvidence | null> {
+  const sourceFile = "latest-ci-run.json";
+  const path = join(process.cwd(), "artifacts", "agent-tasks", sourceFile);
+  if (!existsSync(path)) return null;
+  try {
+    const payload = JSON.parse(await readFile(path, "utf8")) as AgentTaskCronArtifactEvidence;
+    const analysis = analyzeAgentTaskCronArtifact(payload, currentRevision);
+    return {
+      verdict: analysis.verdict,
+      sourceFile,
+      source: analysis.source,
+      mode: analysis.mode,
+      dueCount: numberValue(payload.dueCount),
+      processedCount: numberValue(payload.processedCount),
+      completedCount: numberValue(payload.completedCount),
+      blockedCount: numberValue(payload.blockedCount),
+      failedCount: numberValue(payload.failedCount),
+      recoveredCount: numberValue(payload.recoveredCount),
+      traceIds: analysis.traceIds,
+      blockers: analysis.blockers,
+      runtimeMetadataComplete: analysis.runtimeMetadataComplete,
+      runtimeRevisionMatchesCurrent: analysis.runtimeRevisionMatchesCurrent,
+      codeRevision: analysis.codeRevision,
+      error: payload.error
+    };
+  } catch (error) {
+    return {
+      verdict: "fail",
+      sourceFile,
+      source: "artifact",
+      mode: "unknown",
+      dueCount: 0,
+      processedCount: 0,
+      completedCount: 0,
+      blockedCount: 0,
+      failedCount: 0,
+      recoveredCount: 0,
+      traceIds: [],
+      blockers: [],
+      runtimeMetadataComplete: false,
+      runtimeRevisionMatchesCurrent: false,
+      codeRevision: "unknown",
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
 }
 
 interface SupabaseConsoleEvidence {
@@ -725,6 +801,7 @@ async function resolveCurrentCodeRevision(): Promise<string> {
 function buildProductBlockers(
   realEvidence: RealRunnerEvidence[],
   persistEvidence: CliPersistEvidence | null,
+  cronEvidence: AgentTaskCronEvidence | null,
   consoleEvidence: SupabaseConsoleEvidence,
   providerEvidence: ProviderComparisonEvidence | null
 ): string[] {
@@ -744,7 +821,16 @@ function buildProductBlockers(
       item.doNotContactEventCount > 0 &&
       item.learningUsesFeedback
   );
-  blockers.push("production_not_ready: le runner agent_tasks et le cron GitHub Actions existent, mais aucun run CI avec secrets ne les prouve encore.");
+  const cronEligible = Boolean(cronEvidence?.verdict === "pass" && cronEvidence.runtimeMetadataComplete && cronEvidence.runtimeRevisionMatchesCurrent);
+  if (!cronEligible) {
+    blockers.push("production_not_ready: le runner agent_tasks et le cron GitHub Actions existent, mais aucun run CI avec secrets ne les prouve encore.");
+  }
+  if (cronEvidence?.verdict === "pass" && !cronEvidence.runtimeMetadataComplete) {
+    blockers.push("Cron agent_tasks sans métadonnées GitHub Actions/secrets/runtime auditables.");
+  }
+  if (cronEvidence?.verdict === "pass" && cronEvidence.runtimeMetadataComplete && !cronEvidence.runtimeRevisionMatchesCurrent) {
+    blockers.push(`Cron agent_tasks généré par la révision ${cronEvidence.codeRevision}, différente du code courant.`);
+  }
   const providerModes = new Set(providerEvidence?.modes ?? []);
   const hasFullProviderScope = providerModes.has("core") && providerModes.has("exploration");
   const providerRuntimeEligible = Boolean(providerEvidence?.runtimeMetadataComplete && providerEvidence.runtimeRevisionMatchesCurrent);

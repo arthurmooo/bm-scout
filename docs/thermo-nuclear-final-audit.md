@@ -13,7 +13,7 @@ Verdict : `production_not_ready`.
 
 2. Le scheduler met maintenant en file les 6 routines P0 de façon idempotente et le runner consomme une queue, mais aucune exécution CI avec secrets n'est encore prouvée.
    - Risque : proactivité structurée, mais pas encore démontrée en production.
-   - Remède : exécuter le workflow avec secrets et vérifier les transitions sur le projet interne.
+   - Remède : exécuter le workflow avec secrets, télécharger l'artefact `bm-scout-agent-task-evidence` et vérifier les transitions sur le projet interne.
 
 3. La feedback loop causale existe localement côté TS et worker Python, mais elle n'est pas encore prouvée en run réel Supabase à volume.
    - Risque : les moteurs testés changent bien le scoring/message, mais le pilote réel peut rester sous-exercé.
@@ -39,7 +39,7 @@ Verdict : `production_not_ready`.
 - Le provider réel ajoute des run steps outil-par-outil pour déduplication, fetch, extraction, email discovery, evidence save et scoring.
 - Les function tools Agents SDK enregistrent leurs entrées/sorties compactées pendant `Runner.run`.
 - Les scripts `worker:real:*` et le runner de queue écrivent maintenant les artefacts `latest-real-*.json` attendus par `quality:readiness`.
-- Un workflow GitHub Actions cron/dispatch existe pour consommer `scout_agent_tasks`.
+- Un workflow GitHub Actions cron/dispatch existe pour consommer `scout_agent_tasks` et écrire une preuve `latest-ci-run.json`.
 - Les actions Romu passent par une route serveur et une table d'événements.
 - Les copies email/relance/LinkedIn ne touchent plus le presse-papiers avant validation serveur, et le serveur bloque une copie ou approbation de message DNC, QC bloquée ou email non utilisable.
 - Les actions feedback/outcome Romu alimentent maintenant `scout_feedback` et `scout_outcomes`, donc la mémoire agentique ne dépend plus seulement de notes fictives.

@@ -25,7 +25,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Module scheduler TS : `src/domain/scheduler.ts`.
 - Runner de queue : `src/server/agent-task-runner.ts` et `scripts/run-agent-task-queue.ts`, avec claim `queued -> running` conditionné au statut, récupération explicite des tâches `running` trop anciennes, et transitions terminales limitées aux tâches encore `running`, pour éviter deux runners, un process mort ou une annulation écrasée.
 - Routines non-worker : Daily Brief, Learning Review, DNC check et followup review lisent le snapshot Supabase runtime, produisent un résumé actionnable ou se bloquent si aucun run persistant n'existe.
-- Cron GitHub Actions versionné : `.github/workflows/bm-scout-agent-tasks.yml`.
+- Cron GitHub Actions versionné : `.github/workflows/bm-scout-agent-tasks.yml`, maintenant branché sur `agent:cron:evidence` avec artefact `artifacts/agent-tasks/latest-ci-run.json`.
 - Tests scheduler avec routines Core, Exploration, Daily Brief, Learning, DNC, followup.
 - Migration Supabase `20260530210927_agent_tasks_and_actions.sql`.
 - Migration Supabase `20260531030736_agent_tasks_active_dedupe.sql` : index unique partiel pour empêcher deux tâches `queued/running` identiques sur le même créneau.
@@ -59,6 +59,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - `demoSnapshot()` reste le fallback sans env Supabase serveur. Avec Supabase configuré mais vide, la console affiche un état runtime vide et les tâches, jamais les fixtures comme vérité produit.
 - Le worker réel peut découvrir des candidats sans seeds via SerpAPI, OpenAI `web_search` ou fallback web public ; OpenAI web est prouvé à volume PRD en comparaison provider, mais pas encore en run Agents SDK persisté Supabase à volume.
 - `verify:supabase` produit maintenant `artifacts/supabase-runtime/latest-verify.json`. `quality:readiness` refuse cet artefact s'il est ancien, `-dirty`, incomplet, sans actions Romu persistées ou sans traces Supabase.
+- `quality:readiness` refuse aussi le cron si l'artefact `latest-ci-run.json` n'est pas issu de GitHub Actions, pas en mode `real`, pas sur la révision courante, sans secrets Supabase/OpenAI ou sans transition `completed`.
 - Une comparaison provider Core seule ne peut plus déclarer les volumes PRD prouvés ; `prd_volume_proven` exige Core + Exploration.
 - Les providers `search_web`, `fetch_company_site`, `search_jobs`, `find_public_emails`, `dedupe_company` existent ; `search_jobs` reste minimal et la robustesse search dépend encore des sources publiques.
 - Les volumes 15 Core / 100 Exploration sont paramétrés mais non prouvés en run réel.
@@ -111,5 +112,5 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 2. Ajouter `SERPAPI_API_KEY`, relancer `npm run provider:compare`, puis comparer couverture, coût et qualité des sources contre OpenAI web avant choix par défaut.
 3. Prouver les volumes PRD 15 Core / 100 Exploration en run Agents SDK persisté Supabase, pas seulement en smoke provider.
 4. Prouver la feedback loop sur scoring, messages et recommandations dans un run réel Supabase.
-5. Exécuter le cron GitHub Actions avec secrets et vérifier les transitions `queued -> completed`.
+5. Exécuter le cron GitHub Actions avec secrets, télécharger `bm-scout-agent-task-evidence` et vérifier les transitions `queued -> completed`.
 6. Affecter les claims Supabase réels aux comptes Romu/Arthur et valider le parcours magic link sur le projet interne.

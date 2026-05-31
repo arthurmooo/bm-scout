@@ -218,13 +218,66 @@ function createTask(
 }
 
 function withOffset(date: Date, hours: number): string {
-  const value = new Date(date);
-  value.setHours(8 + hours, 15, 0, 0);
-  return value.toISOString();
+  return zonedDateTimeToUtcISOString(date, 8 + hours, 15, "Europe/Paris");
 }
 
 function weekdayName(date: Date, timeZone: string): string {
   return new Intl.DateTimeFormat("en-US", { weekday: "short", timeZone }).format(date);
+}
+
+function zonedDateTimeToUtcISOString(date: Date, hour: number, minute: number, timeZone: string): string {
+  const parts = dateParts(date, timeZone);
+  const utcGuess = new Date(Date.UTC(parts.year, parts.month - 1, parts.day, hour, minute, 0, 0));
+  const offsetMs = timeZoneOffsetMs(utcGuess, timeZone);
+  return new Date(utcGuess.getTime() - offsetMs).toISOString();
+}
+
+function timeZoneOffsetMs(date: Date, timeZone: string): number {
+  const parts = dateTimeParts(date, timeZone);
+  const asUtc = Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second, 0);
+  return asUtc - date.getTime();
+}
+
+function dateParts(date: Date, timeZone: string): { year: number; month: number; day: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  return {
+    year: numberPart(parts, "year"),
+    month: numberPart(parts, "month"),
+    day: numberPart(parts, "day")
+  };
+}
+
+function dateTimeParts(date: Date, timeZone: string): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).formatToParts(date);
+  return {
+    year: numberPart(parts, "year"),
+    month: numberPart(parts, "month"),
+    day: numberPart(parts, "day"),
+    hour: numberPart(parts, "hour"),
+    minute: numberPart(parts, "minute"),
+    second: numberPart(parts, "second")
+  };
+}
+
+function numberPart(parts: Intl.DateTimeFormatPart[], type: Intl.DateTimeFormatPartTypes): number {
+  const value = parts.find((part) => part.type === type)?.value;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) throw new Error(`Date part ${type} introuvable pour le scheduler.`);
+  return parsed;
 }
 
 function latestRun(runs: ScoutRun[], mode: "core" | "exploration"): ScoutRun | undefined {
