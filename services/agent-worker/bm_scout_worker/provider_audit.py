@@ -299,17 +299,32 @@ def has_sourced_observed(lead: ScoutLead) -> bool:
 
 
 def compact_run_steps(steps: list[RunStep]) -> list[dict[str, object]]:
-    compacted: list[dict[str, object]] = []
-    for step in steps[:12]:
-        compacted.append(
-            {
-                "agent_name": step.agent_name,
-                "step": step.step,
-                "event_type": step.event_type,
-                "payload": compact_payload(step.payload),
-            }
-        )
-    return compacted
+    selected = steps[:12]
+    for step in steps[12:]:
+        if not is_critical_provider_step(step):
+            continue
+        if step not in selected:
+            selected.append(step)
+
+    return [
+        {
+            "agent_name": step.agent_name,
+            "step": step.step,
+            "event_type": step.event_type,
+            "payload": compact_payload(step.payload),
+        }
+        for step in selected
+    ]
+
+
+def is_critical_provider_step(step: RunStep) -> bool:
+    if step.step in {"search_web", "openai_web_search", "serpapi_search"}:
+        return True
+    if step.step in {"openai_web_search_error", "serpapi_search_error"}:
+        return True
+    if step.step == "search_web_error" and step.payload.get("decision") == "failed":
+        return True
+    return False
 
 
 def compact_payload(payload: dict[str, object]) -> dict[str, object]:

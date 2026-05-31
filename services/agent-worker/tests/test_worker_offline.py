@@ -1116,6 +1116,50 @@ def test_provider_audit_keeps_discovery_failure_summary(monkeypatch) -> None:
     assert result.run_steps[-1]["payload"]["target_scan"] == 3
 
 
+def test_provider_audit_compaction_keeps_late_discovery_summary(monkeypatch) -> None:
+    class NoisyFailingProvider:
+        def __init__(self) -> None:
+            self.run_steps: list[RunStep] = []
+
+        def build_candidates(self, _mode, **_kwargs):
+            self.run_steps = [
+                RunStep(
+                    agent_name="bm_scout_provider",
+                    step="search_web_error",
+                    event_type="tool_call",
+                    payload={"query": f"query-{index}", "error": "timeout"},
+                )
+                for index in range(14)
+            ]
+            self.run_steps.append(
+                RunStep(
+                    agent_name="bm_scout_provider",
+                    step="search_web",
+                    event_type="tool_call",
+                    payload={
+                        "target_scan": 100,
+                        "fetch_limit": 1,
+                        "discovered_count": 0,
+                        "decision": "failed",
+                        "error": "Aucun candidat trouvé",
+                    },
+                )
+            )
+            raise RuntimeError("Aucun candidat trouvé")
+
+    monkeypatch.setattr(provider_audit, "provider_unavailable_reason", lambda _name: None)
+    monkeypatch.setattr(provider_audit, "build_named_provider", lambda _name: NoisyFailingProvider())
+    monkeypatch.setenv("BM_SCOUT_EXPLORATION_SCAN_TARGET", "100")
+    monkeypatch.setenv("BM_SCOUT_FETCH_LIMIT", "1")
+
+    result = compare_providers(["web"], ["exploration"]).results[0]
+
+    assert len(result.run_steps) == 13
+    assert result.run_steps[-1]["step"] == "search_web"
+    assert result.run_steps[-1]["payload"]["decision"] == "failed"
+    assert result.run_steps[-1]["payload"]["target_scan"] == 100
+
+
 def test_parse_provider_list_defaults_to_real_provider_order() -> None:
     assert parse_provider_list("") == ["serpapi", "openai_web", "web"]
     assert parse_provider_list("serpapi, openai_web") == ["serpapi", "openai_web"]
