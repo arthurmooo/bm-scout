@@ -227,6 +227,27 @@ def test_open_web_provider_search_web_records_unexpected_network_errors(monkeypa
     assert any(step.step == "search_web_error" and "network reset" in str(step.payload["error"]) for step in provider.run_steps)
 
 
+def test_open_web_provider_records_discovery_failure_summary(monkeypatch) -> None:
+    monkeypatch.setenv("BM_SCOUT_CORE_TARGET", "3")
+    monkeypatch.setenv("BM_SCOUT_FETCH_LIMIT", "1")
+    provider = OpenWebResearchProvider(["conseil M&A France"])
+    provider.search_web = lambda _query, _region, _limit: []
+
+    try:
+        provider.build_candidates("core")
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("Un provider réel sans candidat ne doit pas produire une sortie silencieuse.")
+
+    step = provider.run_steps[-1]
+    assert step.step == "search_web"
+    assert step.payload["decision"] == "failed"
+    assert step.payload["target_scan"] == 3
+    assert step.payload["discovered_count"] == 0
+    assert "Aucun candidat trouvé" in str(step.payload["error"])
+
+
 def test_open_web_provider_adds_job_search_evidence(monkeypatch) -> None:
     monkeypatch.setenv("BM_SCOUT_CORE_TARGET", "1")
     monkeypatch.setenv("BM_SCOUT_FETCH_LIMIT", "1")
@@ -1070,6 +1091,29 @@ def test_provider_audit_keeps_run_steps_when_provider_fails(monkeypatch) -> None
     assert result.status == "fail"
     assert result.run_steps
     assert result.run_steps[1]["step"] == "openai_web_search"
+
+
+def test_provider_audit_keeps_discovery_failure_summary(monkeypatch) -> None:
+    class EmptyProvider(OpenWebResearchProvider):
+        def __init__(self) -> None:
+            super().__init__(["conseil M&A France"])
+
+        def search_web(self, _query, _region, _limit):
+            return []
+
+    monkeypatch.setattr(provider_audit, "provider_unavailable_reason", lambda _name: None)
+    monkeypatch.setattr(provider_audit, "build_named_provider", lambda _name: EmptyProvider())
+    monkeypatch.setenv("BM_SCOUT_CORE_TARGET", "3")
+    monkeypatch.setenv("BM_SCOUT_FETCH_LIMIT", "1")
+
+    report = compare_providers(["web"], ["core"])
+    result = report.results[0]
+
+    assert result.status == "fail"
+    assert result.discovered_count == 0
+    assert result.run_steps[-1]["step"] == "search_web"
+    assert result.run_steps[-1]["payload"]["decision"] == "failed"
+    assert result.run_steps[-1]["payload"]["target_scan"] == 3
 
 
 def test_parse_provider_list_defaults_to_real_provider_order() -> None:

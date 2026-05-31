@@ -439,17 +439,23 @@ class OpenWebResearchProvider(ConfiguredWebResearchProvider):
         queries = default_search_queries(mode) if self.uses_default_queries else self.queries
         target_scan = scan_target_for_mode(mode)
         fetch_limit = fetch_limit_for_mode(mode, target_scan)
-        discovered = self.discover_seeds(queries, target_scan)
-        self.record_step(
-            "search_web",
-            {
-                "mode": mode,
-                "queries": queries,
-                "target_scan": target_scan,
-                "discovered_count": len(discovered),
-                "fetch_limit": fetch_limit,
-            },
-        )
+        try:
+            discovered = self.discover_seeds(queries, target_scan)
+        except Exception as error:
+            self.record_step(
+                "search_web",
+                {
+                    "mode": mode,
+                    "queries": queries,
+                    "target_scan": target_scan,
+                    "discovered_count": 0,
+                    "fetch_limit": fetch_limit,
+                    "decision": "failed",
+                    "error": str(error),
+                },
+            )
+            raise
+        self.record_step("search_web", discovery_payload(mode, queries, target_scan, fetch_limit, len(discovered)))
         discovery_steps = [*self.run_steps]
         self.seeds = discovered[:fetch_limit]
         leads = super().build_candidates(
@@ -873,6 +879,22 @@ def parse_search_queries(value: str) -> list[str]:
         payload = json.loads(value)
         return [str(item).strip() for item in payload if str(item).strip()]
     return [item.strip() for item in value.split(";") if item.strip()]
+
+
+def discovery_payload(
+    mode: ScoutMode,
+    queries: list[str],
+    target_scan: int,
+    fetch_limit: int,
+    discovered_count: int,
+) -> dict[str, object]:
+    return {
+        "mode": mode,
+        "queries": queries,
+        "target_scan": target_scan,
+        "discovered_count": discovered_count,
+        "fetch_limit": fetch_limit,
+    }
 
 
 def default_search_queries(mode: ScoutMode) -> list[str]:
