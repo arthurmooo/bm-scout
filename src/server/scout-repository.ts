@@ -46,7 +46,7 @@ export async function getScoutSnapshot(): Promise<ScoutSnapshot> {
     )
     .eq("status", "succeeded")
     .order("created_at", { ascending: false })
-    .limit(3);
+    .limit(8);
 
   if (error) {
     throw new Error(`Lecture Supabase BM Scout impossible: ${error.message}`);
