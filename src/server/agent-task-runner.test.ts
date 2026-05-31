@@ -77,6 +77,30 @@ describe("agent task runner", () => {
     expect(repo.transitions).toEqual(["claim-missed:task-race"]);
   });
 
+  it("n'ecrase pas une tache modifiee avant finalisation", async () => {
+    const repo = new FakeTaskRepository([task({ id: "task-cancelled", type: "weekly_core_research" })], {
+      finalizable: false
+    });
+
+    const result = await processAgentTaskQueue(repo, {
+      async execute() {
+        return {
+          status: "completed",
+          summary: "Core terminé.",
+          traceId: "trace-core"
+        };
+      }
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.processed[0]).toMatchObject({
+      taskId: "task-cancelled",
+      status: "failed",
+      errorMessage: "Transition terminale refusée car scout_agent_tasks n'était plus running."
+    });
+    expect(repo.transitions).toEqual(["running:task-cancelled", "completed-missed:task-cancelled"]);
+  });
+
   it("genere un daily brief depuis un snapshot runtime sans worker", async () => {
     const executor = createCliAgentTaskExecutor({
       real: false,
@@ -159,7 +183,7 @@ class FakeTaskRepository implements AgentTaskRepository {
 
   constructor(
     private readonly tasks: QueuedAgentTask[],
-    private readonly options: { claimable?: boolean } = {}
+    private readonly options: { claimable?: boolean; finalizable?: boolean } = {}
   ) {}
 
   async loadQueuedTasks(options: { limit: number; taskId?: string }): Promise<QueuedAgentTask[]> {
@@ -176,16 +200,31 @@ class FakeTaskRepository implements AgentTaskRepository {
     return true;
   }
 
-  async markCompleted(taskId: string, execution: AgentTaskExecution): Promise<void> {
+  async markCompleted(taskId: string, execution: AgentTaskExecution): Promise<boolean> {
+    if (this.options.finalizable === false) {
+      this.transitions.push(`completed-missed:${taskId}`);
+      return false;
+    }
     this.transitions.push(`completed:${taskId}:${execution.resultRunId ?? "no-run"}`);
+    return true;
   }
 
-  async markBlocked(taskId: string, execution: AgentTaskExecution): Promise<void> {
+  async markBlocked(taskId: string, execution: AgentTaskExecution): Promise<boolean> {
+    if (this.options.finalizable === false) {
+      this.transitions.push(`blocked-missed:${taskId}`);
+      return false;
+    }
     this.transitions.push(`blocked:${taskId}:${execution.blockedReason}`);
+    return true;
   }
 
-  async markFailed(taskId: string, execution: AgentTaskExecution): Promise<void> {
+  async markFailed(taskId: string, execution: AgentTaskExecution): Promise<boolean> {
+    if (this.options.finalizable === false) {
+      this.transitions.push(`failed-missed:${taskId}`);
+      return false;
+    }
     this.transitions.push(`failed:${taskId}:${execution.errorMessage}`);
+    return true;
   }
 
   async findRunIdByTrace(traceId: string): Promise<string | null> {

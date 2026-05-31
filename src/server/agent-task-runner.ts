@@ -27,9 +27,9 @@ export interface AgentTaskExecution {
 export interface AgentTaskRepository {
   loadQueuedTasks(options: { limit: number; taskId?: string }): Promise<QueuedAgentTask[]>;
   markRunning(taskId: string): Promise<boolean>;
-  markCompleted(taskId: string, execution: AgentTaskExecution): Promise<void>;
-  markBlocked(taskId: string, execution: AgentTaskExecution): Promise<void>;
-  markFailed(taskId: string, execution: AgentTaskExecution): Promise<void>;
+  markCompleted(taskId: string, execution: AgentTaskExecution): Promise<boolean>;
+  markBlocked(taskId: string, execution: AgentTaskExecution): Promise<boolean>;
+  markFailed(taskId: string, execution: AgentTaskExecution): Promise<boolean>;
   findRunIdByTrace(traceId: string): Promise<string | null>;
 }
 
@@ -116,47 +116,59 @@ export function createSupabaseAgentTaskRepository(): AgentTaskRepository | null 
     },
 
     async markCompleted(taskId, execution) {
-      await checked(
-        client
-          .from("scout_agent_tasks")
-          .update({
-            status: "completed",
-            summary: execution.summary,
-            result_run_id: execution.resultRunId ?? null,
-            completed_at: new Date().toISOString(),
-            error_message: null,
-            blocked_reason: null
-          })
-          .eq("id", taskId)
-      );
+      const { data, error } = await client
+        .from("scout_agent_tasks")
+        .update({
+          status: "completed",
+          summary: execution.summary,
+          result_run_id: execution.resultRunId ?? null,
+          completed_at: new Date().toISOString(),
+          error_message: null,
+          blocked_reason: null
+        })
+        .eq("id", taskId)
+        .eq("status", "running")
+        .select("id")
+        .maybeSingle();
+
+      if (error) throw new Error(`Finalisation completed agent_task impossible: ${error.message}`);
+      return Boolean(data?.id);
     },
 
     async markBlocked(taskId, execution) {
-      await checked(
-        client
-          .from("scout_agent_tasks")
-          .update({
-            status: "blocked",
-            summary: execution.summary,
-            blocked_reason: execution.blockedReason ?? execution.summary,
-            completed_at: new Date().toISOString()
-          })
-          .eq("id", taskId)
-      );
+      const { data, error } = await client
+        .from("scout_agent_tasks")
+        .update({
+          status: "blocked",
+          summary: execution.summary,
+          blocked_reason: execution.blockedReason ?? execution.summary,
+          completed_at: new Date().toISOString()
+        })
+        .eq("id", taskId)
+        .eq("status", "running")
+        .select("id")
+        .maybeSingle();
+
+      if (error) throw new Error(`Finalisation blocked agent_task impossible: ${error.message}`);
+      return Boolean(data?.id);
     },
 
     async markFailed(taskId, execution) {
-      await checked(
-        client
-          .from("scout_agent_tasks")
-          .update({
-            status: "failed",
-            summary: execution.summary,
-            error_message: execution.errorMessage ?? execution.summary,
-            completed_at: new Date().toISOString()
-          })
-          .eq("id", taskId)
-      );
+      const { data, error } = await client
+        .from("scout_agent_tasks")
+        .update({
+          status: "failed",
+          summary: execution.summary,
+          error_message: execution.errorMessage ?? execution.summary,
+          completed_at: new Date().toISOString()
+        })
+        .eq("id", taskId)
+        .eq("status", "running")
+        .select("id")
+        .maybeSingle();
+
+      if (error) throw new Error(`Finalisation failed agent_task impossible: ${error.message}`);
+      return Boolean(data?.id);
     },
 
     async findRunIdByTrace(traceId) {
@@ -345,9 +357,14 @@ async function executeTask(
         ? { ...execution, resultRunId: (await repository.findRunIdByTrace(execution.traceId)) ?? undefined }
         : execution;
 
-    if (withRunId.status === "completed") await repository.markCompleted(task.id, withRunId);
-    if (withRunId.status === "blocked") await repository.markBlocked(task.id, withRunId);
-    if (withRunId.status === "failed") await repository.markFailed(task.id, withRunId);
+    const finalized = await finalizeTaskExecution(repository, task.id, withRunId);
+    if (!finalized) {
+      return {
+        status: "failed",
+        summary: "Tâche non finalisée : son statut a changé pendant l'exécution.",
+        errorMessage: "Transition terminale refusée car scout_agent_tasks n'était plus running."
+      };
+    }
     return withRunId;
   } catch (error) {
     const execution: AgentTaskExecution = {
@@ -358,6 +375,16 @@ async function executeTask(
     await repository.markFailed(task.id, execution);
     return execution;
   }
+}
+
+function finalizeTaskExecution(
+  repository: AgentTaskRepository,
+  taskId: string,
+  execution: AgentTaskExecution
+): Promise<boolean> {
+  if (execution.status === "completed") return repository.markCompleted(taskId, execution);
+  if (execution.status === "blocked") return repository.markBlocked(taskId, execution);
+  return repository.markFailed(taskId, execution);
 }
 
 export async function runWorkerCliForEvidence(
@@ -487,11 +514,6 @@ function parseWorkerOutput(stdout: string): WorkerCliOutput | null {
   } catch {
     return null;
   }
-}
-
-async function checked<T extends { error: { message: string } | null }>(request: PromiseLike<T>): Promise<void> {
-  const { error } = await request;
-  if (error) throw new Error(error.message);
 }
 
 interface WorkerCliOutput {
