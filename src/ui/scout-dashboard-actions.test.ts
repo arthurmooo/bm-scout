@@ -36,4 +36,22 @@ describe("ScoutDashboard feedback actions", () => {
       expect(dashboard).toContain(note);
     }
   });
+
+  it("structure le centre de validation par décisions métier", () => {
+    for (const marker of [
+      'type: "lead"',
+      'type: "email"',
+      'type: "follow_up"',
+      'type: "exploration"',
+      'type: "enrichment"',
+      'type: "qc_dnc"',
+      "DNC / opt-out",
+      "Fiche bloquée",
+      "Shortlist exploration",
+      "Brouillon à copier seulement si le serveur confirme QC, email et DNC",
+      "Relance à copier seulement après validation serveur"
+    ]) {
+      expect(dashboard).toContain(marker);
+    }
+  });
 });

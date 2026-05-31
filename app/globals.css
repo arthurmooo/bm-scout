@@ -501,6 +501,20 @@ a {
   gap: 10px;
 }
 
+.approval-row.danger {
+  border-color: rgba(128, 42, 48, 0.24);
+}
+
+.approval-kind {
+  display: block;
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: 0;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
 .approval-row strong {
   color: var(--deep);
   font-size: 14px;

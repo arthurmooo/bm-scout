@@ -27,6 +27,24 @@ type QuickFeedbackAction = {
   danger?: boolean;
 };
 
+type ApprovalItemType = "lead" | "email" | "follow_up" | "exploration" | "enrichment" | "qc_dnc";
+
+type ApprovalItem = {
+  id: string;
+  type: ApprovalItemType;
+  lead: ScoutLead;
+  label: string;
+  detail: string;
+  primaryAction: LeadActionType;
+  primaryLabel: string;
+  secondaryAction: LeadActionType;
+  secondaryLabel: string;
+  primaryNote?: string;
+  secondaryNote?: string;
+  secondaryReason?: string;
+  danger?: boolean;
+};
+
 const leadFeedbackActions: QuickFeedbackAction[] = [
   { label: "Très bon", action: "feedback_good_lead", note: "Très bon lead : fort potentiel, bon secteur, bon timing." },
   { label: "Bon secteur", action: "feedback_good_lead", note: "Bon secteur : à renforcer dans le scoring." },
@@ -258,36 +276,187 @@ function QuickFeedbackPanel({
 }
 
 function ApprovalCenter({ snapshot }: { snapshot: ScoutSnapshot }) {
-  const items = uniqueLeads([
-    snapshot.primaryLead,
-    ...snapshot.queue,
-    ...snapshot.exploration,
-    ...snapshot.rejected.filter((lead) => lead.qualityDecision === "blocked").slice(0, 2)
-  ]).slice(0, 5);
+  const items = buildApprovalItems(snapshot).slice(0, 8);
 
   return (
     <section>
       <h2>À valider</h2>
       <div className="approval-list">
-        {items.map((lead) => (
-          <div className="approval-row" key={lead.id}>
+        {items.map((item) => (
+          <div className={`approval-row ${item.danger ? "danger" : ""}`} key={item.id}>
             <div>
-              <strong>{lead.company}</strong>
-              <p>{approvalLabel(lead)}</p>
+              <span className="approval-kind">{item.label}</span>
+              <strong>{item.lead.company}</strong>
+              <p>{item.detail}</p>
             </div>
             <div className="approval-actions">
-              {lead.qualityDecision === "pass" ? (
-                <ScoutActionButton className="button compact" action="validate_lead" leadId={lead.id}><Check size={15} /> OK</ScoutActionButton>
-              ) : (
-                <ScoutActionButton className="button compact" action="request_enrichment" leadId={lead.id}><Clipboard size={15} /> Enrichir</ScoutActionButton>
-              )}
-              <ScoutActionButton className="button compact danger" action="reject_lead" leadId={lead.id} reason="Rejet depuis le centre de validation."><X size={15} /> Non</ScoutActionButton>
+              <ScoutActionButton className="button compact" action={item.primaryAction} leadId={item.lead.id} note={item.primaryNote}>
+                {approvalActionIcon(item.primaryAction)} {item.primaryLabel}
+              </ScoutActionButton>
+              <ScoutActionButton
+                className={`button compact ${item.danger || item.secondaryAction === "reject_lead" ? "danger" : ""}`}
+                action={item.secondaryAction}
+                leadId={item.lead.id}
+                note={item.secondaryNote}
+                reason={item.secondaryReason}
+              >
+                {approvalActionIcon(item.secondaryAction)} {item.secondaryLabel}
+              </ScoutActionButton>
             </div>
           </div>
         ))}
       </div>
     </section>
   );
+}
+
+function buildApprovalItems(snapshot: ScoutSnapshot): ApprovalItem[] {
+  const leads = uniqueLeads([
+    snapshot.primaryLead,
+    ...snapshot.queue,
+    ...snapshot.exploration,
+    ...snapshot.rejected
+  ]);
+  const items: ApprovalItem[] = [];
+
+  for (const lead of leads) {
+    if (isDncOrOptOut(lead)) {
+      items.push({
+        id: `${lead.id}-qc-dnc`,
+        type: "qc_dnc",
+        lead,
+        label: "DNC / opt-out",
+        detail: lead.rejectionReason ?? "Compte bloqué : aucune relance autorisée.",
+        primaryAction: "add_do_not_contact",
+        primaryLabel: "Bloquer",
+        secondaryAction: "rerun_qc",
+        secondaryLabel: "QC",
+        primaryNote: "Validation DNC depuis le centre de validation.",
+        danger: true
+      });
+      continue;
+    }
+
+    if (lead.qualityDecision === "blocked") {
+      items.push({
+        id: `${lead.id}-qc-blocked`,
+        type: "qc_dnc",
+        lead,
+        label: "Fiche bloquée",
+        detail: lead.rejectionReason ?? "Sortie bloquée par Quality Control.",
+        primaryAction: "request_enrichment",
+        primaryLabel: "Enrichir",
+        secondaryAction: "reject_lead",
+        secondaryLabel: "Rejeter",
+        secondaryReason: "Rejet depuis le centre de validation : fiche bloquée."
+      });
+      continue;
+    }
+
+    if (lead.qualityDecision === "needs_enrichment") {
+      items.push({
+        id: `${lead.id}-enrichment`,
+        type: "enrichment",
+        lead,
+        label: "Enrichissement",
+        detail: "Signal ou contact à renforcer avant décision.",
+        primaryAction: "request_enrichment",
+        primaryLabel: "Enrichir",
+        secondaryAction: "rerun_qc",
+        secondaryLabel: "QC"
+      });
+      continue;
+    }
+
+    if (lead.mode === "exploration") {
+      items.push({
+        id: `${lead.id}-exploration`,
+        type: "exploration",
+        lead,
+        label: "Shortlist exploration",
+        detail: "À valider comme opportunité, sans outreach direct.",
+        primaryAction: "validate_lead",
+        primaryLabel: "Shortlist",
+        secondaryAction: "request_enrichment",
+        secondaryLabel: "Enrichir",
+        primaryNote: "Shortlist exploration validée par Romu."
+      });
+      continue;
+    }
+
+    items.push({
+      id: `${lead.id}-lead`,
+      type: "lead",
+      lead,
+      label: "Lead Core",
+      detail: approvalLabel(lead),
+      primaryAction: "validate_lead",
+      primaryLabel: "OK",
+      secondaryAction: "reject_lead",
+      secondaryLabel: "Non",
+      secondaryReason: "Rejet depuis le centre de validation."
+    });
+
+    if (lead.outreach.coldEmail && lead.qualityDecision === "pass") {
+      items.push({
+        id: `${lead.id}-email`,
+        type: "email",
+        lead,
+        label: "Email",
+        detail: "Brouillon à copier seulement si le serveur confirme QC, email et DNC.",
+        primaryAction: "copy_email",
+        primaryLabel: "Copier",
+        secondaryAction: "feedback_generic_message",
+        secondaryLabel: "Générique",
+        secondaryNote: "Message trop générique depuis le centre de validation."
+      });
+    }
+
+    if (lead.outreach.followUp && lead.qualityDecision === "pass") {
+      items.push({
+        id: `${lead.id}-follow-up`,
+        type: "follow_up",
+        lead,
+        label: "Relance",
+        detail: "Relance à copier seulement après validation serveur.",
+        primaryAction: "copy_follow_up",
+        primaryLabel: "Copier",
+        secondaryAction: "outcome_negative",
+        secondaryLabel: "Bloquer",
+        secondaryNote: "Outcome négatif : relance bloquée depuis le centre de validation.",
+        danger: false
+      });
+    }
+  }
+
+  return items.sort((left, right) => approvalPriority(left.type) - approvalPriority(right.type));
+}
+
+function approvalPriority(type: ApprovalItemType): number {
+  const priorities: Record<ApprovalItemType, number> = {
+    qc_dnc: 0,
+    lead: 1,
+    email: 2,
+    follow_up: 3,
+    enrichment: 4,
+    exploration: 5
+  };
+  return priorities[type];
+}
+
+function isDncOrOptOut(lead: ScoutLead): boolean {
+  const reason = lead.rejectionReason?.toLowerCase() ?? "";
+  return lead.personas.some((persona) => persona.doNotContact) || reason.includes("do-not-contact") || reason.includes("opt-out");
+}
+
+function approvalActionIcon(action: LeadActionType): ReactNode {
+  if (action === "copy_email" || action === "copy_follow_up" || action === "feedback_generic_message" || action === "request_enrichment") {
+    return <Clipboard size={15} />;
+  }
+  if (action === "rerun_qc") return <RefreshCw size={15} />;
+  if (action === "add_do_not_contact") return <UserX size={15} />;
+  if (action === "reject_lead" || action === "outcome_negative") return <X size={15} />;
+  return <Check size={15} />;
 }
 
 function InsightBlock({ lead }: { lead: ScoutLead }) {
