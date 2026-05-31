@@ -41,6 +41,7 @@ export interface SupabaseRuntimeArtifactEvidence {
   dncCount?: number;
   runStepCount?: number;
   actionEventCount?: number;
+  taskActionLinkCount?: number;
   persistenceDedupeVerified?: boolean;
   persistenceDedupeCompanyCount?: number;
   persistenceDedupeRetainedMode?: string | null;
@@ -166,6 +167,7 @@ export function analyzeSupabaseRuntimeArtifact(
   const persistenceDedupeComplete = hasPersistenceDedupeProof(payload);
   const derivedBlockers = [
     ...blockers,
+    ...(!numericAtLeast(payload.taskActionLinkCount, 1) ? ["Preuve Supabase manquante: aucune action Romu reliée à agent_tasks par task_id."] : []),
     ...(!persistenceDedupeComplete ? ["Preuve Supabase manquante: la RPC ne prouve pas la fusion par domaine avec priorité Core et cleanup."] : [])
   ];
   const runtimeMetadataComplete = Boolean(
@@ -181,6 +183,7 @@ export function analyzeSupabaseRuntimeArtifact(
       numericAtLeast(payload.dncCount, 1) &&
       numericAtLeast(payload.runStepCount, 1) &&
       numericAtLeast(payload.actionEventCount, 1) &&
+      numericAtLeast(payload.taskActionLinkCount, 1) &&
       persistenceDedupeComplete &&
       Array.isArray(payload.traces) &&
       payload.traces.length > 0

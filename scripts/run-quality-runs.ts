@@ -357,7 +357,7 @@ function renderReport(
       : "- Cron agent_tasks : aucune preuve GitHub Actions.",
     ...(cronEvidence?.blockers.length ? cronEvidence.blockers.map((blocker) => `- Blocker cron : ${blocker}`) : []),
     `- Console serveur Supabase : ${consoleEvidence.verdict}; source : ${consoleEvidence.source}; artefact : ${consoleEvidence.sourceFile ?? "live"}; runs : ${consoleEvidence.runCount}; leads : ${consoleEvidence.leadCount}; rejetes : ${consoleEvidence.rejectedCount}; lessons : ${consoleEvidence.lessonCount}`,
-    `- Console runtime : metadata ${consoleEvidence.runtimeMetadataComplete ? "oui" : "non"}; révision ${consoleEvidence.codeRevision}; révision courante ${consoleEvidence.runtimeRevisionMatchesCurrent ? "oui" : "non"}; actions : ${consoleEvidence.actionEventCount}`,
+    `- Console runtime : metadata ${consoleEvidence.runtimeMetadataComplete ? "oui" : "non"}; révision ${consoleEvidence.codeRevision}; révision courante ${consoleEvidence.runtimeRevisionMatchesCurrent ? "oui" : "non"}; actions : ${consoleEvidence.actionEventCount}; actions liées task : ${consoleEvidence.taskActionLinkCount}`,
     `- Supabase RPC dedupe : ${consoleEvidence.persistenceDedupeVerified ? "oui" : "non"}; companies : ${consoleEvidence.persistenceDedupeCompanyCount}; mode conservé : ${consoleEvidence.persistenceDedupeRetainedMode ?? "absent"}; run steps merged : ${consoleEvidence.persistenceDedupeRunStepCount}; cleanup companies/runs : ${consoleEvidence.persistenceDedupeCleanupRemainingCompanies}/${consoleEvidence.persistenceDedupeCleanupRemainingRuns}`,
     consoleEvidence.traces.length ? `- Traces console : ${consoleEvidence.traces.join(", ")}` : "- Traces console : aucune.",
     ...(consoleEvidence.error ? [`- Erreur console : ${consoleEvidence.error}`] : []),
@@ -707,6 +707,7 @@ interface SupabaseConsoleEvidence {
   dncCount: number;
   runStepCount: number;
   actionEventCount: number;
+  taskActionLinkCount: number;
   persistenceDedupeVerified: boolean;
   persistenceDedupeCompanyCount: number;
   persistenceDedupeRetainedMode: string | null;
@@ -784,6 +785,7 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
       dncCount: 0,
       runStepCount: 0,
       actionEventCount: 0,
+      taskActionLinkCount: 0,
       persistenceDedupeVerified: false,
       persistenceDedupeCompanyCount: 0,
       persistenceDedupeRetainedMode: null,
@@ -803,13 +805,14 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
     const snapshot = await getScoutSnapshot();
     const client = createServerSupabaseClient();
     if (!client) throw new Error("Client Supabase serveur indisponible malgré les variables requises.");
-    const [taskCount, feedbackCount, outcomeCount, dncCount, runStepCount, actionEventCount] = await Promise.all([
+    const [taskCount, feedbackCount, outcomeCount, dncCount, runStepCount, actionEventCount, taskActionLinkCount] = await Promise.all([
       tableCount(client, "scout_agent_tasks"),
       tableCount(client, "scout_feedback"),
       tableCount(client, "scout_outcomes"),
       tableCount(client, "scout_do_not_contact"),
       tableCount(client, "scout_run_steps"),
-      tableCount(client, "scout_action_events")
+      tableCount(client, "scout_action_events"),
+      taskLinkedActionCount(client)
     ]);
     const leadCount = snapshot.runs.reduce((sum, run) => sum + run.leads.length, 0);
     const rejectedCount = snapshot.runs.reduce((sum, run) => sum + run.rejected.length, 0);
@@ -829,6 +832,7 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
         dncCount > 0 &&
         runStepCount > 0 &&
         actionEventCount > 0 &&
+        taskActionLinkCount > 0 &&
         persistenceDedupe.verified &&
         traces.length > 0
           ? "pass"
@@ -846,6 +850,7 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
       dncCount,
       runStepCount,
       actionEventCount,
+      taskActionLinkCount,
       persistenceDedupeVerified: persistenceDedupe.verified,
       persistenceDedupeCompanyCount: persistenceDedupe.companyCount,
       persistenceDedupeRetainedMode: persistenceDedupe.retainedMode,
@@ -866,6 +871,7 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
         ...(dncCount < 1 ? ["Aucun do-not-contact persisté."] : []),
         ...(runStepCount < 1 ? ["Aucun run step agentique persisté."] : []),
         ...(actionEventCount < 1 ? ["Aucune trace d'action Romu persistée."] : []),
+        ...(taskActionLinkCount < 1 ? ["Aucune action Romu reliée à une tâche agentique par task_id."] : []),
         ...persistenceDedupe.blockers,
         ...(traces.length < 1 ? ["Aucune trace de run Supabase disponible."] : [])
       ]
@@ -884,6 +890,7 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
       dncCount,
       runStepCount,
       actionEventCount,
+      taskActionLinkCount,
       persistenceDedupeVerified: persistenceDedupe.verified,
       persistenceDedupeCompanyCount: persistenceDedupe.companyCount,
       persistenceDedupeRetainedMode: persistenceDedupe.retainedMode,
@@ -910,6 +917,7 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
       dncCount: 0,
       runStepCount: 0,
       actionEventCount: 0,
+      taskActionLinkCount: 0,
       persistenceDedupeVerified: false,
       persistenceDedupeCompanyCount: 0,
       persistenceDedupeRetainedMode: null,
@@ -947,6 +955,7 @@ async function loadSupabaseRuntimeArtifact(currentRevision: string): Promise<Sup
       dncCount: numberValue(payload.dncCount),
       runStepCount: numberValue(payload.runStepCount),
       actionEventCount: numberValue(payload.actionEventCount),
+      taskActionLinkCount: numberValue(payload.taskActionLinkCount),
       persistenceDedupeVerified: payload.persistenceDedupeVerified === true,
       persistenceDedupeCompanyCount: numberValue(payload.persistenceDedupeCompanyCount),
       persistenceDedupeRetainedMode: typeof payload.persistenceDedupeRetainedMode === "string" ? payload.persistenceDedupeRetainedMode : null,
@@ -975,6 +984,7 @@ async function loadSupabaseRuntimeArtifact(currentRevision: string): Promise<Sup
       dncCount: 0,
       runStepCount: 0,
       actionEventCount: 0,
+      taskActionLinkCount: 0,
       persistenceDedupeVerified: false,
       persistenceDedupeCompanyCount: 0,
       persistenceDedupeRetainedMode: null,
@@ -1168,5 +1178,14 @@ function numberValue(value: unknown): number {
 async function tableCount(client: NonNullable<ReturnType<typeof createServerSupabaseClient>>, table: string): Promise<number> {
   const { count, error } = await client.from(table).select("*", { count: "exact", head: true });
   if (error) throw new Error(`Comptage ${table} impossible: ${error.message}`);
+  return count ?? 0;
+}
+
+async function taskLinkedActionCount(client: NonNullable<ReturnType<typeof createServerSupabaseClient>>): Promise<number> {
+  const { count, error } = await client
+    .from("scout_action_events")
+    .select("*", { count: "exact", head: true })
+    .not("task_id", "is", null);
+  if (error) throw new Error(`Comptage actions liées aux tâches impossible: ${error.message}`);
   return count ?? 0;
 }

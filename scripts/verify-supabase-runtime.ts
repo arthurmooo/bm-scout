@@ -28,6 +28,7 @@ interface SupabaseRuntimeVerificationArtifact {
   dncCount: number;
   runStepCount: number;
   actionEventCount: number;
+  taskActionLinkCount: number;
   persistenceDedupeVerified: boolean;
   persistenceDedupeCompanyCount: number;
   persistenceDedupeRetainedMode: string | null;
@@ -71,13 +72,14 @@ try {
   }
   const supabaseClient = client!;
 
-  const [taskCount, feedbackCount, outcomeCount, dncCount, runStepCount, actionEventCount] = await Promise.all([
+  const [taskCount, feedbackCount, outcomeCount, dncCount, runStepCount, actionEventCount, taskActionLinkCount] = await Promise.all([
     tableCount(supabaseClient, "scout_agent_tasks"),
     tableCount(supabaseClient, "scout_feedback"),
     tableCount(supabaseClient, "scout_outcomes"),
     tableCount(supabaseClient, "scout_do_not_contact"),
     tableCount(supabaseClient, "scout_run_steps"),
-    tableCount(supabaseClient, "scout_action_events")
+    tableCount(supabaseClient, "scout_action_events"),
+    taskLinkedActionCount(supabaseClient)
   ]);
   const runCount = snapshot.runs.length;
   const leadCount = snapshot.runs.reduce((sum, run) => sum + run.leads.length, 0);
@@ -99,6 +101,7 @@ try {
   if (dncCount < 1) blockers.push("Aucun do-not-contact persisté.");
   if (runStepCount < 1) blockers.push("Aucun run step agentique persisté.");
   if (actionEventCount < 1) blockers.push("Aucune trace d'action Romu persistée.");
+  if (taskActionLinkCount < 1) blockers.push("Aucune action Romu reliée à une tâche agentique par task_id.");
   if (!traces.length) blockers.push("Aucune trace de run Supabase disponible.");
   blockers.push(...persistenceDedupe.blockers);
 
@@ -118,6 +121,7 @@ try {
     dncCount,
     runStepCount,
     actionEventCount,
+    taskActionLinkCount,
     persistenceDedupeVerified: persistenceDedupe.verified,
     persistenceDedupeCompanyCount: persistenceDedupe.companyCount,
     persistenceDedupeRetainedMode: persistenceDedupe.retainedMode,
@@ -172,6 +176,7 @@ function emptyArtifact(
     dncCount: 0,
     runStepCount: 0,
     actionEventCount: 0,
+    taskActionLinkCount: 0,
     persistenceDedupeVerified: false,
     persistenceDedupeCompanyCount: 0,
     persistenceDedupeRetainedMode: null,
@@ -212,5 +217,14 @@ async function resolveCurrentCodeRevision(): Promise<string> {
 async function tableCount(client: NonNullable<ReturnType<typeof createServerSupabaseClient>>, table: string): Promise<number> {
   const { count, error } = await client.from(table).select("*", { count: "exact", head: true });
   if (error) throw new Error(`Comptage ${table} impossible: ${error.message}`);
+  return count ?? 0;
+}
+
+async function taskLinkedActionCount(client: NonNullable<ReturnType<typeof createServerSupabaseClient>>): Promise<number> {
+  const { count, error } = await client
+    .from("scout_action_events")
+    .select("*", { count: "exact", head: true })
+    .not("task_id", "is", null);
+  if (error) throw new Error(`Comptage actions liées aux tâches impossible: ${error.message}`);
   return count ?? 0;
 }
