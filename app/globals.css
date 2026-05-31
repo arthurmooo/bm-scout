@@ -283,6 +283,22 @@ a {
   text-transform: uppercase;
 }
 
+.contact-summary {
+  display: grid;
+  gap: 5px;
+}
+
+.contact-summary a,
+.contact-warning {
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.contact-warning {
+  color: var(--muted);
+}
+
 .action-row {
   display: flex;
   flex-wrap: wrap;

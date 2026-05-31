@@ -67,4 +67,16 @@ describe("ScoutDashboard feedback actions", () => {
       expect(dashboard).toContain(marker);
     }
   });
+
+  it("affiche la source ou l'absence de source des emails", () => {
+    for (const marker of [
+      "ContactSummary",
+      "emailSourceUrl",
+      "Source email",
+      "Source email absente",
+      "Pas d&apos;email public"
+    ]) {
+      expect(dashboard).toContain(marker);
+    }
+  });
 });

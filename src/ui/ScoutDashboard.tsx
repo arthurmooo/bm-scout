@@ -204,7 +204,7 @@ function PrimaryLead({ lead }: { lead: ScoutLead }) {
         </div>
         <div className="decision-line">
           <span>Contact</span>
-          <span>{contactSummary(lead)}</span>
+          <ContactSummary lead={lead} />
         </div>
       </div>
       <div className="action-row">
@@ -554,13 +554,25 @@ function approvalLabel(lead: ScoutLead): string {
   return "Prêt pour décision Romu, sans envoi automatique.";
 }
 
-function contactSummary(lead: ScoutLead): string {
+function ContactSummary({ lead }: { lead: ScoutLead }) {
   const persona = lead.personas[0];
-  if (!persona) return "Aucun persona exploitable.";
+  if (!persona) return <span>Aucun persona exploitable.</span>;
   const email = persona.email
     ? `${persona.email} (${emailStatusLabel(persona.emailStatus)})`
     : `email ${emailStatusLabel(persona.emailStatus)}`;
-  return `${persona.role} · ${email} · ${emailTypeLabel(persona.emailType)} · confiance ${persona.emailConfidence ?? "low"}`;
+
+  return (
+    <span className="contact-summary">
+      <span>{persona.role} · {email} · {emailTypeLabel(persona.emailType)} · confiance {persona.emailConfidence ?? "low"}</span>
+      {persona.emailSourceUrl ? (
+        <a href={persona.emailSourceUrl} target="_blank" rel="noreferrer">Source email</a>
+      ) : persona.email ? (
+        <span className="contact-warning">Source email absente</span>
+      ) : (
+        <span className="contact-warning">Pas d&apos;email public</span>
+      )}
+    </span>
+  );
 }
 
 function emailStatusLabel(status: ScoutLead["personas"][number]["emailStatus"]): string {
