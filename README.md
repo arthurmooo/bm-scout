@@ -103,7 +103,7 @@ npm run feedback:evidence
 npm run provider:compare
 ```
 
-`quality:runs` valide seulement le socle fixture. `quality:readiness` doit rester bloquant tant que BM Scout est `production_not_ready`; les artefacts réels doivent indiquer une mémoire Supabase, des feedbacks/outcomes chargés, un DNC Supabase chargé, des compteurs `feedback_memory_effects` prouvant un impact sur score/message/blocage/angle, des métadonnées runtime auditables et une révision code compatible avec le commit courant pour prouver le learning runtime.
+`quality:runs` valide seulement le socle fixture. `quality:readiness` doit rester bloquant tant que BM Scout est `production_not_ready`; les artefacts réels doivent indiquer une mémoire Supabase, des feedbacks/outcomes chargés, un DNC Supabase chargé, un run step `dnc_pre_generation_gate` prouvant le court-circuit avant outreach, des compteurs `feedback_memory_effects` prouvant un impact sur score/message/blocage/angle, des métadonnées runtime auditables et une révision code compatible avec le commit courant pour prouver le learning runtime.
 Le rapport affiche un ancien artefact brut `pass` comme `fail (artefact pass inéligible)` si ses métadonnées ou sa révision ne prouvent pas le code courant.
 Les artefacts worker réels ne comptent plus pour la readiness s'ils ne prouvent pas `scanned_count >= 15` en Core et `scanned_count >= 100` en Exploration.
 Les runs issus de seeds configurées (`BM_SCOUT_PROVIDER=configured` ou `BM_SCOUT_REAL_SEEDS`) peuvent prouver une boucle feedback contrôlée via `artifacts/feedback-loop/latest-feedback-loop.json`, mais ne prouvent pas la recherche marché Core/Exploration ; `quality:readiness` ne les accepte pas pour les volumes opérationnels.

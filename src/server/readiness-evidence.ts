@@ -13,6 +13,7 @@ export interface RunnerRuntimeEvidence {
   feedbackScoreChangedCount: number;
   feedbackBlockedCount: number;
   feedbackDncBlockedCount: number;
+  dncPreGenerationBlockedCount: number;
   feedbackMessageRegeneratedCount: number;
   feedbackAngleReinforcedCount: number;
   feedbackSegmentDeltaCount: number;
@@ -118,6 +119,11 @@ export function analyzeRunnerSteps(steps: RunnerStepEvidence[], currentCodeRevis
   const feedbackScoreChangedCount = stepNumber(steps, "feedback_memory_effects", "score_changed_count");
   const feedbackBlockedCount = stepNumber(steps, "feedback_memory_effects", "blocked_count");
   const feedbackDncBlockedCount = stepNumber(steps, "feedback_memory_effects", "blocked_do_not_contact_count");
+  const dncPreGenerationBlockedCount = countMatchingSteps(
+    steps,
+    "dnc_pre_generation_gate",
+    (payload) => payload.decision === "blocked" && payload.message_generation === "skipped"
+  );
   const feedbackMessageRegeneratedCount = stepNumber(steps, "feedback_memory_effects", "message_regenerated_count");
   const feedbackAngleReinforcedCount = stepNumber(steps, "feedback_memory_effects", "angle_reinforced_count");
   const feedbackSegmentDeltaCount = stepNumber(steps, "feedback_memory_effects", "segment_delta_count");
@@ -131,6 +137,7 @@ export function analyzeRunnerSteps(steps: RunnerStepEvidence[], currentCodeRevis
     feedbackScoreChangedCount,
     feedbackBlockedCount,
     feedbackDncBlockedCount,
+    dncPreGenerationBlockedCount,
     feedbackMessageRegeneratedCount,
     feedbackAngleReinforcedCount,
     feedbackSegmentDeltaCount,
@@ -328,6 +335,14 @@ function stepNumber(steps: RunnerStepEvidence[], stepName: string, key: string):
   return steps
     .filter((step) => step.step === stepName)
     .reduce((sum, step) => sum + numberValue(step.payload?.[key]), 0);
+}
+
+function countMatchingSteps(
+  steps: RunnerStepEvidence[],
+  stepName: string,
+  predicate: (payload: Record<string, unknown>) => boolean
+): number {
+  return steps.filter((step) => step.step === stepName && predicate(step.payload ?? {})).length;
 }
 
 function detectResearchProvider(steps: RunnerStepEvidence[], declaredProvider: string): string {

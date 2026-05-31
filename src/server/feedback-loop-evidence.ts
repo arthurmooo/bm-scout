@@ -106,6 +106,9 @@ export function analyzeFeedbackLoopEvidence(
     ...(runtime.feedbackEventCount < 3 ? ["Moins de 3 feedbacks/outcomes Supabase chargés."] : []),
     ...(runtime.doNotContactEventCount < 1 ? ["Aucun do-not-contact Supabase chargé."] : []),
     ...(runtime.feedbackImpactCount < 1 ? ["Aucun impact feedback structuré mesuré."] : []),
+    ...(runtime.doNotContactEventCount > 0 && runtime.dncPreGenerationBlockedCount < 1
+      ? ["Do-not-contact chargé sans preuve `dnc_pre_generation_gate` avant génération d'outreach."]
+      : []),
     ...(!runtime.persistComplete ? ["Run non persisté via Supabase RPC."] : []),
     ...(!runtime.runtimeMetadataComplete ? ["Métadonnées runtime incomplètes."] : []),
     ...(!runtime.runtimeRevisionMatchesCurrent ? ["Révision runtime différente du code courant ou worktree dirty."] : []),
@@ -135,6 +138,7 @@ function hasCausalFeedbackEffect(runtime: RunnerRuntimeEvidence): boolean {
   return (
     runtime.feedbackScoreChangedCount > 0 ||
     runtime.feedbackBlockedCount > 0 ||
+    runtime.dncPreGenerationBlockedCount > 0 ||
     runtime.feedbackMessageRegeneratedCount > 0 ||
     runtime.feedbackAngleReinforcedCount > 0
   );

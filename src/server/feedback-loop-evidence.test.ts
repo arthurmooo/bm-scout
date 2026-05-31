@@ -55,6 +55,14 @@ describe("feedback loop evidence", () => {
             segment_delta_count: 1
           }
         },
+        {
+          step: "dnc_pre_generation_gate",
+          event_type: "tool_call",
+          payload: {
+            decision: "blocked",
+            message_generation: "skipped"
+          }
+        },
         { step: "persist_complete", event_type: "supabase_persist" }
       ],
       "abcdef1234567890",
@@ -64,6 +72,50 @@ describe("feedback loop evidence", () => {
     expect(analysis.status).toBe("pass");
     expect(analysis.runtime.runtimeProvider).toBe("configured");
     expect(analysis.runtime.feedbackImpactCount).toBe(2);
+    expect(analysis.runtime.dncPreGenerationBlockedCount).toBe(1);
+  });
+
+  it("refuse une preuve feedback DNC sans court-circuit avant génération", () => {
+    const analysis = analyzeFeedbackLoopEvidence(
+      [
+        {
+          step: "runner_complete",
+          payload: {
+            feedback_memory_source: "supabase",
+            feedback_event_count: 5,
+            do_not_contact_event_count: 1,
+            started_at: "2026-05-31T10:00:00.000Z",
+            completed_at: "2026-05-31T10:01:00.000Z",
+            duration_ms: 1000,
+            real_mode: true,
+            python_version: "3.14.2",
+            openai_agents_version: "0.17.4",
+            openai_sdk_version: "2.14.0",
+            code_revision: "abcdef123456"
+          }
+        },
+        {
+          step: "feedback_memory_effects",
+          event_type: "tool_call",
+          payload: {
+            impact_count: 1,
+            score_changed_count: 0,
+            blocked_count: 1,
+            blocked_do_not_contact_count: 1,
+            message_regenerated_count: 0,
+            angle_reinforced_count: 0
+          }
+        },
+        { step: "persist_complete", event_type: "supabase_persist" }
+      ],
+      "abcdef1234567890",
+      validLearningLessons()
+    );
+
+    expect(analysis.status).toBe("fail");
+    expect(analysis.blockers).toContain(
+      "Do-not-contact chargé sans preuve `dnc_pre_generation_gate` avant génération d'outreach."
+    );
   });
 
   it("refuse une preuve feedback sans impact causal", () => {

@@ -45,7 +45,7 @@ Verdict : `production_not_ready`.
 - Les actions Romu passent par une route serveur et une table d'événements.
 - Les copies email/relance/LinkedIn ne touchent plus le presse-papiers avant validation serveur, et le serveur bloque une copie ou approbation de message DNC, QC bloquée ou email non utilisable.
 - Les actions feedback/outcome Romu alimentent maintenant `scout_feedback` et `scout_outcomes`, donc la mémoire agentique ne dépend plus seulement de notes fictives.
-- Le DNC est un gate déterministe côté TS, worker offline et DB.
+- Le DNC est un gate déterministe côté TS, worker offline, provider réel avant génération d'outreach et DB ; `feedback:evidence` exige désormais le run step `dnc_pre_generation_gate`.
 - `quality:readiness` ne peut plus transformer des fixtures en claim de readiness.
 - Le dashboard ne contient plus de routine codée en dur.
 - Le provider OpenAI web est branché et testé avec contexte `medium`, verbosité compatible `gpt-4.1-mini` et surface de requêtes élargie ; le dernier smoke réel atteint les volumes PRD (`15/15` Core, `100/100` Exploration).

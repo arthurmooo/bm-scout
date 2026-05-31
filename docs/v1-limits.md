@@ -69,6 +69,6 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 - `npm run verify:supabase` passe avec l'env serveur.
 - `artifacts/supabase-runtime/latest-verify.json` est produit par `verify:supabase`, porte la révision courante, n'est pas `-dirty`, prouve les actions Romu persistées, et prouve la fusion RPC par domaine avec priorité Core et cleanup à zéro.
 - `--persist` cree un run lisible en Supabase via la RPC.
-- Un run reel Agents SDK utilise les feedbacks/outcomes/DNC Supabase, écrit des artefacts avec `feedback_memory_source=supabase`, des compteurs `feedback_memory_effects` non nuls, des métadonnées runtime complètes, une révision code courante, et modifie les recommandations learning. Pour les volumes Core/Exploration, le provider runtime doit être `openai_web`, `serpapi` ou `web`, pas `configured`.
+- Un run reel Agents SDK utilise les feedbacks/outcomes/DNC Supabase, écrit des artefacts avec `feedback_memory_source=supabase`, `dnc_pre_generation_gate`, des compteurs `feedback_memory_effects` non nuls, des métadonnées runtime complètes, une révision code courante, et modifie les recommandations learning. Pour les volumes Core/Exploration, le provider runtime doit être `openai_web`, `serpapi` ou `web`, pas `configured`.
 - `npm run quality:readiness` passe.
 - L'audit thermo-nuclear final ne contient plus de P1 bloquant.

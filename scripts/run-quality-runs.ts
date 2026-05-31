@@ -302,6 +302,7 @@ function renderReport(
               `impacts feedback : ${item.feedbackImpactCount}`,
               `score : ${item.feedbackScoreChangedCount}`,
               `bloqués : ${item.feedbackBlockedCount}`,
+              `DNC pré-génération : ${item.dncPreGenerationBlockedCount}`,
               `message régénéré : ${item.feedbackMessageRegeneratedCount}`,
               `angle renforcé : ${item.feedbackAngleReinforcedCount}`,
               `persist artefact : ${item.persistComplete ? "oui" : "non"}`,
@@ -330,6 +331,7 @@ function renderReport(
           `score : ${feedbackEvidence.feedbackScoreChangedCount}`,
           `bloqués : ${feedbackEvidence.feedbackBlockedCount}`,
           `DNC bloqués : ${feedbackEvidence.feedbackDncBlockedCount}`,
+          `DNC pré-génération : ${feedbackEvidence.dncPreGenerationBlockedCount}`,
           `message régénéré : ${feedbackEvidence.feedbackMessageRegeneratedCount}`,
           `angle renforcé : ${feedbackEvidence.feedbackAngleReinforcedCount}`,
           `lessons : ${feedbackEvidence.lessonCount}`,
@@ -442,6 +444,7 @@ interface RealRunnerEvidence {
   feedbackScoreChangedCount: number;
   feedbackBlockedCount: number;
   feedbackDncBlockedCount: number;
+  dncPreGenerationBlockedCount: number;
   feedbackMessageRegeneratedCount: number;
   feedbackAngleReinforcedCount: number;
   feedbackSegmentDeltaCount: number;
@@ -501,6 +504,7 @@ async function loadRealRunnerEvidence(currentRevision: string): Promise<RealRunn
       feedbackScoreChangedCount: memory.feedbackScoreChangedCount,
       feedbackBlockedCount: memory.feedbackBlockedCount,
       feedbackDncBlockedCount: memory.feedbackDncBlockedCount,
+      dncPreGenerationBlockedCount: memory.dncPreGenerationBlockedCount,
       feedbackMessageRegeneratedCount: memory.feedbackMessageRegeneratedCount,
       feedbackAngleReinforcedCount: memory.feedbackAngleReinforcedCount,
       feedbackSegmentDeltaCount: memory.feedbackSegmentDeltaCount,
@@ -534,6 +538,7 @@ interface FeedbackLoopEvidence {
   feedbackScoreChangedCount: number;
   feedbackBlockedCount: number;
   feedbackDncBlockedCount: number;
+  dncPreGenerationBlockedCount: number;
   feedbackMessageRegeneratedCount: number;
   feedbackAngleReinforcedCount: number;
   lessonCount: number;
@@ -558,6 +563,7 @@ async function loadFeedbackLoopEvidence(currentRevision: string): Promise<Feedba
     feedback_score_changed_count?: number;
     feedback_blocked_count?: number;
     feedback_dnc_blocked_count?: number;
+    dnc_pre_generation_blocked_count?: number;
     feedback_message_regenerated_count?: number;
     feedback_angle_reinforced_count?: number;
     lesson_count?: number;
@@ -576,6 +582,7 @@ async function loadFeedbackLoopEvidence(currentRevision: string): Promise<Feedba
     feedbackScoreChangedCount: numberValue(payload.feedback_score_changed_count),
     feedbackBlockedCount: numberValue(payload.feedback_blocked_count),
     feedbackDncBlockedCount: numberValue(payload.feedback_dnc_blocked_count),
+    dncPreGenerationBlockedCount: numberValue(payload.dnc_pre_generation_blocked_count),
     feedbackMessageRegeneratedCount: numberValue(payload.feedback_message_regenerated_count),
     feedbackAngleReinforcedCount: numberValue(payload.feedback_angle_reinforced_count),
     lessonCount: numberValue(payload.lesson_count),
@@ -1020,6 +1027,7 @@ function buildProductBlockers(
       feedbackEvidence.runtimeRevisionMatchesCurrent &&
       feedbackEvidence.learningUsesFeedback &&
       feedbackEvidence.feedbackImpactCount > 0 &&
+      feedbackEvidence.dncPreGenerationBlockedCount > 0 &&
       hasCausalFeedbackEvidence(feedbackEvidence)
   );
   const hasLearningFromFeedback =
@@ -1032,6 +1040,7 @@ function buildProductBlockers(
         item.feedbackEventCount > 0 &&
         item.doNotContactEventCount > 0 &&
         item.feedbackImpactCount > 0 &&
+        item.dncPreGenerationBlockedCount > 0 &&
         (item.feedbackScoreChangedCount > 0 ||
           item.feedbackBlockedCount > 0 ||
           item.feedbackMessageRegeneratedCount > 0 ||
@@ -1092,6 +1101,9 @@ function buildProductBlockers(
   if (feedbackEvidence?.verdict === "pass" && (!feedbackEvidence.learningUsesFeedback || !hasCausalFeedbackEvidence(feedbackEvidence))) {
     blockers.push("Preuve feedback:evidence sans learning exploitable ou effet causal score/message/blocage/angle.");
   }
+  if (feedbackEvidence?.verdict === "pass" && feedbackEvidence.dncPreGenerationBlockedCount < 1) {
+    blockers.push("Preuve feedback:evidence sans `dnc_pre_generation_gate` avant génération d'outreach.");
+  }
   if (!hasLearningFromFeedback) {
     blockers.push("Learning Agent non prouvé avec feedbacks/outcomes Supabase, do-not-contact et impact causal structuré sur lead/message/score.");
   }
@@ -1124,6 +1136,7 @@ function hasCausalFeedbackEvidence(evidence: FeedbackLoopEvidence): boolean {
   return (
     evidence.feedbackScoreChangedCount > 0 ||
     evidence.feedbackBlockedCount > 0 ||
+    evidence.dncPreGenerationBlockedCount > 0 ||
     evidence.feedbackMessageRegeneratedCount > 0 ||
     evidence.feedbackAngleReinforcedCount > 0
   );
