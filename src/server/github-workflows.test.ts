@@ -49,6 +49,27 @@ describe("github readiness workflows", () => {
     expect(workflow).not.toContain("secrets.");
   });
 
+  it("ne lance pas le cron agent_tasks réel sans preflight OpenAI disponible", () => {
+    const workflow = readFileSync(join(root, ".github", "workflows", "bm-scout-agent-tasks.yml"), "utf8");
+    const blockerScript = readFileSync(join(root, "scripts", "write-agent-task-openai-blocker.ts"), "utf8");
+
+    expect(workflow).toContain("npm run openai:preflight");
+    expect(workflow).toContain("id: openai_preflight");
+    expect(workflow).toContain("gpt-4.1-mini");
+    expect(workflow).toContain("BM_SCOUT_WORKER_TIMEOUT_MS");
+    expect(workflow).toContain('steps.openai_preflight.outputs.available');
+    expect(workflow).toContain('if [ "$MODE" = "real" ]');
+    expect(workflow).toContain('!= "true"');
+    expect(workflow).toContain("npm run agent:tasks:openai-blocker");
+    expect(workflow).toContain("artifacts/openai-runtime/*.json");
+    expect(workflow).toContain('npm run agent:cron:evidence -- --mode="$MODE" --limit=10 --stale-minutes=90');
+    expect(blockerScript).toContain("latest-ci-run.json");
+    expect(blockerScript).toContain("OpenAI preflight échoué");
+    expect(blockerScript).toContain("agent_tasks real non lancé");
+    expect(blockerScript).toContain("weekly_core_research");
+    expect(blockerScript).toContain("weekly_exploration_scan");
+  });
+
   it("force les six routines P0 dans le mode cron de readiness", () => {
     const script = readFileSync(join(root, "scripts", "run-agent-task-cron-evidence.ts"), "utf8");
 
