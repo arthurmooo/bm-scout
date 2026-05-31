@@ -90,7 +90,33 @@ describe("scout actions", () => {
     const result = await recordScoutAction({ action: "add_do_not_contact", leadId: "core-cambon" });
 
     expect(result.ok).toBe(true);
-    expect(calls.some((call) => call.table === "scout_do_not_contact" && call.op === "insert")).toBe(true);
+    expect(calls).toContainEqual({
+      table: "scout_do_not_contact",
+      op: "insert",
+      payload: [
+        {
+          scope: "company",
+          company_id: "company-1",
+          source: "manual",
+          reason: "Ajout manuel Romu."
+        },
+        {
+          scope: "domain",
+          normalized_domain: "example.com",
+          company_id: "company-1",
+          source: "manual",
+          reason: "Ajout manuel Romu."
+        },
+        {
+          scope: "contact",
+          contact_id: "contact-1",
+          company_id: "company-1",
+          normalized_email_hash: "hash-romu",
+          source: "manual",
+          reason: "Ajout manuel Romu."
+        }
+      ]
+    });
     expect(
       calls.some(
         (call) =>
@@ -105,6 +131,14 @@ describe("scout actions", () => {
           call.table === "scout_companies" &&
           call.op === "update" &&
           JSON.stringify(call.payload).includes("blocked")
+      )
+    ).toBe(true);
+    expect(
+      calls.some(
+        (call) =>
+          call.table === "scout_action_events" &&
+          call.op === "insert" &&
+          JSON.stringify(call.payload).includes('"dncScopes":["company","domain","contact"]')
       )
     ).toBe(true);
   });
@@ -264,12 +298,29 @@ describe("scout actions", () => {
     expect(calls).toContainEqual({
       table: "scout_do_not_contact",
       op: "insert",
-      payload: {
-        scope: "company",
-        company_id: "company-1",
-        source: "reply",
-        reason: "Réponse négative : ne pas relancer."
-      }
+      payload: [
+        {
+          scope: "company",
+          company_id: "company-1",
+          source: "reply",
+          reason: "Réponse négative : ne pas relancer."
+        },
+        {
+          scope: "domain",
+          normalized_domain: "example.com",
+          company_id: "company-1",
+          source: "reply",
+          reason: "Réponse négative : ne pas relancer."
+        },
+        {
+          scope: "contact",
+          contact_id: "contact-1",
+          company_id: "company-1",
+          normalized_email_hash: "hash-romu",
+          source: "reply",
+          reason: "Réponse négative : ne pas relancer."
+        }
+      ]
     });
     expect(calls).toContainEqual({ table: "scout_messages", op: "update", payload: { status: "blocked" } });
     expect(
@@ -465,5 +516,9 @@ function singleRow(table: string) {
   if (table === "scout_outcomes") {
     return state.blockingOutcome ? { id: "outcome-1", outcome: "negative", note: "Réponse négative." } : null;
   }
-  return { id: "company-1", domain: "example.com" };
+  return {
+    id: "company-1",
+    domain: "example.com",
+    scout_contacts: [{ id: "contact-1", email_hash: "hash-romu" }]
+  };
 }

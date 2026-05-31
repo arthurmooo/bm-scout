@@ -45,6 +45,7 @@ type ActionMutationTrace = {
   messageIds?: string[];
   channel?: MessageChannel;
   channels?: MessageChannel[];
+  dncScopes?: string[];
 };
 
 const ACTION_LABELS: Record<LeadActionType, string> = {
@@ -269,14 +270,8 @@ async function applyLeadMutation(input: ScoutActionInput, companyId: string): Pr
     await checked(client.from("scout_companies").update({ verdict: "enrich", quality_decision: "needs_enrichment" }).eq("id", companyId));
   }
   if (input.action === "add_do_not_contact") {
-    await checked(
-      client.from("scout_do_not_contact").insert({
-        scope: "company",
-        company_id: companyId,
-        source: "manual",
-        reason: input.reason ?? input.note ?? "Ajout manuel Romu."
-      })
-    );
+    const note = input.reason ?? input.note ?? "Ajout manuel Romu.";
+    const dncTrace = await markCompanyDoNotContact(companyId, "manual", note);
     await checked(
       client
         .from("scout_companies")
@@ -284,7 +279,8 @@ async function applyLeadMutation(input: ScoutActionInput, companyId: string): Pr
         .eq("id", companyId)
     );
     await checked(client.from("scout_messages").update({ status: "blocked" }).eq("company_id", companyId));
-    await insertFeedback(companyId, "do_not_contact", input.reason ?? input.note ?? "Do-not-contact manuel Romu.");
+    await insertFeedback(companyId, "do_not_contact", note);
+    return dncTrace;
   }
   if (input.action === "copy_email") return markMessageCopied(companyId, "email");
   if (input.action === "copy_follow_up") return markMessageCopied(companyId, "follow_up");
@@ -424,17 +420,52 @@ async function rejectUnblockedMessages(companyId: string): Promise<void> {
 async function hardGateFutureContactAfterNegativeOutcome(companyId: string, note: string): Promise<void> {
   const client = createServerSupabaseClient();
   if (!client) return;
-  await checked(
-    client.from("scout_do_not_contact").insert({
-      scope: "company",
-      company_id: companyId,
-      source: "reply",
-      reason: note
-    })
-  );
+  await markCompanyDoNotContact(companyId, "reply", note);
   await checked(client.from("scout_messages").update({ status: "blocked" }).eq("company_id", companyId).neq("status", "blocked"));
   await insertFeedback(companyId, "negative_outcome", note);
   await insertFeedback(companyId, "do_not_contact", `Outcome négatif / opt-out : ${note}`);
+}
+
+async function markCompanyDoNotContact(
+  companyId: string,
+  source: "manual" | "reply",
+  reason: string
+): Promise<ActionMutationTrace> {
+  const client = createServerSupabaseClient();
+  if (!client) return {};
+  const target = await loadDncTargets(companyId);
+  const records: DoNotContactInsert[] = [{ scope: "company", company_id: companyId, source, reason }];
+  if (target.domain) records.push({ scope: "domain", normalized_domain: target.domain, company_id: companyId, source, reason });
+  for (const contact of target.contacts) {
+    records.push({
+      scope: "contact",
+      contact_id: contact.id,
+      company_id: companyId,
+      normalized_email_hash: contact.email_hash ?? undefined,
+      source,
+      reason
+    });
+  }
+  await checked(client.from("scout_do_not_contact").insert(records));
+  return { dncScopes: Array.from(new Set(records.map((record) => record.scope))) };
+}
+
+async function loadDncTargets(companyId: string): Promise<CompanyDncTargets> {
+  const client = createServerSupabaseClient();
+  if (!client) return { domain: null, contacts: [] };
+  const { data, error } = await client
+    .from("scout_companies")
+    .select("domain,scout_contacts(id,email_hash)")
+    .eq("id", companyId)
+    .maybeSingle();
+  if (error) throw new Error(`Lecture cibles do-not-contact impossible: ${error.message}`);
+  const row = data as CompanyDncTargetRow | null;
+  return {
+    domain: normalizeDomain(row?.domain),
+    contacts: Array.isArray(row?.scout_contacts)
+      ? row.scout_contacts.filter((contact): contact is ContactDncTarget => Boolean(contact?.id))
+      : []
+  };
 }
 
 async function updateCompany(companyId: string, patch: CompanyPatch): Promise<void> {
@@ -486,4 +517,34 @@ interface CopyableMessageRow {
   contact_id: string | null;
   scout_contacts?: { email: string | null; email_status: "usable" | "verify" | "not_usable"; email_type: string | null } | null;
   scout_companies?: { domain: string | null } | null;
+}
+
+type DoNotContactInsert = {
+  scope: "company" | "domain" | "contact";
+  source: "manual" | "reply";
+  reason: string;
+  company_id?: string;
+  contact_id?: string;
+  normalized_domain?: string;
+  normalized_email_hash?: string;
+};
+
+type ContactDncTarget = {
+  id: string;
+  email_hash: string | null;
+};
+
+type CompanyDncTargetRow = {
+  domain: string | null;
+  scout_contacts?: Array<ContactDncTarget | null> | null;
+};
+
+type CompanyDncTargets = {
+  domain: string | null;
+  contacts: ContactDncTarget[];
+};
+
+function normalizeDomain(domain: string | null | undefined): string | null {
+  const value = domain?.trim().toLowerCase();
+  return value || null;
 }
