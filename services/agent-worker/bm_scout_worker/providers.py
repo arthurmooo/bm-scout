@@ -255,15 +255,19 @@ class ConfiguredWebResearchProvider:
 
     def find_public_emails(self, company_name: str, domain: str, pages: list[str]) -> list[dict[str, str]]:
         emails: list[dict[str, str]] = []
+        seen: set[str] = set()
         pattern = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.IGNORECASE)
         for page in pages:
             for email in pattern.findall(page):
-                if domain and not email.lower().endswith("@" + domain):
-                    continue
                 normalized = email.lower()
-                local_part = normalized.split("@", 1)[0]
-                email_type = "generic" if local_part in {"contact", "info", "hello", "bonjour", "support"} else "public_named"
-                emails.append({"email": normalized, "type": email_type, "confidence": "medium"})
+                if normalized in seen:
+                    continue
+                classified = classify_public_email(normalized, domain)
+                if not classified:
+                    continue
+                seen.add(normalized)
+                emails.append(classified)
+        emails.sort(key=email_priority)
         return emails[:3]
 
     def dedupe_company(self, seed: CompanySeed) -> str:
@@ -1066,6 +1070,12 @@ def to_scout_lead(
     emails: list[dict[str, str]],
 ) -> ScoutLead:
     lead_id = f"{mode}-{hashlib.sha1((seed.company + seed.website).encode('utf-8')).hexdigest()[:10]}"
+    primary_email = emails[0] if emails else {}
+    email_source_url = (
+        primary_email.get("source_url") or evidence[0].url
+        if primary_email and evidence
+        else None
+    )
     outreach = (
         OutreachPack(
             cold_email=(
@@ -1102,11 +1112,11 @@ def to_scout_lead(
                 role="Operations / Partner",
                 reason="Persona à vérifier : proche des tâches de coordination et arbitrage commercial.",
                 contact_confidence="role_only",
-                email=emails[0]["email"] if emails else None,
-                email_type=emails[0]["type"] if emails else "unknown",
-                email_confidence=emails[0]["confidence"] if emails else "low",
-                email_status="verify" if emails else "not_usable",
-                email_source_url=evidence[0].url if emails and evidence else None,
+                email=primary_email.get("email"),
+                email_type=primary_email.get("type", "unknown"),
+                email_confidence=primary_email.get("confidence", "low"),
+                email_status=email_status_with_source(primary_email, email_source_url),
+                email_source_url=email_source_url,
             )
         ],
         evidence=evidence,
@@ -1129,6 +1139,59 @@ def to_scout_lead(
 
 def normalized_domain(url: str) -> str:
     return urlparse(url).netloc.lower().removeprefix("www.")
+
+
+GENERIC_EMAIL_LOCAL_PARTS = {
+    "contact",
+    "info",
+    "hello",
+    "bonjour",
+    "support",
+    "recrutement",
+    "jobs",
+    "careers",
+}
+
+BLOCKED_EMAIL_LOCAL_PARTS = {"noreply", "no-reply", "donotreply", "do-not-reply", "webmaster"}
+PATTERN_EMAIL_MARKERS = {"firstname", "lastname", "first.last", "prenom", "nom", "prénom"}
+
+
+def classify_public_email(email: str, domain: str) -> dict[str, str] | None:
+    local_part, _, email_domain = email.partition("@")
+    if not local_part or not email_domain:
+        return None
+    if domain:
+        allowed_domains = {domain, registrable_domain(domain)}
+        if email_domain.removeprefix("www.") not in allowed_domains:
+            return None
+    normalized_local = normalized_name(local_part).replace("-", ".")
+    if local_part in BLOCKED_EMAIL_LOCAL_PARTS or normalized_local in BLOCKED_EMAIL_LOCAL_PARTS:
+        return None
+    if local_part_looks_like_pattern(normalized_local):
+        return {"email": email, "type": "probable_pattern", "confidence": "low", "status": "verify"}
+    if local_part in GENERIC_EMAIL_LOCAL_PARTS or normalized_local in GENERIC_EMAIL_LOCAL_PARTS:
+        return {"email": email, "type": "generic", "confidence": "medium", "status": "verify"}
+    return {"email": email, "type": "public_named", "confidence": "high", "status": "usable"}
+
+
+def email_priority(item: dict[str, str]) -> tuple[int, int, str]:
+    status_rank = {"usable": 0, "verify": 1, "not_usable": 2}
+    type_rank = {"public_named": 0, "generic": 1, "probable_pattern": 2, "unknown": 3}
+    return (status_rank.get(item.get("status", "not_usable"), 2), type_rank.get(item.get("type", "unknown"), 3), item.get("email", ""))
+
+
+def local_part_looks_like_pattern(normalized_local: str) -> bool:
+    tokens = [token for token in re.split(r"[._-]+", normalized_local) if token]
+    if any(token in PATTERN_EMAIL_MARKERS for token in tokens):
+        return True
+    return normalized_local in PATTERN_EMAIL_MARKERS
+
+
+def email_status_with_source(item: dict[str, str], source_url: str | None) -> str:
+    status = item.get("status", "not_usable")
+    if status == "usable" and not source_url:
+        return "verify"
+    return status
 
 
 def normalized_name(name: str) -> str:

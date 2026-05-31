@@ -178,6 +178,12 @@ function leadBlockers(lead: ScoutLead): string[] {
   if (!lead.scoreJustification.trim()) blockers.push(`${lead.company}: score non justifie.`);
   for (const persona of lead.personas) {
     if (persona.email && !persona.emailSourceUrl) blockers.push(`${lead.company}: email public sans URL source.`);
+    if (persona.emailStatus === "usable" && (!persona.email || !persona.emailSourceUrl)) {
+      blockers.push(`${lead.company}: email utilisable sans adresse ou source.`);
+    }
+    if (persona.emailType === "unknown" && persona.emailStatus === "usable") {
+      blockers.push(`${lead.company}: email inconnu marqué utilisable.`);
+    }
     if (persona.emailType === "probable_pattern" && persona.emailStatus !== "verify") {
       blockers.push(`${lead.company}: email pattern probable non marque a verifier.`);
     }

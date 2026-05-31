@@ -352,7 +352,7 @@ def test_core_provider_passed_qc_lead_is_validable() -> None:
     assert lead.verdict == "validate"
 
 
-def test_public_email_is_marked_to_verify_with_source() -> None:
+def test_public_named_email_is_usable_with_source() -> None:
     provider = ConfiguredWebResearchProvider(
         [CompanySeed(company="Test M&A", website="https://example.com", segment="Conseil M&A")]
     )
@@ -364,8 +364,8 @@ def test_public_email_is_marked_to_verify_with_source() -> None:
     assert persona.email == "partner@example.com"
     assert persona.email_type == "public_named"
     assert persona.email_source_url == "https://example.com"
-    assert persona.email_confidence == "medium"
-    assert persona.email_status == "verify"
+    assert persona.email_confidence == "high"
+    assert persona.email_status == "usable"
 
 
 def test_generic_public_email_keeps_generic_type() -> None:
@@ -378,7 +378,48 @@ def test_generic_public_email_keeps_generic_type() -> None:
 
     assert persona.email == "contact@example.com"
     assert persona.email_type == "generic"
+    assert persona.email_confidence == "medium"
     assert persona.email_status == "verify"
+
+
+def test_probable_pattern_email_is_marked_to_verify() -> None:
+    provider = ConfiguredWebResearchProvider(
+        [CompanySeed(company="Test M&A", website="https://example.com", segment="Conseil M&A")]
+    )
+    provider.fetch_company_site = lambda _url: "Pour nous écrire: firstname.lastname@example.com M&A transaction reporting document"
+
+    persona = provider.build_candidates("core")[0].personas[0]
+
+    assert persona.email == "firstname.lastname@example.com"
+    assert persona.email_type == "probable_pattern"
+    assert persona.email_confidence == "low"
+    assert persona.email_status == "verify"
+
+
+def test_provider_does_not_invent_probable_email_pattern() -> None:
+    provider = ConfiguredWebResearchProvider(
+        [CompanySeed(company="Test M&A", website="https://example.com", segment="Conseil M&A")]
+    )
+    provider.fetch_company_site = lambda _url: "M&A transaction reporting document sans email public"
+
+    persona = provider.build_candidates("core")[0].personas[0]
+
+    assert persona.email is None
+    assert persona.email_type == "unknown"
+    assert persona.email_confidence == "low"
+    assert persona.email_status == "not_usable"
+
+
+def test_provider_ignores_no_reply_email() -> None:
+    provider = ConfiguredWebResearchProvider(
+        [CompanySeed(company="Test M&A", website="https://example.com", segment="Conseil M&A")]
+    )
+    provider.fetch_company_site = lambda _url: "noreply@example.com M&A transaction reporting document"
+
+    persona = provider.build_candidates("core")[0].personas[0]
+
+    assert persona.email is None
+    assert persona.email_status == "not_usable"
 
 
 def test_configured_provider_dedupes_same_domain() -> None:

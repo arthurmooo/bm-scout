@@ -294,13 +294,20 @@ function contactSummary(lead: ScoutLead): string {
   const email = persona.email
     ? `${persona.email} (${emailStatusLabel(persona.emailStatus)})`
     : `email ${emailStatusLabel(persona.emailStatus)}`;
-  return `${persona.role} · ${email} · confiance ${persona.emailConfidence ?? "low"}`;
+  return `${persona.role} · ${email} · ${emailTypeLabel(persona.emailType)} · confiance ${persona.emailConfidence ?? "low"}`;
 }
 
 function emailStatusLabel(status: ScoutLead["personas"][number]["emailStatus"]): string {
   if (status === "usable") return "utilisable";
   if (status === "verify") return "à vérifier";
   return "non utilisable";
+}
+
+function emailTypeLabel(type: ScoutLead["personas"][number]["emailType"]): string {
+  if (type === "public_named") return "nominatif public";
+  if (type === "generic") return "générique";
+  if (type === "probable_pattern") return "pattern probable";
+  return "source inconnue";
 }
 
 function deriveInsights(lead: ScoutLead): StructuredInsights {
