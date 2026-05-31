@@ -25,7 +25,11 @@ describe("github readiness workflows", () => {
     expect(workflow).toContain("SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}");
     expect(workflow).toContain("OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}");
     expect(workflow).toContain("SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}");
-    expect(workflow.match(/continue-on-error: true/g)?.length).toBeGreaterThanOrEqual(5);
+    expect(workflow).toContain("id: openai_preflight");
+    expect(workflow).toContain('echo "available=true" >> "$GITHUB_OUTPUT"');
+    expect(workflow).toContain("steps.openai_preflight.outputs.available == 'true'");
+    expect(workflow).toContain("inputs.provider == 'serpapi' || inputs.provider == 'web'");
+    expect(workflow.match(/continue-on-error: true/g)?.length).toBeGreaterThanOrEqual(4);
     expect(workflow).toContain("actions/upload-artifact@v4");
     expect(workflow).toContain("bm-scout-readiness-evidence");
     expect(workflow).toContain("artifacts/quality-runs/*.md");

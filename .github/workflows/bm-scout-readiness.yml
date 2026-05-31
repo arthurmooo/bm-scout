@@ -58,24 +58,34 @@ jobs:
           npm run worker:test
           npm run build
       - name: OpenAI runtime preflight
-        continue-on-error: true
-        run: npm run openai:preflight
+        id: openai_preflight
+        shell: bash
+        run: |
+          set +e
+          npm run openai:preflight
+          if [ -f artifacts/openai-runtime/latest-preflight.json ] && jq -e '.status == "pass"' artifacts/openai-runtime/latest-preflight.json >/dev/null; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Provider comparison
+        if: ${{ steps.openai_preflight.outputs.available == 'true' || inputs.provider == 'serpapi' || inputs.provider == 'web' }}
         continue-on-error: true
         run: npm run provider:compare
       - name: Feedback loop evidence
+        if: ${{ steps.openai_preflight.outputs.available == 'true' }}
         continue-on-error: true
         run: npm run feedback:evidence
       - name: Persisted Core worker evidence
-        if: ${{ inputs.run_workers }}
+        if: ${{ inputs.run_workers && steps.openai_preflight.outputs.available == 'true' }}
         continue-on-error: true
         run: npm run worker:real:core:persist
       - name: Persisted Exploration worker evidence
-        if: ${{ inputs.run_workers }}
+        if: ${{ inputs.run_workers && steps.openai_preflight.outputs.available == 'true' }}
         continue-on-error: true
         run: npm run worker:real:exploration:persist
       - name: Full P0 cron evidence
-        if: ${{ inputs.run_cron }}
+        if: ${{ inputs.run_cron && steps.openai_preflight.outputs.available == 'true' }}
         continue-on-error: true
         run: npm run agent:cron:evidence -- --mode=real --limit=10 --stale-minutes=90 --all-p0
       - name: Supabase runtime verification
