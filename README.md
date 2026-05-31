@@ -64,10 +64,12 @@ npm run agent:schedule:run
 npm run agent:tasks
 npm run agent:tasks:offline
 npm run agent:tasks:real
+npm run provider:compare
 ```
 
 `agent:schedule` affiche le plan sans persistance. `agent:schedule:run` met des tâches en file dans Supabase si l'env serveur est configurée.
 `agent:tasks` lit la queue Supabase sans exécuter. `agent:tasks:offline` consomme la queue avec le worker déterministe. `agent:tasks:real` consomme la queue avec OpenAI Agents SDK et `--persist`.
+`provider:compare` compare SerpAPI, OpenAI web et fallback web sur Core/Exploration et écrit `artifacts/provider-comparison/latest-comparison.json`.
 
 ## Tests
 
@@ -79,9 +81,12 @@ npm run build
 npm run quality:runs
 npm run quality:readiness
 npm run worker:test
+npm run provider:compare
 ```
 
 `quality:runs` valide seulement le socle fixture. `quality:readiness` doit rester bloquant tant que BM Scout est `production_not_ready`.
+`provider:compare` est un gate de recherche réelle : sans `SERPAPI_API_KEY` ou `OPENAI_API_KEY`, un échec est attendu et doit rester visible.
+OpenAI a bien un tool officiel de recherche web via Responses API (`web_search`) et le provider `openai_web` l'utilise. Dans les smokes réels actuels, OpenAI web passe Core borné mais ne prouve pas encore Exploration 100 comptes ; SerpAPI reste à brancher pour comparer le scan large.
 
 ## Worker agentique
 
@@ -100,7 +105,7 @@ cd services/agent-worker
 La persistance `--persist` passe par la RPC Supabase transactionnelle `scout_persist_mission_output`.
 Le chemin réel expose le `WebSearchTool` hébergé OpenAI dans l'orchestration Agents SDK, plus les tools métier `search_web`, `fetch_company_site`, `extract_company_signals`, `search_jobs`, `find_public_emails`, `dedupe_company`, `score_candidate`, `save_evidence`.
 Les scripts `worker:real:*` écrivent les artefacts `artifacts/agent-worker-real/latest-real-*.json` consommés par `quality:readiness`.
-SerpAPI est branché derrière le même contrat métier que `openai_web`. En `auto`, `BM_SCOUT_REAL_SEEDS` reste prioritaire, puis `SERPAPI_API_KEY`, puis OpenAI web, puis le fallback web public. SerpAPI reste non prouvé tant qu'aucun run réel avec clé n'a produit d'artefact Core/Exploration.
+SerpAPI est branché derrière le même contrat métier que `openai_web`. En `auto`, `BM_SCOUT_REAL_SEEDS` reste prioritaire, puis `SERPAPI_API_KEY`, puis OpenAI web, puis le fallback web public. OpenAI web est utile pour Core et l'enrichissement ciblé ; SerpAPI reste le candidat à prouver pour Exploration 100 comptes.
 
 ## Documentation
 

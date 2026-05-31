@@ -5,6 +5,7 @@ import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from bm_scout_worker import provider_audit
 from bm_scout_worker import tools
 from bm_scout_worker.fixtures import offline_output
 from bm_scout_worker.memory import SupabaseConfig, SupabaseMemory
@@ -16,16 +17,19 @@ from bm_scout_worker.providers import (
     SearchResult,
     SerpApiResearchProvider,
     build_candidate_batch,
+    is_company_related_result,
     parse_company_seeds,
     parse_duckduckgo_lite_results,
+    parse_openai_response_sources,
     parse_openai_search_results,
     parse_serpapi_results,
     parse_search_queries,
     provider_from_env,
 )
+from bm_scout_worker.provider_audit import compare_providers, parse_provider_list, provider_unavailable_reason
 from bm_scout_worker.quality import mission_blockers
 from bm_scout_worker.runner import run_bm_scout_mission
-from bm_scout_worker.schemas import FeedbackEvent, OutreachPack, QualityGate, ScoutLead, StructuredInsights
+from bm_scout_worker.schemas import FeedbackEvent, OutreachPack, QualityGate, RunStep, ScoutLead, StructuredInsights
 from bm_scout_worker.tool_recorder import capture_tool_calls, compact_payload
 
 
@@ -429,6 +433,71 @@ def test_parse_openai_search_results_tolerates_invalid_json() -> None:
     assert parse_openai_search_results("pas du json", 5) == []
 
 
+def test_parse_openai_search_results_falls_back_to_urls() -> None:
+    text = "Source officielle: https://www.8advisory.com/fr/services/transaction-services/ pour Transaction Services."
+
+    results = parse_openai_search_results(text, 5)
+
+    assert results[0].url == "https://www.8advisory.com/fr/services/transaction-services/"
+    assert "8advisory.com" in results[0].title
+
+
+def test_parse_openai_response_sources_falls_back_to_web_sources() -> None:
+    response = SimpleNamespace(
+        output=[
+            SimpleNamespace(
+                type="web_search_call",
+                action=SimpleNamespace(
+                    sources=[
+                        SimpleNamespace(
+                            title="Transaction Services | Deloitte France",
+                            url="https://www.deloitte.com/fr/fr/services/mergers-and-acquisitions.html",
+                            snippet="Conseil transaction services.",
+                        ),
+                        SimpleNamespace(title="LinkedIn", url="https://www.linkedin.com/company/deloitte", snippet="Réseau social."),
+                    ]
+                ),
+            )
+        ]
+    )
+
+    results = parse_openai_response_sources(response, 5)
+
+    assert [result.url for result in results] == ["https://www.deloitte.com/fr/fr/services/mergers-and-acquisitions.html"]
+    assert results[0].snippet == "Conseil transaction services."
+
+
+def test_openai_provider_uses_fallback_jobs_search_by_default(monkeypatch) -> None:
+    provider = OpenAIWebResearchProvider(["conseil M&A France"])
+    monkeypatch.delenv("BM_SCOUT_OPENAI_SEARCH_JOBS", raising=False)
+
+    def fake_fallback_search(_self, query, _region, _limit):
+        assert "8advisory" in query.lower() or "eight advisory" in query.lower()
+        return [
+            SearchResult(
+                title="Eight Advisory careers analyst M&A",
+                url="https://www.8advisory.com/fr/careers/",
+                snippet="Offre analyste transaction services.",
+            )
+        ]
+
+    def fail_openai_search(*_args, **_kwargs):
+        raise AssertionError("OpenAI search_web should not be called for jobs by default")
+
+    monkeypatch.setattr(OpenWebResearchProvider, "search_web", fake_fallback_search)
+    monkeypatch.setattr(provider, "search_web", fail_openai_search)
+
+    results = provider.search_jobs("Eight Advisory", "8advisory.com", "fr")
+
+    assert results[0].url == "https://www.8advisory.com/fr/careers/"
+
+
+def test_company_related_result_ignores_domain_suffix_tokens() -> None:
+    result = SearchResult(title="Accenture careers", url="https://www.accenture.com/us-en/careers", snippet="Global jobs")
+
+    assert not is_company_related_result(result, "eightadvisory.com", "eightadvisory.com")
+
+
 def test_parse_serpapi_results_filters_non_candidates() -> None:
     payload = {
         "organic_results": [
@@ -492,6 +561,85 @@ def test_serpapi_provider_search_records_steps(monkeypatch) -> None:
     assert "serpapi.com/search.json" in requests[0][0].full_url
     assert "api_key=serpapi-key" in requests[0][0].full_url
     assert any(step.step == "serpapi_search" and step.payload["result_count"] == 1 for step in provider.run_steps)
+
+
+def test_provider_audit_marks_missing_keys_unavailable(monkeypatch) -> None:
+    monkeypatch.delenv("SERPAPI_API_KEY", raising=False)
+    monkeypatch.delenv("SERP_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    assert provider_unavailable_reason("serpapi") == "SERPAPI_API_KEY manquant."
+    assert provider_unavailable_reason("openai_web") == "OPENAI_API_KEY manquant."
+
+    report = compare_providers(["serpapi", "openai_web"], ["core"])
+
+    assert report.verdict == "fail"
+    assert any("Aucun provider réel" in blocker for blocker in report.blockers)
+    assert all(item.status == "unavailable" for item in report.results)
+
+
+def test_provider_audit_can_recommend_real_provider(monkeypatch) -> None:
+    class FakeProvider:
+        run_steps: list[RunStep]
+
+        def build_candidates(self, mode, **_kwargs):
+            target = 15 if mode == "core" else 100
+            self.run_steps = [
+                RunStep(
+                    agent_name="bm_scout_provider",
+                    step="search_web",
+                    event_type="tool_call",
+                    payload={"discovered_count": target, "target_scan": target},
+                )
+            ]
+            return offline_output(mode).leads[:1]
+
+    monkeypatch.setattr(provider_audit, "provider_unavailable_reason", lambda _name: None)
+    monkeypatch.setattr(provider_audit, "build_named_provider", lambda _name: FakeProvider())
+
+    report = compare_providers(["serpapi"], ["core", "exploration"])
+
+    assert report.verdict == "pass"
+    assert report.recommended_default == "serpapi"
+    assert report.prd_volume_proven is True
+
+
+def test_provider_audit_keeps_run_steps_when_provider_fails(monkeypatch) -> None:
+    class FailingProvider:
+        def __init__(self) -> None:
+            self.run_steps: list[RunStep] = []
+
+        def build_candidates(self, _mode, **_kwargs):
+            self.run_steps = [
+                RunStep(
+                    agent_name="bm_scout_provider",
+                    step="search_web",
+                    event_type="tool_call",
+                    payload={"discovered_count": 0, "target_scan": 15},
+                ),
+                RunStep(
+                    agent_name="bm_scout_provider",
+                    step="openai_web_search",
+                    event_type="tool_call",
+                    payload={"result_count": 0, "source_count": 0, "output_text_chars": 0},
+                ),
+            ]
+            raise RuntimeError("Aucun candidat trouvé")
+
+    monkeypatch.setattr(provider_audit, "provider_unavailable_reason", lambda _name: None)
+    monkeypatch.setattr(provider_audit, "build_named_provider", lambda _name: FailingProvider())
+
+    report = compare_providers(["openai_web"], ["core"])
+    result = report.results[0]
+
+    assert result.status == "fail"
+    assert result.run_steps
+    assert result.run_steps[1]["step"] == "openai_web_search"
+
+
+def test_parse_provider_list_defaults_to_real_provider_order() -> None:
+    assert parse_provider_list("") == ["serpapi", "openai_web", "web"]
+    assert parse_provider_list("serpapi, openai_web") == ["serpapi", "openai_web"]
 
 
 def test_agent_sdk_tool_calls_are_recorded(monkeypatch) -> None:

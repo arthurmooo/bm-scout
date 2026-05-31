@@ -26,7 +26,8 @@
     "worker:real:exploration": "tsx scripts/run-agent-worker-evidence.ts --real --mode=exploration",
     "worker:real:core:persist": "tsx scripts/run-agent-worker-evidence.ts --real --mode=core --persist",
     "worker:real:exploration:persist": "tsx scripts/run-agent-worker-evidence.ts --real --mode=exploration --persist",
-    "worker:persist:offline": "tsx scripts/run-agent-worker-evidence.ts --offline --mode=core --persist"
+    "worker:persist:offline": "tsx scripts/run-agent-worker-evidence.ts --offline --mode=core --persist",
+    "provider:compare": ".venv/bin/python -m bm_scout_worker.provider_audit --artifacts-dir artifacts/provider-comparison"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.3",

@@ -37,6 +37,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - QC TS : DNC déterministe et Observé relié à une preuve.
 - Worker offline : DNC interdit en shortlist.
 - Worker réel : provider `auto` avec seeds, SerpAPI, OpenAI `web_search` ou fallback web public, plus `WebSearchTool` hébergé OpenAI et 8 tools métier Agents SDK.
+- Provider OpenAI web : utilise le tool officiel Responses API `{ "type": "web_search" }`, conserve les sources/traces, parse JSON ou sources web, et n'utilise pas OpenAI récursivement pour les recherches jobs sauf opt-in `BM_SCOUT_OPENAI_SEARCH_JOBS=1`.
 - Provider SerpAPI : `BM_SCOUT_PROVIDER=serpapi` ou sélection auto via `SERPAPI_API_KEY`, parsing des `organic_results`, filtrage des sources faibles et run step `serpapi_search`.
 - `search_jobs` n'est plus décoratif : le provider web cherche des sources recrutement publiques, les transforme en preuves et les trace dans `run_steps`.
 - Scripts `worker:real:*` : exécution reproductible Core/Exploration réelle, avec artefacts `latest-real-*.json` consommés par `quality:readiness`.
@@ -78,7 +79,9 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - `npm run build` : pass.
 - `npm run quality:runs` : pass fixture, décision produit `production_not_ready`.
 - `npm run quality:readiness` : fail attendu, décision produit `production_not_ready`.
-- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 32 tests pass, dont provider SerpAPI.
+- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 40 tests pass, dont provider SerpAPI, provider OpenAI web, fallback jobs, parsing sources et comparaison provider.
+- Avec `OPENAI_API_KEY` présent en env et `BM_SCOUT_FETCH_LIMIT=5`, `npm run provider:compare -- --providers=openai_web --modes=core` : pass réel, Core découvre 15 candidats, enrichit 5 comptes et 5 passent QC.
+- Avec `OPENAI_API_KEY` présent en env et `BM_SCOUT_FETCH_LIMIT=5`, `npm run provider:compare -- --providers=openai_web --modes=exploration` : fail attendu côté volume, Exploration découvre 36/100 comptes, produit une shortlist de 5 avec 2 pass QC et bloque les messages directs. Conclusion : OpenAI `web_search` est utile pour Core/enrichissement ciblé, mais SerpAPI reste à brancher pour prouver le scan large 100 comptes.
 - Import Agents SDK manager : 13 tools disponibles, dont `WebSearchTool` et 8 tools métier provider.
 - `npm run agent:schedule` : pass, 6 routines planifiées.
 - `npm run agent:tasks` sans env serveur : fail attendu avec message env Supabase requis.
@@ -92,8 +95,8 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 ## Prochaine tranche P0
 
 1. Fournir l'env service role au runner local/cron et tester `agent:tasks:offline` contre Supabase.
-2. Prouver `serpapi` ou `openai_web` à volume, puis comparer couverture, coût et qualité des sources.
-3. Prouver les volumes PRD 15 Core / 100 Exploration avec artefacts réels.
+2. Ajouter `SERPAPI_API_KEY`, relancer `npm run provider:compare`, puis comparer couverture, coût et qualité des sources contre OpenAI web avant choix par défaut.
+3. Prouver les volumes PRD 15 Core / 100 Exploration avec artefacts réels, notamment Exploration 100 comptes.
 4. Prouver la feedback loop sur scoring, messages et recommandations dans un run réel Supabase.
 5. Exécuter le cron GitHub Actions avec secrets et vérifier les transitions `queued -> completed`.
 6. Affecter les claims Supabase réels aux comptes Romu/Arthur et valider le parcours magic link sur le projet interne.

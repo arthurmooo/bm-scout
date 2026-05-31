@@ -32,8 +32,9 @@ const fixtureVerdict: RunVerdict = globalBlockers.length === 0 && globalScore >=
 const realRunnerEvidence = await loadRealRunnerEvidence();
 const cliPersistEvidence = await loadCliPersistEvidence();
 const supabaseConsoleEvidence = await loadSupabaseConsoleEvidence();
+const providerComparisonEvidence = await loadProviderComparisonEvidence();
 const readinessMode = process.argv.includes("--readiness");
-const productBlockers = buildProductBlockers(realRunnerEvidence, cliPersistEvidence, supabaseConsoleEvidence);
+const productBlockers = buildProductBlockers(realRunnerEvidence, cliPersistEvidence, supabaseConsoleEvidence, providerComparisonEvidence);
 const productReadiness: ProductReadiness = productBlockers.length === 0 ? "pilot_candidate" : "production_not_ready";
 
 const report = renderReport(
@@ -43,7 +44,8 @@ const report = renderReport(
   globalBlockers,
   realRunnerEvidence,
   cliPersistEvidence,
-  supabaseConsoleEvidence
+  supabaseConsoleEvidence,
+  providerComparisonEvidence
 );
 const artifactsDir = join(process.cwd(), "artifacts", "quality-runs");
 await mkdir(artifactsDir, { recursive: true });
@@ -59,6 +61,7 @@ await writeFile(
       realRunnerEvidence,
       cliPersistEvidence,
       supabaseConsoleEvidence,
+      providerComparisonEvidence,
       readinessMode,
       runs: evaluatedRuns
     },
@@ -216,7 +219,8 @@ function renderReport(
   blockers: string[],
   realEvidence: RealRunnerEvidence[],
   persistEvidence: CliPersistEvidence | null,
-  consoleEvidence: SupabaseConsoleEvidence
+  consoleEvidence: SupabaseConsoleEvidence,
+  providerEvidence: ProviderComparisonEvidence | null
 ): string {
   const lines = [
     "# Rapport qualite BM Scout - socle fixture",
@@ -250,6 +254,17 @@ function renderReport(
     `- Console serveur Supabase : ${consoleEvidence.verdict}; runs : ${consoleEvidence.runCount}; leads : ${consoleEvidence.leadCount}; rejetes : ${consoleEvidence.rejectedCount}; lessons : ${consoleEvidence.lessonCount}`,
     consoleEvidence.traces.length ? `- Traces console : ${consoleEvidence.traces.join(", ")}` : "- Traces console : aucune.",
     ...(consoleEvidence.error ? [`- Erreur console : ${consoleEvidence.error}`] : []),
+    "",
+    "## Evidence providers reels",
+    "",
+    ...(providerEvidence
+      ? [
+          `- Comparaison : ${providerEvidence.verdict}; provider recommandé : ${providerEvidence.recommendedDefault ?? "aucun"}; volumes PRD : ${providerEvidence.prdVolumeProven ? "oui" : "non"}`,
+          `- Providers testés : ${providerEvidence.providers.join(", ")}`,
+          `- Modes testés : ${providerEvidence.modes.join(", ")}`,
+          ...(providerEvidence.blockers.length ? providerEvidence.blockers.map((blocker) => `- Blocker provider : ${blocker}`) : ["- Blocker provider : aucun"])
+        ]
+      : ["- Aucune comparaison provider détectée dans `artifacts/provider-comparison/latest-comparison.json`."]),
     "",
     "## Synthese des runs",
     "",
@@ -390,6 +405,39 @@ interface SupabaseConsoleEvidence {
   error?: string;
 }
 
+interface ProviderComparisonEvidence {
+  verdict: RunVerdict;
+  providers: string[];
+  modes: string[];
+  recommendedDefault: string | null;
+  prdVolumeProven: boolean;
+  blockers: string[];
+  sourceFile: string;
+}
+
+async function loadProviderComparisonEvidence(): Promise<ProviderComparisonEvidence | null> {
+  const sourceFile = "latest-comparison.json";
+  const path = join(process.cwd(), "artifacts", "provider-comparison", sourceFile);
+  if (!existsSync(path)) return null;
+  const payload = JSON.parse(await readFile(path, "utf8")) as {
+    verdict?: RunVerdict;
+    providers?: string[];
+    modes?: string[];
+    recommended_default?: string | null;
+    prd_volume_proven?: boolean;
+    blockers?: string[];
+  };
+  return {
+    verdict: payload.verdict === "pass" ? "pass" : "fail",
+    providers: payload.providers ?? [],
+    modes: payload.modes ?? [],
+    recommendedDefault: payload.recommended_default ?? null,
+    prdVolumeProven: Boolean(payload.prd_volume_proven),
+    blockers: payload.blockers ?? [],
+    sourceFile
+  };
+}
+
 async function loadSupabaseConsoleEvidence(): Promise<SupabaseConsoleEvidence> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
     return {
@@ -433,7 +481,8 @@ async function loadSupabaseConsoleEvidence(): Promise<SupabaseConsoleEvidence> {
 function buildProductBlockers(
   realEvidence: RealRunnerEvidence[],
   persistEvidence: CliPersistEvidence | null,
-  consoleEvidence: SupabaseConsoleEvidence
+  consoleEvidence: SupabaseConsoleEvidence,
+  providerEvidence: ProviderComparisonEvidence | null
 ): string[] {
   const blockers: string[] = [];
   const hasCore = realEvidence.some((item) => item.mode === "core" && item.verdict === "pass" && item.finalDecision === "ready");
@@ -447,7 +496,9 @@ function buildProductBlockers(
   const hasLearningFromFeedback = realEvidence.some((item) => item.mode === "core" && item.learningUsesFeedback);
   blockers.push("production_not_ready: le runner agent_tasks et le cron GitHub Actions existent, mais aucun run CI avec secrets ne les prouve encore.");
   blockers.push("production_not_ready: les providers SerpAPI/OpenAI web/fallback public existent, mais la recherche marche web/jobs/email n'est pas encore prouvee a volume PRD.");
-  blockers.push("production_not_ready: la couverture SerpAPI vs OpenAI web/fallback public doit etre mesuree avant de choisir le provider par defaut.");
+  if (!providerEvidence || providerEvidence.verdict !== "pass" || !providerEvidence.recommendedDefault) {
+    blockers.push("production_not_ready: la couverture SerpAPI vs OpenAI web/fallback public doit etre mesuree avant de choisir le provider par defaut.");
+  }
 
   if (!hasCore || !hasExploration) {
     blockers.push("Runs OpenAI Agents SDK réels Core et Exploration incomplets.");

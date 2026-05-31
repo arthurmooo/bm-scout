@@ -212,7 +212,7 @@ class ConfiguredWebResearchProvider:
             method="GET",
         )
         try:
-            with urllib.request.urlopen(request, timeout=12) as response:
+            with urllib.request.urlopen(request, timeout=float(os.getenv("BM_SCOUT_FETCH_TIMEOUT_SECONDS", "8"))) as response:
                 body = response.read(250_000)
         except (urllib.error.URLError, TimeoutError) as error:
             return f"Fetch failed for {url}: {error}"
@@ -310,7 +310,7 @@ class OpenWebResearchProvider(ConfiguredWebResearchProvider):
     def discover_seeds(self, queries: list[str], target_scan: int) -> list[CompanySeed]:
         seeds: list[CompanySeed] = []
         seen: set[str] = set()
-        per_query_limit = max(10, min(30, target_scan))
+        per_query_limit = max(10, min(50, (target_scan // max(1, len(queries))) + 8))
         for query in queries:
             for result in self.search_web(query, "fr", per_query_limit):
                 seed = seed_from_search_result(result, query)
@@ -379,19 +379,52 @@ class OpenAIWebResearchProvider(OpenWebResearchProvider):
             response = client.responses.create(
                 model=model,
                 input=openai_search_prompt(query, region, limit),
-                tools=[{"type": "web_search", "search_context_size": "low", "external_web_access": True}],
-                tool_choice="required",
+                tools=[{"type": "web_search", "search_context_size": "low", "user_location": openai_user_location(region)}],
+                tool_choice="auto",
+                include=["web_search_call.action.sources"],
+                max_tool_calls=1,
                 max_output_tokens=1200,
+                store=False,
+                text={"verbosity": "low"},
+                timeout=float(os.getenv("OPENAI_SEARCH_TIMEOUT_SECONDS", "45")),
             )
         except Exception as error:
             self.record_step("openai_web_search_error", {"query": query, "error": str(error), "model": model})
             return []
         text = getattr(response, "output_text", "") or ""
-        results = parse_openai_search_results(text, limit)
+        results = parse_openai_search_results(text, limit) or parse_openai_response_sources(response, limit)
         self.record_step(
             "openai_web_search",
-            {"query": query, "region": region, "limit": limit, "result_count": len(results), "model": model},
+            {
+                "query": query,
+                "region": region,
+                "limit": limit,
+                "result_count": len(results),
+                "model": model,
+                "output_text_chars": len(text),
+                "output_types": openai_response_output_types(response),
+                "source_count": openai_response_source_count(response),
+            },
         )
+        return results
+
+    def search_jobs(self, company_name: str, domain: str, region: str) -> list[SearchResult]:
+        if os.getenv("BM_SCOUT_OPENAI_SEARCH_JOBS", "").strip() == "1":
+            return super().search_jobs(company_name, domain, region)
+
+        results: list[SearchResult] = []
+        seen: set[str] = set()
+        for query in job_search_queries(company_name, domain, region):
+            for result in OpenWebResearchProvider.search_web(self, query, region, 8):
+                if not is_candidate_url(result.url) or not is_job_result(result) or not is_company_related_result(result, company_name, domain):
+                    continue
+                key = normalized_url(result.url)
+                if key in seen:
+                    continue
+                seen.add(key)
+                results.append(result)
+                if len(results) >= 3:
+                    return results
         return results
 
 
@@ -565,7 +598,12 @@ def default_search_queries(mode: ScoutMode) -> list[str]:
     return [
         "opérations formation B2B inscriptions documents relances France",
         "finance operations reporting multi sites documents France",
-        "services B2B processus documents relances CRM France"
+        "services B2B processus documents relances CRM France",
+        "cabinet expertise comptable collecte pièces relances clients France",
+        "gestion patrimoine immobilier documents reporting investisseurs France",
+        "asset management immobilier reporting portefeuille investisseurs France",
+        "conseil RH paie onboarding documents relances France",
+        "organisme formation Qualiopi dossiers apprenants relances France",
     ]
 
 
@@ -622,11 +660,11 @@ Contraintes :
 def parse_openai_search_results(text: str, limit: int) -> list[SearchResult]:
     payload = extract_json_payload(text)
     if not payload:
-        return []
+        return parse_url_results_from_text(text, limit)
     try:
         data = json.loads(payload)
     except json.JSONDecodeError:
-        return []
+        return parse_url_results_from_text(text, limit)
     items = data.get("results", data if isinstance(data, list) else [])
     results: list[SearchResult] = []
     for item in items:
@@ -640,7 +678,7 @@ def parse_openai_search_results(text: str, limit: int) -> list[SearchResult]:
         results.append(SearchResult(title=title, url=url, snippet=snippet or title))
         if len(results) >= limit:
             break
-    return results
+    return results or parse_url_results_from_text(text, limit)
 
 
 def parse_serpapi_results(payload: object, limit: int) -> list[SearchResult]:
@@ -663,6 +701,86 @@ def parse_serpapi_results(payload: object, limit: int) -> list[SearchResult]:
         if len(results) >= limit:
             break
     return results
+
+
+def parse_openai_response_sources(response: object, limit: int) -> list[SearchResult]:
+    results: list[SearchResult] = []
+    seen: set[str] = set()
+    for source in iter_openai_response_sources(response):
+        url = str(read_attr(source, "url", "") or "").strip()
+        title = str(read_attr(source, "title", "") or "").strip() or normalized_domain(url)
+        snippet = str(read_attr(source, "snippet", "") or read_attr(source, "summary", "") or "").strip()
+        if not url or not is_candidate_url(url):
+            continue
+        key = normalized_url(url)
+        if key in seen:
+            continue
+        seen.add(key)
+        results.append(SearchResult(title=title, url=url, snippet=snippet or title))
+        if len(results) >= limit:
+            break
+    return results
+
+
+def parse_url_results_from_text(text: str, limit: int) -> list[SearchResult]:
+    results: list[SearchResult] = []
+    seen: set[str] = set()
+    for match in re.finditer(r"https?://[^\s\"'<>),]+", text):
+        url = match.group(0).rstrip(".,;:]}").strip()
+        if not url or not is_candidate_url(url):
+            continue
+        key = normalized_url(url)
+        if key in seen:
+            continue
+        seen.add(key)
+        title = normalized_domain(url) or url
+        snippet = sentence_around(text, match.start(), match.end()) or title
+        results.append(SearchResult(title=title, url=url, snippet=snippet))
+        if len(results) >= limit:
+            break
+    return results
+
+
+def sentence_around(text: str, start: int, end: int) -> str:
+    left = max(text.rfind("\n", 0, start), text.rfind(". ", 0, start))
+    right_candidates = [index for index in [text.find("\n", end), text.find(". ", end)] if index >= 0]
+    right = min(right_candidates) if right_candidates else min(len(text), end + 180)
+    return clean_html_text(text[left + 1 : right]).strip()[:240]
+
+
+def iter_openai_response_sources(response: object) -> list[object]:
+    sources: list[object] = []
+    for output_item in read_iterable_attr(response, "output"):
+        action = read_attr(output_item, "action")
+        sources.extend(read_iterable_attr(action, "sources"))
+        sources.extend(read_iterable_attr(output_item, "sources"))
+    return sources
+
+
+def openai_response_source_count(response: object) -> int:
+    return len(iter_openai_response_sources(response))
+
+
+def openai_response_output_types(response: object) -> list[str]:
+    return [str(read_attr(item, "type", "unknown") or "unknown") for item in read_iterable_attr(response, "output")]
+
+
+def read_attr(item: object, name: str, default: object | None = None) -> object | None:
+    if item is None:
+        return default
+    if isinstance(item, dict):
+        return item.get(name, default)
+    return getattr(item, name, default)
+
+
+def read_iterable_attr(item: object, name: str) -> list[object]:
+    value = read_attr(item, name, [])
+    return value if isinstance(value, list) else []
+
+
+def openai_user_location(region: str) -> dict[str, str]:
+    country = "FR" if region.lower().startswith("fr") else region[:2].upper() or "FR"
+    return {"type": "approximate", "country": country}
 
 
 def extract_json_payload(text: str) -> str:
@@ -738,7 +856,8 @@ def is_company_related_result(result: SearchResult, company_name: str, domain: s
     if domain and (result_domain == domain or result_domain.endswith(f".{domain}")):
         return True
     text = f"{result.title} {result.url} {result.snippet}".lower()
-    tokens = [token for token in re.split(r"[^a-z0-9]+", company_name.lower()) if len(token) >= 3]
+    ignored_tokens = {"com", "fr", "www", "net", "org", "io", "co", "eu", "sas", "ltd", "group", "groupe"}
+    tokens = [token for token in re.split(r"[^a-z0-9]+", company_name.lower()) if len(token) >= 4 and token not in ignored_tokens]
     return bool(tokens) and any(token in text for token in tokens)
 
 

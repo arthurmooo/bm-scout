@@ -16,9 +16,11 @@ Statut : `production_not_ready`. Socle utilisable pour demo interne, pas pour d�
   - `SERPAPI_API_KEY` optionnel pour utiliser SerpAPI comme recherche SERP réelle
   - `OPENAI_MODEL` optionnel, par defaut `gpt-5.5`
   - `OPENAI_SEARCH_MODEL` optionnel pour la recherche web OpenAI
-  - `BM_SCOUT_PROVIDER=auto|serpapi|openai_web|web|configured|demo`
-  - `BM_SCOUT_SEARCH_QUERIES` optionnel pour piloter les requêtes web
-  - `BM_SCOUT_REAL_SEEDS` pour le mode `configured`
+- `BM_SCOUT_PROVIDER=auto|serpapi|openai_web|web|configured|demo`
+- `BM_SCOUT_SEARCH_QUERIES` optionnel pour piloter les requêtes web
+- `BM_SCOUT_REAL_SEEDS` pour le mode `configured`
+- `OPENAI_SEARCH_TIMEOUT_SECONDS` optionnel pour borner les appels OpenAI web search
+- `BM_SCOUT_OPENAI_SEARCH_JOBS=1` optionnel si l'on accepte d'utiliser OpenAI aussi pour les recherches jobs ; par défaut les jobs utilisent le fallback web léger
   - `BM_SCOUT_PROVIDER=demo` seulement pour forcer explicitement les fixtures
 
 Ne jamais exposer `SUPABASE_SERVICE_ROLE_KEY` dans le navigateur. Elle sert uniquement au worker et au rendu serveur.
@@ -124,6 +126,26 @@ npm run agent:tasks:real
 Limite actuelle : le runner est reproductible, mais le cron production reste à brancher. `agent:tasks:real` lance le worker OpenAI Agents SDK et requiert `OPENAI_API_KEY`.
 Les actions Romu de feedback et outcome écrivent `scout_feedback` / `scout_outcomes`, puis les runs suivants les rechargent via le worker. Cela doit être prouvé par comparaison avant/après sur un run Supabase réel avant tout statut pilote.
 
+## Comparer les providers de recherche
+
+```bash
+npm run provider:compare
+```
+
+La commande écrit :
+
+- `artifacts/provider-comparison/latest-comparison.json`
+- `artifacts/provider-comparison/latest-comparison.md`
+
+Elle compare `serpapi`, `openai_web` et `web` sur Core et Exploration. Sans `SERPAPI_API_KEY` ou `OPENAI_API_KEY`, ces providers sont marqués `unavailable` au lieu de retomber silencieusement sur les fixtures. Le statut `pass` de cette comparaison ne suffit pas pour déclarer BM Scout prêt : il faut encore des runs Agents SDK réels, persistés, à volume PRD.
+
+Résultat actuel avec OpenAI web seul :
+
+- Core borné (`BM_SCOUT_FETCH_LIMIT=5`) : pass, 15 candidats découverts, 5 enrichis, 5 pass QC.
+- Exploration bornée (`BM_SCOUT_FETCH_LIMIT=5`) : qualité shortlist partielle, mais volume fail, 36/100 comptes découverts.
+
+Décision actuelle : OpenAI `web_search` est utilisable pour Core et l'enrichissement ciblé. Pour le scan large Exploration 100 comptes, brancher SerpAPI puis comparer avant de choisir le provider par défaut.
+
 ## Cron GitHub Actions
 
 Le workflow `.github/workflows/bm-scout-agent-tasks.yml` planifie `agent:schedule:run` puis `agent:tasks:real` les jours ouvrés à 07:15 UTC, avec déclenchement manuel possible en mode `real` ou `offline`.
@@ -206,6 +228,7 @@ npm run test
 npm run worker:test
 npm run build
 npm run quality:runs
+npm run provider:compare
 npm run verify:supabase
 npm run quality:readiness
 ```

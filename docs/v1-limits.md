@@ -19,6 +19,8 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 - La feedback memory modifie bien scoring/message en local côté TS et worker Python ; les feedbacks/outcomes Supabase chargent maintenant le contexte entreprise/segment/site, mais l'effet doit encore être prouvé sur runs réels persistés.
 - Les agents produisent des sorties structurees, mais la qualite commerciale finale reste a valider par Romu.
 - Les recherches SerpAPI/OpenAI web/fallback public restent dependantes de la disponibilite des sources, des coûts, des rate limits et de la qualité des requêtes.
+- OpenAI `web_search` est branché et testé sur Core. Il ne prouve pas encore Exploration 100 comptes : dernier smoke réel à 36/100 comptes découverts avec shortlist bornée.
+- `provider:compare` mesure la couverture des providers, mais ne remplace pas un run Agents SDK persisté ni une validation commerciale Romu.
 - Les volumes PRD 15 Core / 100 Exploration sont des objectifs de routine, pas encore des preuves de production.
 
 ## Limites data
@@ -52,7 +54,8 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 
 - Le cron GitHub Actions consomme vraiment `scout_agent_tasks` via `agent:tasks:real` avec secrets configurés.
 - `BM_SCOUT_AUTH_MODE=internal` est activé hors démo, avec `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` et comptes internes autorisés.
-- Les providers reels dépassent les seeds configurées, scannent réellement le marché et prouvent la qualité des sources ; SerpAPI est branché mais reste à prouver avec clé et artefacts à volume.
+- Les providers reels dépassent les seeds configurées, scannent réellement le marché et prouvent la qualité des sources ; OpenAI web est prouvé sur Core borné, SerpAPI reste à brancher avec clé et artefacts à volume pour Exploration.
+- `artifacts/provider-comparison/latest-comparison.json` recommande un provider réel couvrant Core et Exploration à volume configuré/PRD.
 - `npm run verify:supabase` passe avec l'env serveur.
 - `--persist` cree un run lisible en Supabase via la RPC.
 - Un run reel Agents SDK utilise les feedbacks/outcomes Supabase et modifie les recommandations learning.
