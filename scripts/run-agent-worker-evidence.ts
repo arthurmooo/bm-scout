@@ -32,6 +32,7 @@ console.log(
       verdict: result.parsed?.verdict ?? null,
       blockers: result.parsed?.blockers ?? [],
       traceId: result.parsed?.output?.trace_id ?? null,
+      scannedCount: result.parsed?.output?.scanned_count ?? 0,
       keptCount: result.parsed?.output?.kept_count ?? 0,
       rejectedCount: result.parsed?.output?.rejected_count ?? 0,
       error: ok ? null : [result.stderr, result.stdout].filter(Boolean).join("\n").slice(0, 4000)

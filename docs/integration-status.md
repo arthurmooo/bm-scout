@@ -47,6 +47,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Déduplication provider renforcée : clés multiples domaine, domaine enregistrable, identité légale normalisée + pays/ville, LinkedIn et identifiant public si disponible, avec run steps `dedupe_company` exposant les clés de doublon. Côté Supabase, la persistance fusionne aussi les companies par `external_id` ou domaine pour éviter un doublon Core/Exploration.
 - Scripts `worker:real:*` : exécution reproductible Core/Exploration réelle, avec artefacts `latest-real-*.json` consommés par `quality:readiness`, incluant modèle, provider, versions SDK, révision code, timestamps et durée. Un artefact réel ne compte pas pour la readiness si sa révision ne correspond pas au commit courant.
 - Les routines Core/Exploration transmettent maintenant leurs objectifs payload au worker Python ; le worker dérive `scanned_count` des steps provider `discovered_count`, et `quality:readiness` exige Core >= 15 scannés et Exploration >= 100 scannés.
+- Le runner refuse aussi de marquer un worker réel persisté comme preuve valide si `scanned_count` est sous l'objectif PRD ou si le step `persist_complete` Supabase manque.
 - Mémoire feedback TS : rejet lead, pénalité secteur, bonus angle validé, régénération anti-générique.
 - Mémoire feedback worker : chargement feedbacks/outcomes Supabase avec contexte entreprise/segment/site, chargement direct de `scout_do_not_contact`, blocage DNC/rejets par domaine/hash email, pénalités segments faibles, bonus angles validés et régénération anti-générique dans le provider Python.
 - Run steps feedback worker : chaque application de mémoire produit un step `apply_feedback_memory`, puis un agrégat `feedback_memory_effects` comptant les impacts score, blocage, DNC, message régénéré, angle renforcé et delta segment.
@@ -89,7 +90,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 ## Vérifications exécutées
 
-- `npm run test` : 85 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/outcome négatif/email incertain bloquée, routines DNC/followup lançables, indexes FK Supabase, index anti-doublon, fusion Supabase company par `external_id`/domaine, preuve `verify:supabase` de fusion RPC avec cleanup, cron readiness couvrant les 6 routines P0, policy Auth BM Scout, actions Romu, provider runtime des preuves et scénario `feedback:evidence`.
+- `npm run test` : 87 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/outcome négatif/email incertain bloquée, routines DNC/followup lançables, indexes FK Supabase, index anti-doublon, fusion Supabase company par `external_id`/domaine, preuve `verify:supabase` de fusion RPC avec cleanup, cron readiness couvrant les 6 routines P0, worker réel persisté refusé sous volume PRD, policy Auth BM Scout, actions Romu, provider runtime des preuves et scénario `feedback:evidence`.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.

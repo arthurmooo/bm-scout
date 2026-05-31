@@ -477,7 +477,7 @@ export async function runWorkerCliForEvidence(
   if (options.persist !== false) args.push("--persist");
 
   const result = await runProcess(pythonPath, args, options.env);
-  const parsed = parseWorkerOutput(result.stdout) ?? failedWorkerOutput(mode, result);
+  const parsed = applyWorkerEvidenceGates(mode, options, parseWorkerOutput(result.stdout) ?? failedWorkerOutput(mode, result));
   const evidenceFile = await writeWorkerEvidence(mode, options, parsed);
 
   return {
@@ -485,6 +485,47 @@ export async function runWorkerCliForEvidence(
     parsed,
     evidenceFile
   };
+}
+
+function applyWorkerEvidenceGates(
+  mode: "core" | "exploration",
+  options: WorkerCliOptions,
+  parsed: WorkerCliOutput
+): WorkerCliOutput {
+  const blockers = [...(parsed.blockers ?? []), ...workerReadinessBlockers(mode, options, parsed.output)];
+  if (!blockers.length) return parsed;
+  return {
+    ...parsed,
+    verdict: "fail",
+    blockers
+  };
+}
+
+export function workerReadinessBlockers(
+  mode: "core" | "exploration",
+  options: Pick<WorkerCliOptions, "real" | "persist" | "env">,
+  output: Pick<WorkerCliOutput["output"], "scanned_count" | "run_steps">
+): string[] {
+  if (!options.real || options.persist === false) return [];
+
+  const target = requiredWorkerScanTarget(mode, options.env);
+  const scannedCount = Number(output.scanned_count ?? 0);
+  const blockers: string[] = [];
+  if (!Number.isFinite(scannedCount) || scannedCount < target) {
+    blockers.push(`Volume PRD ${mode} non prouvé : ${Number.isFinite(scannedCount) ? scannedCount : 0}/${target} comptes scannés.`);
+  }
+  const persistComplete = output.run_steps?.some((step) => step.step === "persist_complete" && step.event_type === "supabase_persist");
+  if (!persistComplete) {
+    blockers.push("Persistance Supabase non prouvée : step persist_complete absent.");
+  }
+  return blockers;
+}
+
+function requiredWorkerScanTarget(mode: "core" | "exploration", env: Record<string, string> = {}): number {
+  const key = mode === "core" ? "BM_SCOUT_CORE_TARGET" : "BM_SCOUT_EXPLORATION_SCAN_TARGET";
+  const fallback = mode === "core" ? 15 : 100;
+  const value = Number(env[key] ?? process.env[key] ?? fallback);
+  return Number.isInteger(value) && value > 0 ? value : fallback;
 }
 
 function failedWorkerOutput(
@@ -657,6 +698,7 @@ interface WorkerCliOutput {
     trace_id: string;
     mode?: "core" | "exploration";
     kept_count: number;
+    scanned_count?: number;
     rejected_count: number;
     final_decision?: "ready" | "not_ready";
     lessons?: { lesson?: string; recommendation?: string; source?: string }[];

@@ -14,6 +14,7 @@ import {
   createCliAgentTaskExecutor,
   processAgentTaskQueue,
   runWorkerCliForEvidence,
+  workerReadinessBlockers,
   workerEnvForTask,
   workerEvidenceFileName
 } from "./agent-task-runner";
@@ -266,6 +267,43 @@ describe("agent task runner", () => {
         })
       )
     ).toEqual({ BM_SCOUT_EXPLORATION_SCAN_TARGET: "100", BM_SCOUT_FETCH_LIMIT: "12" });
+  });
+
+  it("bloque une preuve worker réelle persistée sous les volumes PRD", () => {
+    expect(
+      workerReadinessBlockers(
+        "core",
+        { real: true, persist: true, env: { BM_SCOUT_CORE_TARGET: "15" } },
+        {
+          scanned_count: 6,
+          run_steps: [{ step: "persist_complete", event_type: "supabase_persist" }]
+        }
+      )
+    ).toContain("Volume PRD core non prouvé : 6/15 comptes scannés.");
+
+    expect(
+      workerReadinessBlockers(
+        "exploration",
+        { real: true, persist: true, env: { BM_SCOUT_EXPLORATION_SCAN_TARGET: "100" } },
+        {
+          scanned_count: 25,
+          run_steps: [{ step: "persist_complete", event_type: "supabase_persist" }]
+        }
+      )
+    ).toContain("Volume PRD exploration non prouvé : 25/100 comptes scannés.");
+  });
+
+  it("exige la preuve persist_complete pour un worker réel persisté", () => {
+    expect(
+      workerReadinessBlockers(
+        "core",
+        { real: true, persist: true, env: { BM_SCOUT_CORE_TARGET: "15" } },
+        { scanned_count: 15, run_steps: [] }
+      )
+    ).toEqual(["Persistance Supabase non prouvée : step persist_complete absent."]);
+
+    expect(workerReadinessBlockers("core", { real: true, persist: false }, { scanned_count: 1, run_steps: [] })).toEqual([]);
+    expect(workerReadinessBlockers("core", { real: false, persist: true }, { scanned_count: 1, run_steps: [] })).toEqual([]);
   });
 
   it("ecrase l'artefact attendu avec un verdict fail si le worker ne retourne pas de JSON", async () => {
