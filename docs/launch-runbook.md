@@ -260,6 +260,7 @@ npm run quality:readiness
 ```
 
 `quality:readiness` doit echouer tant que la V1 n'a pas les preuves runtime serveur completes. Il ne faut pas contourner ce gate en interpretant `quality:runs` comme une validation produit.
+`verify:supabase` écrit `artifacts/supabase-runtime/latest-verify.json` à chaque exécution, y compris en échec d'env. `quality:readiness` accepte cette preuve uniquement si elle est `pass`, générée par la révision courante, non `-dirty`, avec runs, leads, rejets QC, lessons, tasks, feedbacks, outcomes, DNC, run steps, traces et actions Romu persistés.
 
 ## Decision de lancement
 
@@ -274,6 +275,7 @@ BM Scout peut etre utilise en demo interne si :
 BM Scout peut etre marque au mieux `pilot_candidate` uniquement si :
 
 - `verify:supabase` passe avec la vraie env serveur ;
+- l'artefact `artifacts/supabase-runtime/latest-verify.json` correspond au commit courant et n'est pas un run ancien ;
 - la CLI `--persist` a cree un run lisible dans Supabase ;
 - un run reel Agents SDK post-branchement feedback Supabase a produit 3 a 5 apprentissages exploitables ;
 - les feedbacks/outcomes/DNC Supabase changent réellement le scoring, l'angle, le blocage DNC ou la shortlist suivante ;

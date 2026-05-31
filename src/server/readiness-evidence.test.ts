@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { analyzeRunnerSteps, codeRevisionMatchesCurrent } from "./readiness-evidence";
+import { analyzeRunnerSteps, analyzeSupabaseRuntimeArtifact, codeRevisionMatchesCurrent } from "./readiness-evidence";
 
 describe("readiness evidence", () => {
   it("rend eligible un runner reel avec metadata complete et revision courante", () => {
@@ -94,5 +94,110 @@ describe("readiness evidence", () => {
     expect(codeRevisionMatchesCurrent("abcdef123456", "abcdef123456-dirty")).toBe(false);
     expect(codeRevisionMatchesCurrent("abc", "abcdef123456")).toBe(false);
     expect(codeRevisionMatchesCurrent("unknown", "abcdef123456")).toBe(false);
+  });
+
+  it("accepte une preuve Supabase runtime complete sur la revision courante", () => {
+    const evidence = analyzeSupabaseRuntimeArtifact(
+      {
+        status: "pass",
+        generated_at: "2026-05-31T10:00:00.000Z",
+        source: "supabase_live",
+        code_revision: "abcdef123456",
+        runCount: 1,
+        leadCount: 2,
+        rejectedCount: 1,
+        lessonCount: 3,
+        taskCount: 1,
+        feedbackCount: 1,
+        outcomeCount: 1,
+        dncCount: 1,
+        runStepCount: 1,
+        actionEventCount: 1,
+        traces: ["trace-1"]
+      },
+      "abcdef1234567890"
+    );
+
+    expect(evidence).toMatchObject({
+      verdict: "pass",
+      runtimeMetadataComplete: true,
+      runtimeRevisionMatchesCurrent: true,
+      codeRevision: "abcdef123456",
+      traces: ["trace-1"],
+      source: "supabase_live"
+    });
+  });
+
+  it("refuse une preuve Supabase ancienne ou sale", () => {
+    const stale = analyzeSupabaseRuntimeArtifact(
+      {
+        status: "pass",
+        generated_at: "2026-05-31T10:00:00.000Z",
+        code_revision: "111111122222",
+        runCount: 1,
+        leadCount: 2,
+        rejectedCount: 1,
+        lessonCount: 3,
+        taskCount: 1,
+        feedbackCount: 1,
+        outcomeCount: 1,
+        dncCount: 1,
+        runStepCount: 1,
+        actionEventCount: 1,
+        traces: ["trace-1"]
+      },
+      "abcdef123456"
+    );
+    const dirty = analyzeSupabaseRuntimeArtifact(
+      {
+        status: "pass",
+        generated_at: "2026-05-31T10:00:00.000Z",
+        code_revision: "abcdef123456-dirty",
+        runCount: 1,
+        leadCount: 2,
+        rejectedCount: 1,
+        lessonCount: 3,
+        taskCount: 1,
+        feedbackCount: 1,
+        outcomeCount: 1,
+        dncCount: 1,
+        runStepCount: 1,
+        actionEventCount: 1,
+        traces: ["trace-1"]
+      },
+      "abcdef123456"
+    );
+
+    expect(stale.runtimeMetadataComplete).toBe(true);
+    expect(stale.runtimeRevisionMatchesCurrent).toBe(false);
+    expect(stale.verdict).toBe("fail");
+    expect(dirty.runtimeMetadataComplete).toBe(true);
+    expect(dirty.runtimeRevisionMatchesCurrent).toBe(false);
+    expect(dirty.verdict).toBe("fail");
+  });
+
+  it("refuse une preuve Supabase sans metadata ou sans traces actionnables", () => {
+    const evidence = analyzeSupabaseRuntimeArtifact(
+      {
+        status: "pass",
+        code_revision: "abcdef123456",
+        runCount: 1,
+        leadCount: 1,
+        rejectedCount: 1,
+        lessonCount: 3,
+        taskCount: 1,
+        feedbackCount: 1,
+        outcomeCount: 1,
+        dncCount: 1,
+        runStepCount: 1,
+        actionEventCount: 0,
+        traces: []
+      },
+      "abcdef123456"
+    );
+
+    expect(evidence.runtimeMetadataComplete).toBe(false);
+    expect(evidence.runtimeRevisionMatchesCurrent).toBe(false);
+    expect(evidence.verdict).toBe("fail");
   });
 });

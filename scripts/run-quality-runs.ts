@@ -5,8 +5,15 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { runScoutMission, seedFeedbacks } from "../src/domain/scout-engine";
 import type { ScoutLead, ScoutRun } from "../src/domain/types";
-import { analyzeRunnerSteps, codeRevisionMatchesCurrent, type RunnerStepEvidence } from "../src/server/readiness-evidence";
+import {
+  analyzeRunnerSteps,
+  analyzeSupabaseRuntimeArtifact,
+  codeRevisionMatchesCurrent,
+  type RunnerStepEvidence,
+  type SupabaseRuntimeArtifactEvidence
+} from "../src/server/readiness-evidence";
 import { getScoutSnapshot } from "../src/server/scout-repository";
+import { createServerSupabaseClient } from "../src/server/supabase";
 
 type RunVerdict = "pass" | "fail";
 type ProductReadiness = "pilot_candidate" | "production_not_ready";
@@ -37,7 +44,7 @@ const fixtureVerdict: RunVerdict = globalBlockers.length === 0 && globalScore >=
 const currentCodeRevision = await resolveCurrentCodeRevision();
 const realRunnerEvidence = await loadRealRunnerEvidence(currentCodeRevision);
 const cliPersistEvidence = await loadCliPersistEvidence();
-const supabaseConsoleEvidence = await loadSupabaseConsoleEvidence();
+const supabaseConsoleEvidence = await loadSupabaseConsoleEvidence(currentCodeRevision);
 const providerComparisonEvidence = await loadProviderComparisonEvidence(currentCodeRevision);
 const readinessMode = process.argv.includes("--readiness");
 const productBlockers = buildProductBlockers(realRunnerEvidence, cliPersistEvidence, supabaseConsoleEvidence, providerComparisonEvidence);
@@ -276,9 +283,11 @@ function renderReport(
     persistEvidence
       ? `- CLI --persist : ${persistEvidence.verdict}; trace : ${persistEvidence.traceId}; artefact : ${persistEvidence.sourceFile}; persist artefact : ${persistEvidence.persistComplete ? "oui" : "non"}`
       : "- CLI --persist : aucune preuve locale.",
-    `- Console serveur Supabase : ${consoleEvidence.verdict}; runs : ${consoleEvidence.runCount}; leads : ${consoleEvidence.leadCount}; rejetes : ${consoleEvidence.rejectedCount}; lessons : ${consoleEvidence.lessonCount}`,
+    `- Console serveur Supabase : ${consoleEvidence.verdict}; source : ${consoleEvidence.source}; artefact : ${consoleEvidence.sourceFile ?? "live"}; runs : ${consoleEvidence.runCount}; leads : ${consoleEvidence.leadCount}; rejetes : ${consoleEvidence.rejectedCount}; lessons : ${consoleEvidence.lessonCount}`,
+    `- Console runtime : metadata ${consoleEvidence.runtimeMetadataComplete ? "oui" : "non"}; révision ${consoleEvidence.codeRevision}; révision courante ${consoleEvidence.runtimeRevisionMatchesCurrent ? "oui" : "non"}; actions : ${consoleEvidence.actionEventCount}`,
     consoleEvidence.traces.length ? `- Traces console : ${consoleEvidence.traces.join(", ")}` : "- Traces console : aucune.",
     ...(consoleEvidence.error ? [`- Erreur console : ${consoleEvidence.error}`] : []),
+    ...(consoleEvidence.blockers.length ? consoleEvidence.blockers.map((blocker) => `- Blocker console : ${blocker}`) : []),
     "",
     "## Evidence providers reels",
     "",
@@ -443,11 +452,23 @@ async function loadCliPersistEvidence(): Promise<CliPersistEvidence | null> {
 
 interface SupabaseConsoleEvidence {
   verdict: RunVerdict;
+  source: "live" | "artifact" | "missing";
+  sourceFile?: string;
   runCount: number;
   leadCount: number;
   rejectedCount: number;
   lessonCount: number;
+  taskCount: number;
+  feedbackCount: number;
+  outcomeCount: number;
+  dncCount: number;
+  runStepCount: number;
+  actionEventCount: number;
   traces: string[];
+  blockers: string[];
+  runtimeMetadataComplete: boolean;
+  runtimeRevisionMatchesCurrent: boolean;
+  codeRevision: string;
   error?: string;
 }
 
@@ -497,41 +518,185 @@ async function loadProviderComparisonEvidence(currentRevision: string): Promise<
   };
 }
 
-async function loadSupabaseConsoleEvidence(): Promise<SupabaseConsoleEvidence> {
+async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<SupabaseConsoleEvidence> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const artifact = await loadSupabaseRuntimeArtifact(currentRevision);
+    if (artifact) return artifact;
     return {
       verdict: "fail",
+      source: "missing",
       runCount: 0,
       leadCount: 0,
       rejectedCount: 0,
       lessonCount: 0,
+      taskCount: 0,
+      feedbackCount: 0,
+      outcomeCount: 0,
+      dncCount: 0,
+      runStepCount: 0,
+      actionEventCount: 0,
       traces: [],
+      blockers: [],
+      runtimeMetadataComplete: false,
+      runtimeRevisionMatchesCurrent: false,
+      codeRevision: "unknown",
       error: "NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY manquante"
     };
   }
 
   try {
     const snapshot = await getScoutSnapshot();
+    const client = createServerSupabaseClient();
+    if (!client) throw new Error("Client Supabase serveur indisponible malgré les variables requises.");
+    const [taskCount, feedbackCount, outcomeCount, dncCount, runStepCount, actionEventCount] = await Promise.all([
+      tableCount(client, "scout_agent_tasks"),
+      tableCount(client, "scout_feedback"),
+      tableCount(client, "scout_outcomes"),
+      tableCount(client, "scout_do_not_contact"),
+      tableCount(client, "scout_run_steps"),
+      tableCount(client, "scout_action_events")
+    ]);
     const leadCount = snapshot.runs.reduce((sum, run) => sum + run.leads.length, 0);
     const rejectedCount = snapshot.runs.reduce((sum, run) => sum + run.rejected.length, 0);
     const lessonCount = snapshot.lessons.length;
-    const pass = snapshot.runs.length > 0 && Boolean(snapshot.primaryLead) && leadCount > 0 && rejectedCount > 0 && lessonCount >= 3;
-    return {
-      verdict: pass ? "pass" : "fail",
+    const traces = snapshot.runs.map((run) => run.traceId).filter(Boolean);
+    const payload: SupabaseRuntimeArtifactEvidence = {
+      status:
+        snapshot.runs.length > 0 &&
+        Boolean(snapshot.primaryLead) &&
+        leadCount > 0 &&
+        rejectedCount > 0 &&
+        lessonCount >= 3 &&
+        taskCount > 0 &&
+        feedbackCount > 0 &&
+        outcomeCount > 0 &&
+        dncCount > 0 &&
+        runStepCount > 0 &&
+        actionEventCount > 0 &&
+        traces.length > 0
+          ? "pass"
+          : "fail",
+      source: "supabase_live",
+      generated_at: new Date().toISOString(),
+      code_revision: currentRevision,
       runCount: snapshot.runs.length,
       leadCount,
       rejectedCount,
       lessonCount,
-      traces: snapshot.runs.map((run) => run.traceId)
+      taskCount,
+      feedbackCount,
+      outcomeCount,
+      dncCount,
+      runStepCount,
+      actionEventCount,
+      traces,
+      blockers: [
+        ...(snapshot.runs.length < 1 ? ["Aucun run Supabase lisible par la console."] : []),
+        ...(!snapshot.primaryLead ? ["Aucun lead prioritaire lisible par la console."] : []),
+        ...(leadCount < 1 ? ["Aucun lead actionnable lisible par la console."] : []),
+        ...(rejectedCount < 1 ? ["Aucun rejet/QC visible dans la console."] : []),
+        ...(lessonCount < 3 ? ["Moins de 3 apprentissages visibles dans la console."] : []),
+        ...(taskCount < 1 ? ["Aucune tâche agent_tasks persistée."] : []),
+        ...(feedbackCount < 1 ? ["Aucun feedback Romu persisté."] : []),
+        ...(outcomeCount < 1 ? ["Aucun outcome persisté."] : []),
+        ...(dncCount < 1 ? ["Aucun do-not-contact persisté."] : []),
+        ...(runStepCount < 1 ? ["Aucun run step agentique persisté."] : []),
+        ...(actionEventCount < 1 ? ["Aucune trace d'action Romu persistée."] : []),
+        ...(traces.length < 1 ? ["Aucune trace de run Supabase disponible."] : [])
+      ]
+    };
+    const analysis = analyzeSupabaseRuntimeArtifact(payload, currentRevision);
+    return {
+      verdict: analysis.verdict,
+      source: "live",
+      runCount: snapshot.runs.length,
+      leadCount,
+      rejectedCount,
+      lessonCount,
+      taskCount,
+      feedbackCount,
+      outcomeCount,
+      dncCount,
+      runStepCount,
+      actionEventCount,
+      traces,
+      blockers: analysis.blockers,
+      runtimeMetadataComplete: analysis.runtimeMetadataComplete,
+      runtimeRevisionMatchesCurrent: analysis.runtimeRevisionMatchesCurrent,
+      codeRevision: analysis.codeRevision
     };
   } catch (error) {
     return {
       verdict: "fail",
+      source: "live",
       runCount: 0,
       leadCount: 0,
       rejectedCount: 0,
       lessonCount: 0,
+      taskCount: 0,
+      feedbackCount: 0,
+      outcomeCount: 0,
+      dncCount: 0,
+      runStepCount: 0,
+      actionEventCount: 0,
       traces: [],
+      blockers: [],
+      runtimeMetadataComplete: false,
+      runtimeRevisionMatchesCurrent: false,
+      codeRevision: currentRevision,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+async function loadSupabaseRuntimeArtifact(currentRevision: string): Promise<SupabaseConsoleEvidence | null> {
+  const sourceFile = "latest-verify.json";
+  const path = join(process.cwd(), "artifacts", "supabase-runtime", sourceFile);
+  if (!existsSync(path)) return null;
+  try {
+    const payload = JSON.parse(await readFile(path, "utf8")) as SupabaseRuntimeArtifactEvidence;
+    const analysis = analyzeSupabaseRuntimeArtifact(payload, currentRevision);
+    return {
+      verdict: analysis.verdict,
+      source: "artifact",
+      sourceFile,
+      runCount: numberValue(payload.runCount),
+      leadCount: numberValue(payload.leadCount),
+      rejectedCount: numberValue(payload.rejectedCount),
+      lessonCount: numberValue(payload.lessonCount),
+      taskCount: numberValue(payload.taskCount),
+      feedbackCount: numberValue(payload.feedbackCount),
+      outcomeCount: numberValue(payload.outcomeCount),
+      dncCount: numberValue(payload.dncCount),
+      runStepCount: numberValue(payload.runStepCount),
+      actionEventCount: numberValue(payload.actionEventCount),
+      traces: analysis.traces,
+      blockers: analysis.blockers,
+      runtimeMetadataComplete: analysis.runtimeMetadataComplete,
+      runtimeRevisionMatchesCurrent: analysis.runtimeRevisionMatchesCurrent,
+      codeRevision: analysis.codeRevision,
+      error: payload.error
+    };
+  } catch (error) {
+    return {
+      verdict: "fail",
+      source: "artifact",
+      sourceFile,
+      runCount: 0,
+      leadCount: 0,
+      rejectedCount: 0,
+      lessonCount: 0,
+      taskCount: 0,
+      feedbackCount: 0,
+      outcomeCount: 0,
+      dncCount: 0,
+      runStepCount: 0,
+      actionEventCount: 0,
+      traces: [],
+      blockers: [],
+      runtimeMetadataComplete: false,
+      runtimeRevisionMatchesCurrent: false,
+      codeRevision: "unknown",
       error: error instanceof Error ? error.message : String(error)
     };
   }
@@ -628,5 +793,21 @@ function buildProductBlockers(
   if (consoleEvidence.verdict !== "pass") {
     blockers.push(`Console Supabase serveur non prouvée${consoleEvidence.error ? ` : ${consoleEvidence.error}` : "."}`);
   }
+  if (consoleEvidence.verdict === "pass" && !consoleEvidence.runtimeMetadataComplete) {
+    blockers.push("Console Supabase serveur sans métadonnées runtime auditables.");
+  }
+  if (consoleEvidence.verdict === "pass" && consoleEvidence.runtimeMetadataComplete && !consoleEvidence.runtimeRevisionMatchesCurrent) {
+    blockers.push(`Console Supabase serveur prouvée par la révision ${consoleEvidence.codeRevision}, différente du code courant.`);
+  }
   return blockers;
+}
+
+function numberValue(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+async function tableCount(client: NonNullable<ReturnType<typeof createServerSupabaseClient>>, table: string): Promise<number> {
+  const { count, error } = await client.from(table).select("*", { count: "exact", head: true });
+  if (error) throw new Error(`Comptage ${table} impossible: ${error.message}`);
+  return count ?? 0;
 }

@@ -15,6 +15,36 @@ export interface RunnerRuntimeEvidence {
   runtimeModel: string;
 }
 
+export interface SupabaseRuntimeArtifactEvidence {
+  status?: string;
+  generated_at?: string;
+  source?: string;
+  code_revision?: string;
+  runCount?: number;
+  leadCount?: number;
+  rejectedCount?: number;
+  lessonCount?: number;
+  taskCount?: number;
+  feedbackCount?: number;
+  outcomeCount?: number;
+  dncCount?: number;
+  runStepCount?: number;
+  actionEventCount?: number;
+  traces?: string[];
+  blockers?: string[];
+  error?: string;
+}
+
+export interface SupabaseRuntimeEvidenceAnalysis {
+  verdict: "pass" | "fail";
+  runtimeMetadataComplete: boolean;
+  runtimeRevisionMatchesCurrent: boolean;
+  codeRevision: string;
+  blockers: string[];
+  traces: string[];
+  source: string;
+}
+
 export function analyzeRunnerSteps(steps: RunnerStepEvidence[], currentCodeRevision: string): RunnerRuntimeEvidence {
   const runnerStep = steps.find((step) => step.step === "runner_complete");
   const payload = runnerStep?.payload ?? {};
@@ -34,6 +64,41 @@ export function analyzeRunnerSteps(steps: RunnerStepEvidence[], currentCodeRevis
     runtimeCodeRevision: codeRevision || "unknown",
     runtimeDurationMs: Number.isFinite(durationMs) ? durationMs : 0,
     runtimeModel: model || "unknown"
+  };
+}
+
+export function analyzeSupabaseRuntimeArtifact(
+  payload: SupabaseRuntimeArtifactEvidence,
+  currentCodeRevision: string
+): SupabaseRuntimeEvidenceAnalysis {
+  const codeRevision = stringValue(payload.code_revision);
+  const blockers = Array.isArray(payload.blockers) ? payload.blockers.filter((item): item is string => typeof item === "string") : [];
+  const runtimeMetadataComplete = Boolean(
+    stringValue(payload.generated_at) &&
+      codeRevision &&
+      numericAtLeast(payload.runCount, 1) &&
+      numericAtLeast(payload.leadCount, 1) &&
+      numericAtLeast(payload.rejectedCount, 1) &&
+      numericAtLeast(payload.lessonCount, 3) &&
+      numericAtLeast(payload.taskCount, 1) &&
+      numericAtLeast(payload.feedbackCount, 1) &&
+      numericAtLeast(payload.outcomeCount, 1) &&
+      numericAtLeast(payload.dncCount, 1) &&
+      numericAtLeast(payload.runStepCount, 1) &&
+      numericAtLeast(payload.actionEventCount, 1) &&
+      Array.isArray(payload.traces) &&
+      payload.traces.length > 0
+  );
+  const runtimeRevisionMatchesCurrent = runtimeMetadataComplete && codeRevisionMatchesCurrent(codeRevision, currentCodeRevision);
+
+  return {
+    verdict: payload.status === "pass" && runtimeMetadataComplete && runtimeRevisionMatchesCurrent ? "pass" : "fail",
+    runtimeMetadataComplete,
+    runtimeRevisionMatchesCurrent,
+    codeRevision: codeRevision || "unknown",
+    blockers,
+    traces: Array.isArray(payload.traces) ? payload.traces.filter((item): item is string => typeof item === "string") : [],
+    source: stringValue(payload.source) || "artifact"
   };
 }
 
@@ -68,6 +133,10 @@ function knownString(value: unknown): string {
 
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function numericAtLeast(value: unknown, minimum: number): boolean {
+  return typeof value === "number" && Number.isFinite(value) && value >= minimum;
 }
 
 function normalizeRevision(value: string): string {

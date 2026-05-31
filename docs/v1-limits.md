@@ -60,6 +60,7 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 - Les providers reels dépassent les seeds configurées, scannent réellement le marché et prouvent la qualité des sources ; OpenAI web est prouvé en smoke Core/Exploration à volume PRD, SerpAPI reste à brancher pour comparaison provider.
 - `artifacts/provider-comparison/latest-comparison.json` recommande un provider réel couvrant Core et Exploration à volume configuré/PRD, avec métadonnées runtime et révision code courante.
 - `npm run verify:supabase` passe avec l'env serveur.
+- `artifacts/supabase-runtime/latest-verify.json` est produit par `verify:supabase`, porte la révision courante, n'est pas `-dirty`, et prouve aussi les actions Romu persistées.
 - `--persist` cree un run lisible en Supabase via la RPC.
 - Un run reel Agents SDK utilise les feedbacks/outcomes/DNC Supabase, écrit des artefacts avec `feedback_memory_source=supabase`, des métadonnées runtime complètes, une révision code courante, et modifie les recommandations learning.
 - `npm run quality:readiness` passe.
