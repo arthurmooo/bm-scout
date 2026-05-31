@@ -703,12 +703,16 @@ def test_provider_audit_can_recommend_real_provider(monkeypatch) -> None:
 
     monkeypatch.setattr(provider_audit, "provider_unavailable_reason", lambda _name: None)
     monkeypatch.setattr(provider_audit, "build_named_provider", lambda _name: FakeProvider())
+    monkeypatch.setenv("BM_SCOUT_CODE_REVISION", "provider-audit-test-revision")
 
     report = compare_providers(["serpapi"], ["core", "exploration"])
 
     assert report.verdict == "pass"
     assert report.recommended_default == "serpapi"
     assert report.prd_volume_proven is True
+    assert report.code_revision == "provider-audit-test-revision"
+    assert report.python_version
+    assert report.openai_sdk_version != ""
 
 
 def test_provider_audit_does_not_claim_prd_volume_for_core_only_smoke(monkeypatch) -> None:

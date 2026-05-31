@@ -93,7 +93,7 @@ npm run provider:compare
 ```
 
 `quality:runs` valide seulement le socle fixture. `quality:readiness` doit rester bloquant tant que BM Scout est `production_not_ready`; les artefacts réels doivent indiquer une mémoire Supabase, un DNC Supabase chargé, des métadonnées runtime auditables et une révision code compatible avec le commit courant pour prouver le learning runtime.
-`provider:compare` est un gate de recherche réelle : sans `SERPAPI_API_KEY` ou `OPENAI_API_KEY`, un échec est attendu et doit rester visible.
+`provider:compare` est un gate de recherche réelle : sans `SERPAPI_API_KEY` ou `OPENAI_API_KEY`, un échec est attendu et doit rester visible. Sa preuve `latest-comparison.json` doit aussi porter une révision code courante pour compter dans `quality:readiness`.
 OpenAI a bien un tool officiel de recherche web via Responses API (`web_search`) et le provider `openai_web` l'utilise. Dans le dernier smoke réel provider, OpenAI web passe Core et Exploration à volume PRD (`15/15` Core, `100/100` Exploration) ; SerpAPI reste utile pour comparer coût, stabilité et qualité des sources.
 
 ## Worker agentique

@@ -162,7 +162,7 @@ La commande écrit :
 - `artifacts/provider-comparison/latest-comparison.json`
 - `artifacts/provider-comparison/latest-comparison.md`
 
-Elle compare `serpapi`, `openai_web` et `web` sur Core et Exploration. Sans `SERPAPI_API_KEY` ou `OPENAI_API_KEY`, ces providers sont marqués `unavailable` au lieu de retomber silencieusement sur les fixtures. Le statut `pass` de cette comparaison ne suffit pas pour déclarer BM Scout prêt : il faut encore des runs Agents SDK réels, persistés, à volume PRD.
+Elle compare `serpapi`, `openai_web` et `web` sur Core et Exploration. Sans `SERPAPI_API_KEY` ou `OPENAI_API_KEY`, ces providers sont marqués `unavailable` au lieu de retomber silencieusement sur les fixtures. Les artefacts incluent la révision code, la version Python et la version du SDK OpenAI ; `quality:readiness` les refuse si ces métadonnées manquent ou si la révision ne correspond pas au commit courant. Le statut `pass` de cette comparaison ne suffit pas pour déclarer BM Scout prêt : il faut encore des runs Agents SDK réels, persistés, à volume PRD.
 Un smoke ciblé `--modes=core` peut passer pour vérifier OpenAI web, mais il marque volontairement `prd_volume_proven=false` tant que Core et Exploration n'ont pas été mesurés ensemble.
 
 Résultat actuel avec OpenAI web seul :

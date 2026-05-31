@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -17,6 +18,7 @@ from .providers import (
     fetch_limit_for_mode,
     scan_target_for_mode,
 )
+from .runtime import code_revision, package_version
 from .schemas import RunStep, ScoutLead, ScoutMode
 
 ProviderAuditStatus = Literal["pass", "fail", "unavailable"]
@@ -47,6 +49,9 @@ class ProviderModeAudit:
 class ProviderComparisonReport:
     verdict: Literal["pass", "fail"]
     generated_at: str
+    code_revision: str
+    python_version: str
+    openai_sdk_version: str
     providers: list[str]
     modes: list[ScoutMode]
     prd_volume_proven: bool
@@ -82,6 +87,9 @@ def compare_providers(providers: list[str], modes: list[ScoutMode]) -> ProviderC
     return ProviderComparisonReport(
         verdict="pass" if not blockers else "fail",
         generated_at=datetime.now(UTC).isoformat(),
+        code_revision=code_revision(),
+        python_version=sys.version.split()[0],
+        openai_sdk_version=package_version("openai"),
         providers=providers,
         modes=modes,
         prd_volume_proven=prd_volume_proven(results, modes),
@@ -311,6 +319,9 @@ def render_markdown(report: ProviderComparisonReport) -> str:
         "",
         f"- Verdict : {report.verdict}",
         f"- Généré : {report.generated_at}",
+        f"- Révision code : {report.code_revision}",
+        f"- Python : {report.python_version}",
+        f"- OpenAI SDK : {report.openai_sdk_version}",
         f"- Provider recommandé : {report.recommended_default or 'aucun'}",
         f"- Volumes PRD prouvés : {'oui' if report.prd_volume_proven else 'non'}",
         "",

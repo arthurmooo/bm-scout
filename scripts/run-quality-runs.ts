@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { runScoutMission, seedFeedbacks } from "../src/domain/scout-engine";
 import type { ScoutLead, ScoutRun } from "../src/domain/types";
-import { analyzeRunnerSteps, type RunnerStepEvidence } from "../src/server/readiness-evidence";
+import { analyzeRunnerSteps, codeRevisionMatchesCurrent, type RunnerStepEvidence } from "../src/server/readiness-evidence";
 import { getScoutSnapshot } from "../src/server/scout-repository";
 
 type RunVerdict = "pass" | "fail";
@@ -38,7 +38,7 @@ const currentCodeRevision = await resolveCurrentCodeRevision();
 const realRunnerEvidence = await loadRealRunnerEvidence(currentCodeRevision);
 const cliPersistEvidence = await loadCliPersistEvidence();
 const supabaseConsoleEvidence = await loadSupabaseConsoleEvidence();
-const providerComparisonEvidence = await loadProviderComparisonEvidence();
+const providerComparisonEvidence = await loadProviderComparisonEvidence(currentCodeRevision);
 const readinessMode = process.argv.includes("--readiness");
 const productBlockers = buildProductBlockers(realRunnerEvidence, cliPersistEvidence, supabaseConsoleEvidence, providerComparisonEvidence);
 const productReadiness: ProductReadiness = productBlockers.length === 0 ? "pilot_candidate" : "production_not_ready";
@@ -285,6 +285,7 @@ function renderReport(
     ...(providerEvidence
       ? [
           `- Comparaison : ${providerEvidence.verdict}; provider recommandé : ${providerEvidence.recommendedDefault ?? "aucun"}; volumes PRD : ${providerEvidence.prdVolumeProven ? "oui" : "non"}`,
+          `- Comparaison runtime : metadata ${providerEvidence.runtimeMetadataComplete ? "oui" : "non"}; révision ${providerEvidence.codeRevision}; révision courante ${providerEvidence.runtimeRevisionMatchesCurrent ? "oui" : "non"}`,
           `- Providers testés : ${providerEvidence.providers.join(", ")}`,
           `- Modes testés : ${providerEvidence.modes.join(", ")}`,
           ...(providerEvidence.blockers.length ? providerEvidence.blockers.map((blocker) => `- Blocker provider : ${blocker}`) : ["- Blocker provider : aucun"])
@@ -458,9 +459,12 @@ interface ProviderComparisonEvidence {
   prdVolumeProven: boolean;
   blockers: string[];
   sourceFile: string;
+  codeRevision: string;
+  runtimeMetadataComplete: boolean;
+  runtimeRevisionMatchesCurrent: boolean;
 }
 
-async function loadProviderComparisonEvidence(): Promise<ProviderComparisonEvidence | null> {
+async function loadProviderComparisonEvidence(currentRevision: string): Promise<ProviderComparisonEvidence | null> {
   const sourceFile = "latest-comparison.json";
   const path = join(process.cwd(), "artifacts", "provider-comparison", sourceFile);
   if (!existsSync(path)) return null;
@@ -471,7 +475,14 @@ async function loadProviderComparisonEvidence(): Promise<ProviderComparisonEvide
     recommended_default?: string | null;
     prd_volume_proven?: boolean;
     blockers?: string[];
+    code_revision?: string;
+    generated_at?: string;
+    python_version?: string;
+    openai_sdk_version?: string;
   };
+  const codeRevision = typeof payload.code_revision === "string" ? payload.code_revision.trim() : "";
+  const openaiSdkVersion = typeof payload.openai_sdk_version === "string" ? payload.openai_sdk_version.trim() : "";
+  const runtimeMetadataComplete = Boolean(payload.generated_at && payload.python_version && openaiSdkVersion && openaiSdkVersion !== "unknown" && codeRevision);
   return {
     verdict: payload.verdict === "pass" ? "pass" : "fail",
     providers: payload.providers ?? [],
@@ -479,7 +490,10 @@ async function loadProviderComparisonEvidence(): Promise<ProviderComparisonEvide
     recommendedDefault: payload.recommended_default ?? null,
     prdVolumeProven: Boolean(payload.prd_volume_proven),
     blockers: payload.blockers ?? [],
-    sourceFile
+    sourceFile,
+    codeRevision: codeRevision || "unknown",
+    runtimeMetadataComplete,
+    runtimeRevisionMatchesCurrent: runtimeMetadataComplete && codeRevisionMatchesCurrent(codeRevision, currentRevision)
   };
 }
 
@@ -568,14 +582,22 @@ function buildProductBlockers(
   blockers.push("production_not_ready: le runner agent_tasks et le cron GitHub Actions existent, mais aucun run CI avec secrets ne les prouve encore.");
   const providerModes = new Set(providerEvidence?.modes ?? []);
   const hasFullProviderScope = providerModes.has("core") && providerModes.has("exploration");
+  const providerRuntimeEligible = Boolean(providerEvidence?.runtimeMetadataComplete && providerEvidence.runtimeRevisionMatchesCurrent);
   if (
     !providerEvidence ||
     providerEvidence.verdict !== "pass" ||
+    !providerRuntimeEligible ||
     !providerEvidence.recommendedDefault ||
     !providerEvidence.prdVolumeProven ||
     !hasFullProviderScope
   ) {
     blockers.push("production_not_ready: aucun provider réel ne prouve encore Core + Exploration à volume PRD.");
+  }
+  if (providerEvidence?.verdict === "pass" && !providerEvidence.runtimeMetadataComplete) {
+    blockers.push("Comparaison provider réelle sans métadonnées runtime auditables.");
+  }
+  if (providerEvidence?.verdict === "pass" && providerEvidence.runtimeMetadataComplete && !providerEvidence.runtimeRevisionMatchesCurrent) {
+    blockers.push(`Comparaison provider générée par la révision ${providerEvidence.codeRevision}, différente du code courant.`);
   }
 
   if (!hasCore || !hasExploration) {
