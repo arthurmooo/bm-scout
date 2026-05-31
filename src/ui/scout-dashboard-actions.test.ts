@@ -54,4 +54,17 @@ describe("ScoutDashboard feedback actions", () => {
       expect(dashboard).toContain(marker);
     }
   });
+
+  it("rend les faits observés traçables à une preuve visible", () => {
+    for (const marker of [
+      "evidenceById",
+      "sourceLabel",
+      "sourceUrl",
+      "Source :",
+      "Source manquante",
+      "missing-source"
+    ]) {
+      expect(dashboard).toContain(marker);
+    }
+  });
 });

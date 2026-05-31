@@ -45,6 +45,13 @@ type ApprovalItem = {
   danger?: boolean;
 };
 
+type DisplayInsight = {
+  text: string;
+  sourceLabel?: string;
+  sourceUrl?: string;
+  missingSource?: boolean;
+};
+
 const leadFeedbackActions: QuickFeedbackAction[] = [
   { label: "Très bon", action: "feedback_good_lead", note: "Très bon lead : fort potentiel, bon secteur, bon timing." },
   { label: "Bon secteur", action: "feedback_good_lead", note: "Bon secteur : à renforcer dans le scoring." },
@@ -461,21 +468,44 @@ function approvalActionIcon(action: LeadActionType): ReactNode {
 
 function InsightBlock({ lead }: { lead: ScoutLead }) {
   const insights = lead.insights ?? deriveInsights(lead);
+  const evidenceById = new Map(
+    lead.evidence.flatMap((evidence) => {
+      const keys = [evidence.id, evidence.url].filter((key): key is string => Boolean(key));
+      return keys.map((key) => [key, evidence] as const);
+    })
+  );
+  const observed = insights.observed.map((item) => {
+    const evidence = evidenceById.get(item.evidenceId);
+    return {
+      text: item.text,
+      sourceLabel: evidence?.label,
+      sourceUrl: evidence?.url,
+      missingSource: !evidence
+    };
+  });
+
   return (
     <div className="insights-grid">
-      <InsightColumn label="Observé" items={insights.observed.map((item) => item.text)} />
-      <InsightColumn label="Inféré" items={insights.inferred} />
-      <InsightColumn label="Incertain" items={insights.uncertain} />
+      <InsightColumn label="Observé" items={observed} />
+      <InsightColumn label="Inféré" items={insights.inferred.map((text) => ({ text }))} />
+      <InsightColumn label="Incertain" items={insights.uncertain.map((text) => ({ text }))} />
     </div>
   );
 }
 
-function InsightColumn({ label, items }: { label: string; items: string[] }) {
+function InsightColumn({ label, items }: { label: string; items: DisplayInsight[] }) {
   return (
     <div className="insight-column">
       <strong>{label}</strong>
       {items.slice(0, 2).map((item) => (
-        <p key={item}>{item}</p>
+        <div className={`insight-item ${item.missingSource ? "missing-source" : ""}`} key={`${label}-${item.text}`}>
+          <p>{item.text}</p>
+          {item.sourceUrl ? (
+            <a href={item.sourceUrl} target="_blank" rel="noreferrer">Source : {item.sourceLabel ?? "preuve"}</a>
+          ) : item.missingSource ? (
+            <span>Source manquante</span>
+          ) : null}
+        </div>
       ))}
     </div>
   );
