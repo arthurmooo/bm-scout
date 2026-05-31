@@ -42,7 +42,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - QC TS : DNC déterministe et Observé relié à une preuve.
 - Worker offline : DNC interdit en shortlist.
 - Worker réel : provider `auto` avec seeds, SerpAPI, OpenAI `web_search` ou fallback web public, plus 8 tools métier Agents SDK. Le `WebSearchTool` hébergé OpenAI est disponible en opt-in via `BM_SCOUT_AGENT_HOSTED_WEB_SEARCH=1`, mais désactivé par défaut pour éviter de relancer une deuxième recherche web non bornée après le provider.
-- Provider OpenAI web : utilise le tool officiel Responses API `{ "type": "web_search" }`, conserve les sources/traces, parse JSON ou sources web, et n'utilise pas OpenAI récursivement pour les recherches jobs sauf opt-in `BM_SCOUT_OPENAI_SEARCH_JOBS=1`.
+- Provider OpenAI web : utilise le tool officiel Responses API `{ "type": "web_search" }` avec `tool_choice=required`, conserve les sources/traces, parse JSON ou sources web, et n'utilise pas OpenAI récursivement pour les recherches jobs sauf opt-in `BM_SCOUT_OPENAI_SEARCH_JOBS=1`.
 - Preuve provider : `latest-comparison.json` porte maintenant `code_revision`, `python_version` et `openai_sdk_version`; `quality:readiness` refuse une comparaison provider ancienne ou sans métadonnées runtime.
 - Provider SerpAPI : `BM_SCOUT_PROVIDER=serpapi` ou sélection auto via `SERPAPI_API_KEY`, parsing des `organic_results`, filtrage des sources faibles et run step `serpapi_search`.
 - `search_jobs` n'est plus décoratif : le provider web cherche des sources recrutement publiques, les transforme en preuves et les trace dans `run_steps`.

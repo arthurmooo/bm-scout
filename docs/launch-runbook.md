@@ -171,7 +171,7 @@ Résultat actuel avec OpenAI web seul :
 
 - Core + Exploration (`BM_SCOUT_FETCH_LIMIT=3`) : pass, Core `15/15`, Exploration `100/100`, `prd_volume_proven=true`, provider recommandé `openai_web`.
 
-Décision actuelle : OpenAI `web_search` prouve maintenant le scan large en smoke provider. Brancher SerpAPI reste utile pour comparer coût, stabilité et qualité des sources avant de choisir le provider par défaut.
+Décision actuelle : OpenAI `web_search` prouve maintenant le scan large en smoke provider. Le provider force `tool_choice=required` pour éviter un résultat sans recherche web effective. Brancher SerpAPI reste utile pour comparer coût, stabilité et qualité des sources avant de choisir le provider par défaut.
 
 ## Cron GitHub Actions
 

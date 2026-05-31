@@ -432,10 +432,11 @@ class OpenAIWebResearchProvider(OpenWebResearchProvider):
                     {
                         "type": "web_search",
                         "search_context_size": openai_search_context_size(),
+                        "external_web_access": True,
                         "user_location": openai_user_location(region),
                     }
                 ],
-                tool_choice="auto",
+                tool_choice="required",
                 include=["web_search_call.action.sources"],
                 max_tool_calls=1,
                 max_output_tokens=openai_search_max_output_tokens(),
@@ -456,6 +457,8 @@ class OpenAIWebResearchProvider(OpenWebResearchProvider):
                 "limit": limit,
                 "result_count": len(results),
                 "model": model,
+                "tool_choice": "required",
+                "external_web_access": True,
                 "output_text_chars": len(text),
                 "output_types": openai_response_output_types(response),
                 "source_count": openai_response_source_count(response),

@@ -713,6 +713,60 @@ def test_parse_openai_response_sources_falls_back_to_web_sources() -> None:
     assert results[0].snippet == "Conseil transaction services."
 
 
+def test_openai_provider_requires_hosted_web_search_call(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    class FakeResponses:
+        def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(
+                output_text=json.dumps(
+                    {
+                        "results": [
+                            {
+                                "title": "Transaction Services | Deloitte France",
+                                "url": "https://www.deloitte.com/fr/fr/services/mergers-and-acquisitions.html",
+                                "snippet": "Conseil transaction services.",
+                            }
+                        ]
+                    }
+                ),
+                output=[
+                    SimpleNamespace(
+                        type="web_search_call",
+                        action=SimpleNamespace(sources=[]),
+                    )
+                ],
+            )
+
+    class FakeOpenAI:
+        def __init__(self) -> None:
+            self.responses = FakeResponses()
+
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    monkeypatch.setenv("OPENAI_SEARCH_MODEL", "gpt-4.1-mini")
+    monkeypatch.setattr("openai.OpenAI", FakeOpenAI)
+
+    provider = OpenAIWebResearchProvider(["conseil M&A France"])
+    results = provider.search_web("conseil M&A France", "fr", 1)
+
+    assert results[0].url == "https://www.deloitte.com/fr/fr/services/mergers-and-acquisitions.html"
+    assert captured["tool_choice"] == "required"
+    assert captured["max_tool_calls"] == 1
+    assert captured["store"] is False
+    assert captured["tools"] == [
+        {
+            "type": "web_search",
+            "search_context_size": "medium",
+            "external_web_access": True,
+            "user_location": {"type": "approximate", "country": "FR"},
+        }
+    ]
+    search_step = next(step for step in provider.run_steps if step.step == "openai_web_search")
+    assert search_step.payload["tool_choice"] == "required"
+    assert search_step.payload["external_web_access"] is True
+
+
 def test_openai_provider_uses_fallback_jobs_search_by_default(monkeypatch) -> None:
     provider = OpenAIWebResearchProvider(["conseil M&A France"])
     monkeypatch.delenv("BM_SCOUT_OPENAI_SEARCH_JOBS", raising=False)
