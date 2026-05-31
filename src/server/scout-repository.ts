@@ -97,8 +97,9 @@ function buildSnapshotFromRows(rows: ScoutRunRow[], taskRows: ScoutTaskRow[] = [
 
 function mapRun(row: ScoutRunRow): ScoutRun {
   const companies = row.scout_companies ?? [];
-  const leads = companies.map(mapLead).filter((lead) => lead.verdict !== "reject" && lead.qualityDecision !== "blocked");
-  const rejected = companies.map(mapLead).filter((lead) => lead.verdict === "reject" || lead.qualityDecision === "blocked");
+  const mappedCompanies = companies.map(mapLead);
+  const leads = mappedCompanies.filter((lead) => !isRejectedLead(lead));
+  const rejected = mappedCompanies.filter(isRejectedLead);
   return {
     id: row.id,
     mode: row.mode,
@@ -112,6 +113,10 @@ function mapRun(row: ScoutRunRow): ScoutRun {
     rejected,
     lessons: (row.scout_learning_lessons ?? []).map(mapLesson)
   };
+}
+
+function isRejectedLead(lead: ScoutLead): boolean {
+  return lead.verdict === "reject" || lead.qualityDecision === "blocked" || Boolean(lead.rejectionReason);
 }
 
 function mapLead(row: ScoutCompanyRow): ScoutLead {
