@@ -91,6 +91,28 @@ describe("supabase security posture", () => {
     expect(migration).toContain("set status = 'blocked'");
   });
 
+  it("bloque les messages existants quand une cible devient do-not-contact", () => {
+    const migration = readMigration("scout_dnc_blocks_existing_messages");
+
+    expect(migration).toContain("create or replace function public.scout_block_messages_for_dnc()");
+    expect(migration).toContain("after insert or update of normalized_email_hash, normalized_domain, company_id, contact_id");
+    expect(migration).toContain("on public.scout_do_not_contact");
+    expect(migration).toContain("set status = 'blocked'");
+    expect(migration).toContain("messages.company_id = new.company_id");
+    expect(migration).toContain("messages.contact_id = new.contact_id");
+    expect(migration).toContain("companies.domain = lower(trim(new.normalized_domain))");
+    expect(migration).toContain("contacts.email_hash = new.normalized_email_hash");
+    expect(migration).toContain("create trigger scout_contacts_block_existing_dnc_messages");
+    expect(migration).toContain("after insert or update of email, company_id, do_not_contact");
+    expect(migration).toContain("new.do_not_contact is true");
+    expect(migration).toContain("create trigger scout_companies_block_existing_dnc_messages");
+    expect(migration).toContain("after insert or update of website");
+    expect(migration).toContain("revoke execute on function public.scout_block_messages_for_dnc() from public, anon, authenticated");
+    expect(migration).toContain("revoke execute on function public.scout_block_contact_messages_if_dnc() from public, anon, authenticated");
+    expect(migration).toContain("revoke execute on function public.scout_block_company_messages_if_dnc() from public, anon, authenticated");
+    expect(migration).not.toContain("security definer");
+  });
+
   it("autorise les actions manuelles pour les routines DNC et relances", () => {
     const migration = readMigration("scout_manual_dnc_followup_routines");
 
