@@ -177,7 +177,7 @@ Décision actuelle : OpenAI `web_search` prouve maintenant le scan large en smok
 
 Le workflow `.github/workflows/bm-scout-agent-tasks.yml` planifie les jours ouvrés à 12:30 UTC, après les six créneaux Paris 08:15 -> 13:15. Il lance `agent:cron:evidence`, qui met en file les routines dues, consomme jusqu'à 10 tâches et écrit `artifacts/agent-tasks/latest-ci-run.json`.
 
-Le déclenchement manuel reste possible en mode `real` ou `offline`, mais seul un artefact GitHub Actions en mode `real`, avec secrets Supabase + OpenAI, transitions `completed` et révision courante peut compter dans `quality:readiness`.
+Le déclenchement manuel reste possible en mode `real` ou `offline`, mais seul un artefact GitHub Actions en mode `real`, avec secrets Supabase + OpenAI, les 6 routines P0 complétées, des traces worker Core/Exploration, transitions `completed` et révision courante peut compter dans `quality:readiness`.
 
 Secrets requis :
 

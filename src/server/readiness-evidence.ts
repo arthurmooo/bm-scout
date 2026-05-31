@@ -79,8 +79,13 @@ export interface AgentTaskCronArtifactEvidence {
   blockedCount?: number;
   failedCount?: number;
   recoveredCount?: number;
+  requiredTaskTypes?: string[];
   taskTypes?: string[];
   completedTaskTypes?: string[];
+  workerTraceTaskTypes?: string[];
+  missingScheduledTaskTypes?: string[];
+  missingCompletedTaskTypes?: string[];
+  missingWorkerTraceTaskTypes?: string[];
   traceIds?: string[];
   blockers?: string[];
   error?: string;
@@ -187,6 +192,19 @@ export function analyzeAgentTaskCronArtifact(
   const blockers = Array.isArray(payload.blockers) ? payload.blockers.filter((item): item is string => typeof item === "string") : [];
   const source = stringValue(payload.source) || "artifact";
   const mode = stringValue(payload.mode) || "unknown";
+  const scheduledTaskTypes = stringArray(payload.taskTypes);
+  const completedTaskTypes = stringArray(payload.completedTaskTypes);
+  const workerTraceTaskTypes = stringArray(payload.workerTraceTaskTypes);
+  const cronCoversAllP0Routines =
+    hasAllValues(scheduledTaskTypes, P0_AGENT_TASK_TYPES) &&
+    hasAllValues(completedTaskTypes, P0_AGENT_TASK_TYPES) &&
+    hasAllValues(workerTraceTaskTypes, P0_WORKER_AGENT_TASK_TYPES);
+  const derivedBlockers = [
+    ...blockers,
+    ...(!cronCoversAllP0Routines
+      ? ["Cron agent_tasks sans preuve complète des 6 routines P0 et des traces worker Core/Exploration."]
+      : [])
+  ];
   const runtimeMetadataComplete = Boolean(
     stringValue(payload.generated_at) &&
       codeRevision &&
@@ -207,7 +225,8 @@ export function analyzeAgentTaskCronArtifact(
       Array.isArray(payload.taskTypes) &&
       payload.taskTypes.length > 0 &&
       Array.isArray(payload.completedTaskTypes) &&
-      payload.completedTaskTypes.length > 0
+      payload.completedTaskTypes.length > 0 &&
+      cronCoversAllP0Routines
   );
   const runtimeRevisionMatchesCurrent = runtimeMetadataComplete && codeRevisionMatchesCurrent(codeRevision, currentCodeRevision);
   const cleanExecution =
@@ -218,12 +237,23 @@ export function analyzeAgentTaskCronArtifact(
     runtimeMetadataComplete,
     runtimeRevisionMatchesCurrent,
     codeRevision: codeRevision || "unknown",
-    blockers,
+    blockers: derivedBlockers,
     source,
     mode,
     traceIds: Array.isArray(payload.traceIds) ? payload.traceIds.filter((item): item is string => typeof item === "string") : []
   };
 }
+
+const P0_AGENT_TASK_TYPES = [
+  "weekly_core_research",
+  "weekly_exploration_scan",
+  "daily_brief",
+  "learning_review",
+  "dnc_check",
+  "followup_review"
+];
+
+const P0_WORKER_AGENT_TASK_TYPES = ["weekly_core_research", "weekly_exploration_scan"];
 
 export function codeRevisionMatchesCurrent(artifactRevision: string, currentRevision: string): boolean {
   const artifact = normalizeRevision(artifactRevision);
@@ -256,6 +286,15 @@ function knownString(value: unknown): string {
 
 function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function hasAllValues(values: string[], required: string[]): boolean {
+  const set = new Set(values);
+  return required.every((item) => set.has(item));
 }
 
 function numericAtLeast(value: unknown, minimum: number): boolean {

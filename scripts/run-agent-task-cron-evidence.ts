@@ -42,8 +42,13 @@ interface AgentTaskCronEvidenceArtifact {
   blockedCount: number;
   failedCount: number;
   recoveredCount: number;
+  requiredTaskTypes: AgentTaskType[];
   taskTypes: AgentTaskType[];
   completedTaskTypes: AgentTaskType[];
+  workerTraceTaskTypes: AgentTaskType[];
+  missingScheduledTaskTypes: AgentTaskType[];
+  missingCompletedTaskTypes: AgentTaskType[];
+  missingWorkerTraceTaskTypes: AgentTaskType[];
   traceIds: string[];
   blockers: string[];
   schedule?: AgentTaskScheduleResult;
@@ -59,6 +64,15 @@ const recoverStale = !args.includes("--no-recover-stale");
 const nowArg = argValue("--now");
 const taskArg = argValue("--task") as AgentTaskType | undefined;
 const now = nowArg ? new Date(nowArg) : new Date();
+const P0_TASK_TYPES: AgentTaskType[] = [
+  "weekly_core_research",
+  "weekly_exploration_scan",
+  "daily_brief",
+  "learning_review",
+  "dnc_check",
+  "followup_review"
+];
+const WORKER_TASK_TYPES = new Set<AgentTaskType>(["weekly_core_research", "weekly_exploration_scan"]);
 
 const baseArtifact = {
   generated_at: new Date().toISOString(),
@@ -106,15 +120,32 @@ try {
   const completed = processed.filter((item) => item.status === "completed");
   const blocked = processed.filter((item) => item.status === "blocked");
   const failed = processed.filter((item) => item.status === "failed");
+  const scheduledTaskTypes = uniqueTaskTypes(tasks.map((task) => task.type));
+  const completedTaskTypes = uniqueTaskTypes(completed.map((task) => task.taskType));
+  const workerTraceTaskTypes = uniqueTaskTypes(
+    completed.flatMap((task) => (WORKER_TASK_TYPES.has(task.taskType) && task.traceId ? [task.taskType] : []))
+  );
+  const missingScheduledTaskTypes = missingTaskTypes(scheduledTaskTypes);
+  const missingCompletedTaskTypes = missingTaskTypes(completedTaskTypes);
+  const missingWorkerTraceTaskTypes = P0_TASK_TYPES.filter((type) => WORKER_TASK_TYPES.has(type) && !workerTraceTaskTypes.includes(type));
   const blockers = [
     ...(baseArtifact.source !== "github_actions" ? ["Artefact cron produit hors GitHub Actions."] : []),
     ...(mode !== "real" ? ["Artefact cron produit en mode offline, insuffisant pour la readiness."] : []),
     ...(!baseArtifact.has_supabase_env ? ["Secrets Supabase absents."] : []),
     ...(!baseArtifact.has_openai_env ? ["Secret OPENAI_API_KEY absent."] : []),
     ...(tasks.length < 1 ? ["Aucune routine due mise en file par le scheduler."] : []),
+    ...(missingScheduledTaskTypes.length
+      ? [`Routines P0 absentes du scheduler cron: ${missingScheduledTaskTypes.join(", ")}.`]
+      : []),
     ...(schedule.inserted.length < 1 && schedule.skipped.length < 1 ? ["Aucune tâche agent_tasks insérée ou retrouvée."] : []),
     ...(processed.length < 1 ? ["Aucune tâche agent_tasks consommée par le runner."] : []),
     ...(completed.length < 1 ? ["Aucune transition agent_tasks vers completed."] : []),
+    ...(missingCompletedTaskTypes.length
+      ? [`Routines P0 non complétées par le runner cron: ${missingCompletedTaskTypes.join(", ")}.`]
+      : []),
+    ...(missingWorkerTraceTaskTypes.length
+      ? [`Routines worker sans trace persistable: ${missingWorkerTraceTaskTypes.join(", ")}.`]
+      : []),
     ...(blocked.length ? [`${blocked.length} tâche(s) bloquée(s) pendant le cron.`] : []),
     ...(failed.length ? [`${failed.length} tâche(s) échouée(s) pendant le cron.`] : []),
     ...(queue.recovered.length ? [`${queue.recovered.length} tâche(s) running récupérée(s), incident à traiter.`] : [])
@@ -132,8 +163,13 @@ try {
       blockedCount: blocked.length,
       failedCount: failed.length,
       recoveredCount: queue.recovered.length,
-      taskTypes: tasks.map((task) => task.type),
-      completedTaskTypes: completed.map((task) => task.taskType),
+      requiredTaskTypes: P0_TASK_TYPES,
+      taskTypes: scheduledTaskTypes,
+      completedTaskTypes,
+      workerTraceTaskTypes,
+      missingScheduledTaskTypes,
+      missingCompletedTaskTypes,
+      missingWorkerTraceTaskTypes,
       traceIds: processed.flatMap((task) => (task.traceId ? [task.traceId] : [])),
       blockers,
       schedule,
@@ -180,11 +216,24 @@ function emptyArtifact(status: "pass" | "fail", blockers: string[]): AgentTaskCr
     blockedCount: 0,
     failedCount: 0,
     recoveredCount: 0,
+    requiredTaskTypes: P0_TASK_TYPES,
     taskTypes: [],
     completedTaskTypes: [],
+    workerTraceTaskTypes: [],
+    missingScheduledTaskTypes: P0_TASK_TYPES,
+    missingCompletedTaskTypes: P0_TASK_TYPES,
+    missingWorkerTraceTaskTypes: P0_TASK_TYPES.filter((type) => WORKER_TASK_TYPES.has(type)),
     traceIds: [],
     blockers
   };
+}
+
+function uniqueTaskTypes(types: AgentTaskType[]): AgentTaskType[] {
+  return P0_TASK_TYPES.filter((type) => types.includes(type));
+}
+
+function missingTaskTypes(types: AgentTaskType[]): AgentTaskType[] {
+  return P0_TASK_TYPES.filter((type) => !types.includes(type));
 }
 
 async function writeArtifact(output: string): Promise<void> {

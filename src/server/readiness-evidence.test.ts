@@ -343,9 +343,32 @@ describe("readiness evidence", () => {
         blockedCount: 0,
         failedCount: 0,
         recoveredCount: 0,
-        taskTypes: ["weekly_core_research"],
-        completedTaskTypes: ["weekly_core_research"],
-        traceIds: ["trace-core"]
+        requiredTaskTypes: [
+          "weekly_core_research",
+          "weekly_exploration_scan",
+          "daily_brief",
+          "learning_review",
+          "dnc_check",
+          "followup_review"
+        ],
+        taskTypes: [
+          "weekly_core_research",
+          "weekly_exploration_scan",
+          "daily_brief",
+          "learning_review",
+          "dnc_check",
+          "followup_review"
+        ],
+        completedTaskTypes: [
+          "weekly_core_research",
+          "weekly_exploration_scan",
+          "daily_brief",
+          "learning_review",
+          "dnc_check",
+          "followup_review"
+        ],
+        workerTraceTaskTypes: ["weekly_core_research", "weekly_exploration_scan"],
+        traceIds: ["trace-core", "trace-exploration"]
       },
       "abcdef1234567890"
     );
@@ -356,8 +379,40 @@ describe("readiness evidence", () => {
       runtimeRevisionMatchesCurrent: true,
       source: "github_actions",
       mode: "real",
-      traceIds: ["trace-core"]
+      traceIds: ["trace-core", "trace-exploration"]
     });
+  });
+
+  it("refuse une preuve cron qui ne couvre pas les six routines P0", () => {
+    const evidence = analyzeAgentTaskCronArtifact(
+      {
+        status: "pass",
+        generated_at: "2026-05-31T10:00:00.000Z",
+        source: "github_actions",
+        mode: "real",
+        code_revision: "abcdef123456",
+        github_run_id: "1001",
+        github_sha: "abcdef123456",
+        has_supabase_env: true,
+        has_openai_env: true,
+        dueCount: 1,
+        insertedCount: 1,
+        skippedCount: 0,
+        processedCount: 1,
+        completedCount: 1,
+        blockedCount: 0,
+        failedCount: 0,
+        recoveredCount: 0,
+        taskTypes: ["daily_brief"],
+        completedTaskTypes: ["daily_brief"],
+        traceIds: []
+      },
+      "abcdef123456"
+    );
+
+    expect(evidence.runtimeMetadataComplete).toBe(false);
+    expect(evidence.verdict).toBe("fail");
+    expect(evidence.blockers).toContain("Cron agent_tasks sans preuve complète des 6 routines P0 et des traces worker Core/Exploration.");
   });
 
   it("refuse une preuve cron locale, offline ou ancienne", () => {
@@ -420,16 +475,32 @@ describe("readiness evidence", () => {
         github_sha: "111111122222",
         has_supabase_env: true,
         has_openai_env: true,
-        dueCount: 1,
-        insertedCount: 1,
+        dueCount: 6,
+        insertedCount: 6,
         skippedCount: 0,
-        processedCount: 1,
-        completedCount: 1,
+        processedCount: 6,
+        completedCount: 6,
         blockedCount: 0,
         failedCount: 0,
         recoveredCount: 0,
-        taskTypes: ["daily_brief"],
-        completedTaskTypes: ["daily_brief"]
+        taskTypes: [
+          "weekly_core_research",
+          "weekly_exploration_scan",
+          "daily_brief",
+          "learning_review",
+          "dnc_check",
+          "followup_review"
+        ],
+        completedTaskTypes: [
+          "weekly_core_research",
+          "weekly_exploration_scan",
+          "daily_brief",
+          "learning_review",
+          "dnc_check",
+          "followup_review"
+        ],
+        workerTraceTaskTypes: ["weekly_core_research", "weekly_exploration_scan"],
+        traceIds: ["trace-core", "trace-exploration"]
       },
       "abcdef123456"
     );

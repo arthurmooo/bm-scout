@@ -25,7 +25,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Module scheduler TS : `src/domain/scheduler.ts`.
 - Runner de queue : `src/server/agent-task-runner.ts` et `scripts/run-agent-task-queue.ts`, avec claim `queued -> running` conditionné au statut, récupération explicite des tâches `running` trop anciennes, et transitions terminales limitées aux tâches encore `running`, pour éviter deux runners, un process mort ou une annulation écrasée.
 - Routines non-worker : Daily Brief, Learning Review, DNC check et followup review lisent le snapshot Supabase runtime, produisent un résumé actionnable ou se bloquent si aucun run persistant n'existe.
-- Cron GitHub Actions versionné : `.github/workflows/bm-scout-agent-tasks.yml`, maintenant branché sur `agent:cron:evidence` avec artefact `artifacts/agent-tasks/latest-ci-run.json`.
+- Cron GitHub Actions versionné : `.github/workflows/bm-scout-agent-tasks.yml`, maintenant branché sur `agent:cron:evidence` avec artefact `artifacts/agent-tasks/latest-ci-run.json`, qui doit prouver les 6 routines P0 complétées et les traces worker Core/Exploration.
 - Tests scheduler avec routines Core, Exploration, Daily Brief, Learning, DNC, followup.
 - Migration Supabase `20260530210927_agent_tasks_and_actions.sql`.
 - Migration Supabase `20260531030736_agent_tasks_active_dedupe.sql` : index unique partiel pour empêcher deux tâches `queued/running` identiques sur le même créneau.
@@ -67,7 +67,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Le worker réel peut découvrir des candidats sans seeds via SerpAPI, OpenAI `web_search` ou fallback web public ; OpenAI web est prouvé à volume PRD en comparaison provider, mais pas encore en run Agents SDK persisté Supabase à volume.
 - `verify:supabase` produit maintenant `artifacts/supabase-runtime/latest-verify.json`. `quality:readiness` refuse cet artefact s'il est ancien, `-dirty`, incomplet, sans actions Romu persistées ou sans traces Supabase.
 - `verify:supabase` exécute aussi un probe temporaire Core puis Exploration sur le même domaine via `scout_persist_mission_output`, exige une seule company conservée en Core, un run step `dedupe_decision=merged_existing`, puis vérifie que le cleanup laisse zéro company/run de probe.
-- `quality:readiness` refuse aussi le cron si l'artefact `latest-ci-run.json` n'est pas issu de GitHub Actions, pas en mode `real`, pas sur la révision courante, sans secrets Supabase/OpenAI ou sans transition `completed`.
+- `quality:readiness` refuse aussi le cron si l'artefact `latest-ci-run.json` n'est pas issu de GitHub Actions, pas en mode `real`, pas sur la révision courante, sans secrets Supabase/OpenAI, sans les 6 routines P0 complétées, sans traces worker Core/Exploration ou sans transition `completed`.
 - Une comparaison provider Core seule ne peut plus déclarer les volumes PRD prouvés ; `prd_volume_proven` exige Core + Exploration.
 - Les providers `search_web`, `fetch_company_site`, `search_jobs`, `find_public_emails`, `dedupe_company` existent ; `search_jobs` reste minimal et la robustesse search dépend encore des sources publiques.
 - Les volumes 15 Core / 100 Exploration sont paramétrés mais non prouvés en run réel.
@@ -89,12 +89,12 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 ## Vérifications exécutées
 
-- `npm run test` : 84 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/outcome négatif/email incertain bloquée, routines DNC/followup lançables, indexes FK Supabase, index anti-doublon, fusion Supabase company par `external_id`/domaine, preuve `verify:supabase` de fusion RPC avec cleanup, policy Auth BM Scout, actions Romu, provider runtime des preuves et scénario `feedback:evidence`.
+- `npm run test` : 85 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/outcome négatif/email incertain bloquée, routines DNC/followup lançables, indexes FK Supabase, index anti-doublon, fusion Supabase company par `external_id`/domaine, preuve `verify:supabase` de fusion RPC avec cleanup, cron readiness couvrant les 6 routines P0, policy Auth BM Scout, actions Romu, provider runtime des preuves et scénario `feedback:evidence`.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.
 - `npm run quality:runs` : pass fixture, décision produit `production_not_ready`.
-- `npm run quality:readiness` : fail attendu, décision produit `production_not_ready`. Les anciens artefacts réels ne suffisent plus à prouver le learning si la mémoire ne vient pas de Supabase, si aucun feedback/outcome Supabase ni DNC Supabase n'est chargé, si aucun impact `feedback_memory_effects` n'est mesuré, si le provider opérationnel est seulement `configured`, si les métadonnées runtime sont absentes ou si la révision code ne correspond pas au commit courant.
+- `npm run quality:readiness` : fail attendu, décision produit `production_not_ready`. Les anciens artefacts réels ne suffisent plus à prouver le learning si la mémoire ne vient pas de Supabase, si aucun feedback/outcome Supabase ni DNC Supabase n'est chargé, si aucun impact `feedback_memory_effects` n'est mesuré, si le provider opérationnel est seulement `configured`, si les métadonnées runtime sont absentes, si la révision code ne correspond pas au commit courant ou si le cron ne couvre pas les 6 routines P0.
 - `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 60 tests pass, dont provider SerpAPI, provider OpenAI web, schéma strict Agents SDK, hosted web search opt-in, max turns borné, métadonnées runtime, contexte/verbosité OpenAI compatibles, surface de requêtes PRD, DNC table/domaine/hash email, email confidence public/générique/pattern/no-reply, seuil Core validable, fallback jobs, parsing sources, comparaison provider, déduplication domaine/nom/pays/ville/LinkedIn/identifiant, impact feedback structuré et anti-faux-positif PRD sur smoke Core seul.
 - `npm run verify:supabase` vérifie maintenant aussi `scout_agent_tasks`, `scout_feedback`, `scout_outcomes`, `scout_do_not_contact`, `scout_run_steps`, `scout_action_events` et la fusion RPC domain/Core.
 - Avec `OPENAI_API_KEY` présent en env, `OPENAI_MODEL=gpt-4.1-mini`, `OPENAI_SEARCH_MODEL=gpt-4.1-mini` et `BM_SCOUT_FETCH_LIMIT=3`, `npm run provider:compare -- --providers=openai_web --modes=core,exploration` : pass réel. Core atteint `15/15`, Exploration atteint `100/100`, `openai_web` est recommandé et `prd_volume_proven=true`.
@@ -121,5 +121,5 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 2. Ajouter `SERPAPI_API_KEY`, relancer `npm run provider:compare`, puis comparer couverture, coût et qualité des sources contre OpenAI web avant choix par défaut.
 3. Prouver les volumes PRD 15 Core / 100 Exploration en run Agents SDK persisté Supabase, pas seulement en smoke provider.
 4. Exécuter `npm run feedback:evidence` avec secrets serveur pour produire une preuve Supabase de causalité feedback, puis prouver la même mémoire sur runs marché Core/Exploration à volume.
-5. Exécuter le cron GitHub Actions avec secrets, télécharger `bm-scout-agent-task-evidence` et vérifier les transitions `queued -> completed`.
+5. Exécuter le cron GitHub Actions avec secrets, télécharger `bm-scout-agent-task-evidence` et vérifier les transitions `queued -> completed` pour les 6 routines P0, avec traces Core/Exploration.
 6. Affecter les claims Supabase réels aux comptes Romu/Arthur et valider le parcours magic link sur le projet interne.
