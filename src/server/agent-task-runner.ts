@@ -432,8 +432,27 @@ function defaultPythonPath(): string {
 function runProcess(command: string, args: string[]): Promise<{ code: number | null; stdout: string; stderr: string }> {
   return new Promise((resolve) => {
     const child = spawn(command, args, { cwd: process.cwd(), env: process.env });
+    const timeoutMs = workerCliTimeoutMs();
     let stdout = "";
     let stderr = "";
+    let finished = false;
+    const timeout = setTimeout(() => {
+      if (finished) return;
+      stderr += `\nWorker CLI timeout après ${timeoutMs}ms.`;
+      child.kill("SIGTERM");
+      setTimeout(() => {
+        if (!finished) child.kill("SIGKILL");
+      }, 3000).unref();
+    }, timeoutMs);
+    timeout.unref();
+
+    const finish = (code: number | null) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timeout);
+      resolve({ code, stdout, stderr });
+    };
+
     child.stdout.on("data", (chunk: Buffer) => {
       stdout += chunk.toString("utf8");
     });
@@ -442,10 +461,15 @@ function runProcess(command: string, args: string[]): Promise<{ code: number | n
     });
     child.on("error", (error) => {
       stderr += error.message;
-      resolve({ code: 1, stdout, stderr });
+      finish(1);
     });
-    child.on("close", (code) => resolve({ code, stdout, stderr }));
+    child.on("close", (code, signal) => finish(signal === "SIGTERM" ? 124 : code));
   });
+}
+
+function workerCliTimeoutMs(): number {
+  const value = Number(process.env.BM_SCOUT_WORKER_TIMEOUT_MS ?? 300000);
+  return Number.isFinite(value) && value >= 10000 ? value : 300000;
 }
 
 function parseWorkerOutput(stdout: string): WorkerCliOutput | null {

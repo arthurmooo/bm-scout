@@ -44,7 +44,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - `search_jobs` n'est plus décoratif : le provider web cherche des sources recrutement publiques, les transforme en preuves et les trace dans `run_steps`.
 - Scripts `worker:real:*` : exécution reproductible Core/Exploration réelle, avec artefacts `latest-real-*.json` consommés par `quality:readiness`.
 - Mémoire feedback TS : rejet lead, pénalité secteur, bonus angle validé, régénération anti-générique.
-- Mémoire feedback worker : chargement feedbacks/outcomes Supabase avec contexte entreprise/segment/site, blocage DNC/rejets, pénalités segments faibles, bonus angles validés et régénération anti-générique dans le provider Python.
+- Mémoire feedback worker : chargement feedbacks/outcomes Supabase avec contexte entreprise/segment/site, chargement direct de `scout_do_not_contact`, blocage DNC/rejets par domaine/hash email, pénalités segments faibles, bonus angles validés et régénération anti-générique dans le provider Python.
 - Worker Pydantic : contrat Observé/Inféré/Incertain, email confidence, run steps.
 - Recorder Agents SDK : les function tools poussent maintenant leurs entrées/sorties compactées dans `run_steps` pendant `Runner.run`.
 - Migration Supabase `20260530214847_bm_scout_structured_insights_email_confidence_steps.sql` appliquée au projet interne.
@@ -83,8 +83,9 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - `npm run lint` : pass.
 - `npm run build` : pass.
 - `npm run quality:runs` : pass fixture, décision produit `production_not_ready`.
-- `npm run quality:readiness` : fail attendu, décision produit `production_not_ready`.
-- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 46 tests pass, dont provider SerpAPI, provider OpenAI web, schéma strict Agents SDK, contexte/verbosité OpenAI compatibles, surface de requêtes PRD, seuil Core validable, fallback jobs, parsing sources, comparaison provider et anti-faux-positif PRD sur smoke Core seul.
+- `npm run quality:readiness` : fail attendu, décision produit `production_not_ready`. Les anciens artefacts réels ne suffisent plus à prouver le learning si la mémoire ne vient pas de Supabase et si aucun DNC Supabase n'est chargé.
+- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 49 tests pass, dont provider SerpAPI, provider OpenAI web, schéma strict Agents SDK, contexte/verbosité OpenAI compatibles, surface de requêtes PRD, DNC table/domaine/hash email, seuil Core validable, fallback jobs, parsing sources, comparaison provider et anti-faux-positif PRD sur smoke Core seul.
+- `npm run verify:supabase` vérifie maintenant aussi `scout_agent_tasks`, `scout_feedback`, `scout_outcomes`, `scout_do_not_contact`, `scout_run_steps` et `scout_action_events`.
 - Avec `OPENAI_API_KEY` présent en env, `OPENAI_MODEL=gpt-4.1-mini`, `OPENAI_SEARCH_MODEL=gpt-4.1-mini` et `BM_SCOUT_FETCH_LIMIT=3`, `npm run provider:compare -- --providers=openai_web --modes=core,exploration` : pass réel. Core atteint `15/15`, Exploration atteint `100/100`, `openai_web` est recommandé et `prd_volume_proven=true`.
 - Avec `OPENAI_API_KEY` présent en env, `OPENAI_MODEL=gpt-4.1-mini`, `OPENAI_SEARCH_MODEL=gpt-4.1-mini`, `BM_SCOUT_PROVIDER=openai_web` et `BM_SCOUT_FETCH_LIMIT=2`, `npm run worker:real:core` : pass réel Agents SDK, artefact `latest-real-core.json`, 2 leads retenus, 5 lessons.
 - Avec les mêmes env, `npm run worker:real:exploration` : pass réel Agents SDK, artefact `latest-real-exploration.json`, 2 leads retenus, 5 lessons, aucun message direct.

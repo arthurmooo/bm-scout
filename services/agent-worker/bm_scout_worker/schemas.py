@@ -101,6 +101,9 @@ class FeedbackEvent(BaseModel):
     company_name: str | None = None
     segment: str | None = None
     website: str | None = None
+    normalized_domain: str | None = None
+    normalized_email_hash: str | None = None
+    contact_id: str | None = None
 
 
 class RunStep(BaseModel):

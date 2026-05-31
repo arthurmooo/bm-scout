@@ -52,8 +52,20 @@ class SupabaseMemory:
                 "limit": str(limit),
             },
         )
+        dnc_rows = self.get_json(
+            "scout_do_not_contact",
+            {
+                "select": (
+                    "id,scope,normalized_email_hash,normalized_domain,company_id,contact_id,"
+                    "reason,created_at,scout_companies(name,segment,website),scout_contacts(name,role,email)"
+                ),
+                "order": "created_at.desc",
+                "limit": str(limit),
+            },
+        )
         events = [self._feedback_event(row) for row in feedback_rows]
         events.extend(self._outcome_event(row) for row in outcome_rows)
+        events.extend(self._dnc_event(row) for row in dnc_rows)
         return sorted(events, key=lambda event: event.created_at, reverse=True)[:limit]
 
     def _feedback_event(self, row: dict[str, Any]) -> FeedbackEvent:
@@ -82,6 +94,25 @@ class SupabaseMemory:
             company_name=company.get("name"),
             segment=company.get("segment"),
             website=company.get("website"),
+        )
+
+    def _dnc_event(self, row: dict[str, Any]) -> FeedbackEvent:
+        company = self._company_context(row)
+        domain = str(row.get("normalized_domain") or "")
+        reason = str(row.get("reason") or "Do-not-contact actif.")
+        scope = str(row.get("scope") or "unknown")
+        return FeedbackEvent(
+            id=f"dnc-{row['id']}",
+            lead_id=str(row.get("company_id") or row.get("contact_id") or domain or row["id"]),
+            kind="do_not_contact",
+            note=f"{reason} Scope: {scope}.",
+            created_at=row["created_at"],
+            company_name=company.get("name") or (domain if domain else None),
+            segment=company.get("segment"),
+            website=company.get("website") or (f"https://{domain}" if domain else None),
+            normalized_domain=domain or None,
+            normalized_email_hash=row.get("normalized_email_hash"),
+            contact_id=str(row.get("contact_id")) if row.get("contact_id") else None,
         )
 
     def _company_context(self, row: dict[str, Any]) -> dict[str, Any]:

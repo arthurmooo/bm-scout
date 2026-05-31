@@ -19,7 +19,7 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 - Actions UI branchées sur une API serveur : valider, rejeter, enrichir, copier, DNC, lancer routines. Les copies ne sont écrites dans le presse-papiers qu'après validation serveur.
 - Feedbacks et outcomes Romu persistés dans `scout_feedback` / `scout_outcomes` : bon/mauvais lead, bon angle, message générique, RDV, positif/négatif, timing, mauvais interlocuteur.
 - DNC hard gate côté qualité TS, côté worker offline et côté DB pour empêcher un message non bloqué sur une cible DNC.
-- Feedback memory TS + worker provider : mauvais lead/secteur pénalisé, angle validé renforcé, message générique régénéré, DNC bloquant, contexte entreprise/segment chargé depuis Supabase.
+- Feedback memory TS + worker provider : mauvais lead/secteur pénalisé, angle validé renforcé, message générique régénéré, DNC bloquant, contexte entreprise/segment et table `scout_do_not_contact` chargés depuis Supabase.
 - Observé/Inféré/Incertain, email confidence, run steps provider et tool calls Agents SDK persistés via Supabase/RPC.
 - RLS Supabase durcie : policies `authenticated` restreintes aux rôles internes via `app_metadata`, service role réservée au serveur/worker, advisor sécurité Supabase sans lint après migration.
 - Auth interne Supabase SSR branchée : login magic link, refresh cookies via proxy Next, API actions bloquée si l'utilisateur n'a pas de claim `app_metadata` BM Scout. Le mode démo local reste explicite via `BM_SCOUT_AUTH_MODE=demo`.
@@ -53,6 +53,7 @@ Variables serveur :
 - `OPENAI_SEARCH_MODEL` optionnel pour la découverte web OpenAI, par défaut `OPENAI_MODEL`
 - `OPENAI_SEARCH_CONTEXT_SIZE=low|medium|high` optionnel, par défaut `medium`
 - `OPENAI_SEARCH_MAX_OUTPUT_TOKENS` optionnel, par défaut `2400`
+- `BM_SCOUT_WORKER_TIMEOUT_MS` optionnel, par défaut `300000`
 - `SERPAPI_API_KEY` optionnel ; si présent, `auto` choisit SerpAPI avant OpenAI web.
 - `BM_SCOUT_PROVIDER=auto|serpapi|openai_web|web|configured|demo`, par défaut `auto`
 - `BM_SCOUT_SEARCH_QUERIES` optionnel pour piloter les requêtes web, format JSON ou `;`
@@ -87,7 +88,7 @@ npm run worker:test
 npm run provider:compare
 ```
 
-`quality:runs` valide seulement le socle fixture. `quality:readiness` doit rester bloquant tant que BM Scout est `production_not_ready`.
+`quality:runs` valide seulement le socle fixture. `quality:readiness` doit rester bloquant tant que BM Scout est `production_not_ready`; les artefacts réels doivent indiquer une mémoire Supabase et un DNC Supabase chargé pour prouver le learning runtime.
 `provider:compare` est un gate de recherche réelle : sans `SERPAPI_API_KEY` ou `OPENAI_API_KEY`, un échec est attendu et doit rester visible.
 OpenAI a bien un tool officiel de recherche web via Responses API (`web_search`) et le provider `openai_web` l'utilise. Dans le dernier smoke réel provider, OpenAI web passe Core et Exploration à volume PRD (`15/15` Core, `100/100` Exploration) ; SerpAPI reste utile pour comparer coût, stabilité et qualité des sources.
 

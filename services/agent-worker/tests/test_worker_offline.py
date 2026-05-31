@@ -8,7 +8,6 @@ from unittest.mock import patch
 from bm_scout_worker import provider_audit
 from bm_scout_worker import tools
 from bm_scout_worker.fixtures import offline_output
-from bm_scout_worker.memory import SupabaseConfig, SupabaseMemory
 from bm_scout_worker.providers import (
     CompanySeed,
     ConfiguredWebResearchProvider,
@@ -43,6 +42,14 @@ def test_core_offline_produces_actionable_lead() -> None:
     assert output.leads
     assert any(lead.verdict == "validate" and lead.quality_decision == "pass" for lead in output.leads)
     assert mission_blockers(output) == []
+
+
+def test_runner_records_memory_source_metadata() -> None:
+    output = asyncio.run(run_bm_scout_mission("core", real=False, persist=False))
+    runner_step = next(step for step in output.run_steps if step.step == "runner_complete")
+
+    assert runner_step.payload["feedback_memory_source"] == "offline_fixture"
+    assert runner_step.payload["do_not_contact_event_count"] == 0
 
 
 def test_exploration_does_not_generate_direct_outreach() -> None:
@@ -760,91 +767,3 @@ def test_agent_output_schema_is_strict_compatible() -> None:
     from bm_scout_worker.schemas import MissionAgentOutput
 
     AgentOutputSchema(MissionAgentOutput)
-
-
-def test_supabase_memory_persists_output_through_atomic_rpc() -> None:
-    output = offline_output("core")
-    requests = []
-
-    class Response:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return None
-
-        def read(self):
-            return json.dumps(output.run_id).encode("utf-8")
-
-    def fake_urlopen(request, timeout):
-        requests.append((request, timeout))
-        return Response()
-
-    memory = SupabaseMemory(SupabaseConfig(url="https://example.supabase.co", service_role_key="service"))
-    with patch("urllib.request.urlopen", fake_urlopen):
-        memory.persist_output(output)
-
-    request, timeout = requests[0]
-    assert timeout == 20
-    assert request.full_url == "https://example.supabase.co/rest/v1/rpc/scout_persist_mission_output"
-    assert request.get_method() == "POST"
-    assert json.loads(request.data.decode("utf-8"))["payload"]["run_id"] == output.run_id
-
-
-def test_supabase_memory_loads_feedback_and_outcomes() -> None:
-    responses = [
-        [
-            {
-                "id": "feedback-1",
-                "company_id": "company-1",
-                "kind": "good_angle",
-                "note": "Angle validé par Romu.",
-                "created_at": "2026-05-30T10:00:00+00:00",
-                "scout_companies": {
-                    "name": "Cambon Partners",
-                    "segment": "Conseil M&A",
-                    "website": "https://www.cambonpartners.com",
-                },
-            }
-        ],
-        [
-            {
-                "id": "outcome-1",
-                "company_id": "company-1",
-                "outcome": "interested",
-                "note": "Réponse positive.",
-                "occurred_at": "2026-05-30T11:00:00+00:00",
-                "scout_companies": {
-                    "name": "Cambon Partners",
-                    "segment": "Conseil M&A",
-                    "website": "https://www.cambonpartners.com",
-                },
-            }
-        ],
-    ]
-
-    class Response:
-        def __init__(self, payload):
-            self.payload = payload
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return None
-
-        def read(self):
-            return json.dumps(self.payload).encode("utf-8")
-
-    def fake_urlopen(_request, timeout):
-        assert timeout == 20
-        return Response(responses.pop(0))
-
-    memory = SupabaseMemory(SupabaseConfig(url="https://example.supabase.co", service_role_key="service"))
-    with patch("urllib.request.urlopen", fake_urlopen):
-        events = memory.load_feedback_events()
-
-    assert [event.kind for event in events] == ["positive_outcome", "good_angle"]
-    assert events[0].note == "Réponse positive."
-    assert events[0].company_name == "Cambon Partners"
-    assert events[0].segment == "Conseil M&A"

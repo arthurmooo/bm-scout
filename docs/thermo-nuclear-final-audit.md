@@ -33,7 +33,7 @@ Verdict : `production_not_ready`.
 - Les routines Daily Brief, Learning Review, DNC check et followup review ne restent plus bloquées par défaut : elles lisent le runtime Supabase et refusent les fixtures comme preuve opérationnelle.
 - Le worker réel ne retombe plus silencieusement sur fixtures et expose `WebSearchTool` OpenAI plus 8 tools métier Agents SDK.
 - `search_jobs` produit maintenant des preuves recrutement publiques et des run steps au lieu d'être un no-op.
-- La mémoire feedback TS et worker pénalise les secteurs faibles, bloque les leads rejetés/DNC, renforce les angles validés et régénère les messages trop génériques.
+- La mémoire feedback TS et worker pénalise les secteurs faibles, bloque les leads rejetés/DNC, renforce les angles validés et régénère les messages trop génériques. Le worker charge aussi `scout_do_not_contact` directement pour les blocages domaine/hash email.
 - Observé/Inféré/Incertain et email confidence sont maintenant portés par TS, worker Pydantic, DB et RPC.
 - Le RPC écrit des run steps minimaux (`mission_start`, `lead_persisted`, steps worker, `mission_complete`).
 - Le provider réel ajoute des run steps outil-par-outil pour déduplication, fetch, extraction, email discovery, evidence save et scoring.
@@ -58,8 +58,8 @@ Verdict : `production_not_ready`.
 - `npm run quality:runs`
 - `npm run quality:readiness` échoue comme attendu en `production_not_ready`
 - `npm exec tsx -- scripts/run-agent-worker-evidence.ts --offline --mode=core` : pass, harnais d'artefact vérifié sans Supabase.
-- `npm run worker:real:core` : pass réel Agents SDK sans persistance Supabase.
-- `npm run worker:real:exploration` : pass réel Agents SDK sans persistance Supabase.
+- `npm run worker:real:core` : pass réel Agents SDK sans persistance Supabase sur l'artefact de référence précédent ; la dernière tentative de relance OpenAI a été arrêtée après blocage long, et le runner dispose maintenant d'un timeout explicite.
+- `npm run worker:real:exploration` : pass réel Agents SDK sans persistance Supabase sur l'artefact de référence précédent.
 - `npm run agent:tasks` échoue sans env Supabase avec un message explicite.
 - Tests runner TS : routines brief/learning/DNC/followup couvertes.
 - Tests actions TS : feedback bon angle, message générique, outcome RDV et DNC vers mémoire couverts.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from hashlib import sha256
 from dataclasses import dataclass, field
 from urllib.parse import urlparse
 
@@ -85,7 +86,15 @@ def apply_provider_feedback_memory(lead: ScoutLead, memory: ProviderFeedbackMemo
 
 
 def feedback_targets(feedback: FeedbackEvent) -> set[str]:
-    values = {feedback.lead_id, feedback.company_name, feedback.website, domain_key(feedback.website or "")}
+    values = {
+        feedback.lead_id,
+        feedback.company_name,
+        feedback.website,
+        domain_key(feedback.website or ""),
+        feedback.normalized_domain,
+        feedback.normalized_email_hash,
+        feedback.contact_id,
+    }
     return {normalize(value) for value in values if value}
 
 
@@ -95,8 +104,22 @@ def matching_target(lead: ScoutLead, targets: set[str]) -> str | None:
         normalize(lead.company),
         normalize(lead.website),
         normalize(domain_key(lead.website)),
+        *persona_targets(lead),
     }
     return next((target for target in targets if target in candidates), None)
+
+
+def persona_targets(lead: ScoutLead) -> set[str]:
+    values: set[str] = set()
+    for persona in lead.personas:
+        if persona.email:
+            values.add(normalize(persona.email))
+            values.add(email_hash(persona.email))
+    return values
+
+
+def email_hash(email: str) -> str:
+    return sha256(email.strip().lower().encode("utf-8")).hexdigest()
 
 
 def add_segment_delta(memory: ProviderFeedbackMemory, segment: str, delta: int) -> None:

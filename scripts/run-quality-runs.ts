@@ -242,14 +242,14 @@ function renderReport(
     ...(realEvidence.length
       ? realEvidence.map(
           (item) =>
-            `- ${item.name} : ${item.verdict}; trace : ${item.traceId}; leads retenus : ${item.keptCount}; rejetes : ${item.rejectedCount}; lessons : ${item.lessonCount}; feedback learning : ${item.learningUsesFeedback ? "oui" : "non"}`
+            `- ${item.name} : ${item.verdict}; trace : ${item.traceId}; leads retenus : ${item.keptCount}; rejetes : ${item.rejectedCount}; lessons : ${item.lessonCount}; mémoire : ${item.memorySource}; DNC mémoire : ${item.doNotContactEventCount}; persist artefact : ${item.persistComplete ? "oui" : "non"}; feedback learning : ${item.learningUsesFeedback ? "oui" : "non"}`
         )
       : ["- Aucun artefact réel détecté dans `artifacts/agent-worker-real/`."]),
     "",
     "## Evidence Supabase runtime",
     "",
     persistEvidence
-      ? `- CLI --persist : ${persistEvidence.verdict}; trace : ${persistEvidence.traceId}; artefact : ${persistEvidence.sourceFile}`
+      ? `- CLI --persist : ${persistEvidence.verdict}; trace : ${persistEvidence.traceId}; artefact : ${persistEvidence.sourceFile}; persist artefact : ${persistEvidence.persistComplete ? "oui" : "non"}`
       : "- CLI --persist : aucune preuve locale.",
     `- Console serveur Supabase : ${consoleEvidence.verdict}; runs : ${consoleEvidence.runCount}; leads : ${consoleEvidence.leadCount}; rejetes : ${consoleEvidence.rejectedCount}; lessons : ${consoleEvidence.lessonCount}`,
     consoleEvidence.traces.length ? `- Traces console : ${consoleEvidence.traces.join(", ")}` : "- Traces console : aucune.",
@@ -320,6 +320,9 @@ interface RealRunnerEvidence {
   finalDecision: "ready" | "not_ready";
   sourceFile: string;
   learningUsesFeedback: boolean;
+  memorySource: string;
+  doNotContactEventCount: number;
+  persistComplete: boolean;
 }
 
 async function loadRealRunnerEvidence(): Promise<RealRunnerEvidence[]> {
@@ -342,11 +345,13 @@ async function loadRealRunnerEvidence(): Promise<RealRunnerEvidence[]> {
         rejected_count?: number;
         lessons?: { lesson?: string; recommendation?: string; source?: string }[];
         final_decision?: "ready" | "not_ready";
+        run_steps?: RunnerStep[];
       };
     };
     if (!payload.output?.trace_id) continue;
     const lessons = payload.output.lessons ?? [];
     const lessonCount = lessons.length;
+    const memory = runnerMemoryEvidence(payload.output.run_steps ?? []);
     evidence.push({
       name: target.name,
       verdict: payload.verdict === "pass" ? "pass" : "fail",
@@ -357,10 +362,31 @@ async function loadRealRunnerEvidence(): Promise<RealRunnerEvidence[]> {
       lessonCount,
       finalDecision: payload.output.final_decision ?? "not_ready",
       sourceFile: target.file,
-      learningUsesFeedback: learningUsesFeedback(lessons)
+      learningUsesFeedback: learningUsesFeedback(lessons),
+      memorySource: memory.source,
+      doNotContactEventCount: memory.doNotContactEventCount,
+      persistComplete: memory.persistComplete
     });
   }
   return evidence;
+}
+
+interface RunnerStep {
+  step?: string;
+  event_type?: string;
+  payload?: Record<string, unknown>;
+}
+
+function runnerMemoryEvidence(steps: RunnerStep[]): { source: string; doNotContactEventCount: number; persistComplete: boolean } {
+  const runnerStep = steps.find((step) => step.step === "runner_complete");
+  const payload = runnerStep?.payload ?? {};
+  const source = typeof payload.feedback_memory_source === "string" ? payload.feedback_memory_source : "unknown";
+  const dncCount = Number(payload.do_not_contact_event_count ?? 0);
+  return {
+    source,
+    doNotContactEventCount: Number.isFinite(dncCount) ? dncCount : 0,
+    persistComplete: steps.some((step) => step.step === "persist_complete" && step.event_type === "supabase_persist")
+  };
 }
 
 function learningUsesFeedback(lessons: { lesson?: string; recommendation?: string; source?: string }[]): boolean {
@@ -377,6 +403,7 @@ interface CliPersistEvidence {
   verdict: RunVerdict;
   traceId: string;
   sourceFile: string;
+  persistComplete: boolean;
 }
 
 async function loadCliPersistEvidence(): Promise<CliPersistEvidence | null> {
@@ -385,13 +412,14 @@ async function loadCliPersistEvidence(): Promise<CliPersistEvidence | null> {
   if (!existsSync(path)) return null;
   const payload = JSON.parse(await readFile(path, "utf8")) as {
     verdict?: RunVerdict;
-    output?: { trace_id?: string };
+    output?: { trace_id?: string; run_steps?: RunnerStep[] };
   };
   if (!payload.output?.trace_id) return null;
   return {
     verdict: payload.verdict === "pass" ? "pass" : "fail",
     traceId: payload.output.trace_id,
-    sourceFile
+    sourceFile,
+    persistComplete: runnerMemoryEvidence(payload.output.run_steps ?? []).persistComplete
   };
 }
 
@@ -493,7 +521,14 @@ function buildProductBlockers(
   const hasSupabaseExploration = realEvidence.some(
     (item) => item.mode === "exploration" && item.sourceFile.includes("supabase-persist") && item.verdict === "pass"
   );
-  const hasLearningFromFeedback = realEvidence.some((item) => item.mode === "core" && item.learningUsesFeedback);
+  const hasLearningFromFeedback = realEvidence.some(
+    (item) =>
+      item.mode === "core" &&
+      item.sourceFile.includes("supabase-persist") &&
+      item.memorySource === "supabase" &&
+      item.doNotContactEventCount > 0 &&
+      item.learningUsesFeedback
+  );
   blockers.push("production_not_ready: le runner agent_tasks et le cron GitHub Actions existent, mais aucun run CI avec secrets ne les prouve encore.");
   const providerModes = new Set(providerEvidence?.modes ?? []);
   const hasFullProviderScope = providerModes.has("core") && providerModes.has("exploration");
@@ -510,7 +545,7 @@ function buildProductBlockers(
   if (!hasCore || !hasExploration) {
     blockers.push("Runs OpenAI Agents SDK réels Core et Exploration incomplets.");
   }
-  if (!hasSupabaseCore || !hasSupabaseExploration) {
+  if (!hasSupabaseCore || !hasSupabaseExploration || realEvidence.some((item) => item.sourceFile.includes("supabase-persist") && !item.persistComplete)) {
     blockers.push("Runs Agents SDK réels non prouvés avec persistance Supabase.");
   }
   if (!hasLearningFromFeedback) {
@@ -521,7 +556,7 @@ function buildProductBlockers(
       blockers.push(`Run ${evidence.traceId} absent de la console Supabase serveur.`);
     }
   }
-  if (!persistEvidence || persistEvidence.verdict !== "pass") {
+  if (!persistEvidence || persistEvidence.verdict !== "pass" || !persistEvidence.persistComplete) {
     blockers.push("CLI `--persist` non prouvée avec la RPC Supabase.");
   } else if (!consoleEvidence.traces.includes(persistEvidence.traceId)) {
     blockers.push(`Run CLI --persist ${persistEvidence.traceId} absent de la console Supabase serveur.`);

@@ -19,9 +19,16 @@ async def run_bm_scout_mission(
 ) -> MissionOutput:
     config = SupabaseConfig.from_env()
     memory = SupabaseMemory(config) if config else None
+    feedbacks: list[FeedbackEvent] = []
+    memory_source = "offline_fixture"
 
     if real:
-        feedbacks = memory.load_feedback_events() if memory else seed_feedbacks()
+        if memory:
+            feedbacks = memory.load_feedback_events()
+            memory_source = "supabase"
+        else:
+            feedbacks = seed_feedbacks()
+            memory_source = "seed"
         output = await _run_with_agents_sdk(mode, include_weak=include_weak, feedbacks=feedbacks)
     else:
         output = offline_output(mode, include_weak=include_weak)
@@ -35,7 +42,10 @@ async def run_bm_scout_mission(
                 "mode": mode,
                 "include_weak": include_weak,
                 "persist_requested": persist,
-                "feedback_memory_loaded": bool(real),
+                "feedback_memory_loaded": bool(feedbacks),
+                "feedback_memory_source": memory_source,
+                "feedback_event_count": len(feedbacks),
+                "do_not_contact_event_count": sum(1 for feedback in feedbacks if feedback.kind == "do_not_contact"),
             },
         ),
         *output.run_steps,
@@ -45,6 +55,14 @@ async def run_bm_scout_mission(
         if memory is None:
             raise RuntimeError("Persistance demandée mais SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY manque.")
         memory.persist_output(output)
+        output.run_steps.append(
+            RunStep(
+                agent_name="bm_scout_worker",
+                step="persist_complete",
+                event_type="supabase_persist",
+                payload={"mode": mode, "trace_id": output.trace_id, "run_id": output.run_id},
+            )
+        )
 
     if artifacts_dir:
         artifacts_dir.mkdir(parents=True, exist_ok=True)
