@@ -26,7 +26,7 @@ export interface AgentTaskExecution {
 
 export interface AgentTaskRepository {
   loadQueuedTasks(options: { limit: number; taskId?: string }): Promise<QueuedAgentTask[]>;
-  markRunning(taskId: string): Promise<void>;
+  markRunning(taskId: string): Promise<boolean>;
   markCompleted(taskId: string, execution: AgentTaskExecution): Promise<void>;
   markBlocked(taskId: string, execution: AgentTaskExecution): Promise<void>;
   markFailed(taskId: string, execution: AgentTaskExecution): Promise<void>;
@@ -57,7 +57,8 @@ export async function processAgentTaskQueue(
   const processed: AgentTaskExecutionResult[] = [];
 
   for (const task of tasks) {
-    await repository.markRunning(task.id);
+    const claimed = await repository.markRunning(task.id);
+    if (!claimed) continue;
     const execution = await executeTask(repository, executor, task);
     processed.push({ ...execution, taskId: task.id, taskType: task.type });
   }
@@ -65,7 +66,11 @@ export async function processAgentTaskQueue(
   return {
     ok: processed.every((item) => item.status === "completed"),
     processed,
-    message: tasks.length ? `${processed.length} tâche(s) traitée(s).` : "Aucune tâche queued à traiter."
+    message: processed.length
+      ? `${processed.length} tâche(s) traitée(s).`
+      : tasks.length
+        ? "Aucune tâche queued disponible à réclamer."
+        : "Aucune tâche queued à traiter."
   };
 }
 
@@ -98,12 +103,16 @@ export function createSupabaseAgentTaskRepository(): AgentTaskRepository | null 
     },
 
     async markRunning(taskId) {
-      await checked(
-        client
-          .from("scout_agent_tasks")
-          .update({ status: "running", started_at: new Date().toISOString(), error_message: null, blocked_reason: null })
-          .eq("id", taskId)
-      );
+      const { data, error } = await client
+        .from("scout_agent_tasks")
+        .update({ status: "running", started_at: new Date().toISOString(), error_message: null, blocked_reason: null })
+        .eq("id", taskId)
+        .eq("status", "queued")
+        .select("id")
+        .maybeSingle();
+
+      if (error) throw new Error(`Claim agent_task impossible: ${error.message}`);
+      return Boolean(data?.id);
     },
 
     async markCompleted(taskId, execution) {

@@ -59,6 +59,24 @@ describe("agent task runner", () => {
     expect(repo.transitions).toEqual(["running:task-exploration", "failed:task-exploration:worker indisponible"]);
   });
 
+  it("n'execute pas une tache deja claim par un autre runner", async () => {
+    const repo = new FakeTaskRepository([task({ id: "task-race", type: "weekly_core_research" })], {
+      claimable: false
+    });
+    const executor: AgentTaskExecutor = {
+      async execute() {
+        throw new Error("ne doit pas executer");
+      }
+    };
+
+    const result = await processAgentTaskQueue(repo, executor);
+
+    expect(result.ok).toBe(true);
+    expect(result.processed).toEqual([]);
+    expect(result.message).toContain("réclamer");
+    expect(repo.transitions).toEqual(["claim-missed:task-race"]);
+  });
+
   it("genere un daily brief depuis un snapshot runtime sans worker", async () => {
     const executor = createCliAgentTaskExecutor({
       real: false,
@@ -139,15 +157,23 @@ describe("agent task runner", () => {
 class FakeTaskRepository implements AgentTaskRepository {
   transitions: string[] = [];
 
-  constructor(private readonly tasks: QueuedAgentTask[]) {}
+  constructor(
+    private readonly tasks: QueuedAgentTask[],
+    private readonly options: { claimable?: boolean } = {}
+  ) {}
 
   async loadQueuedTasks(options: { limit: number; taskId?: string }): Promise<QueuedAgentTask[]> {
     void options;
     return this.tasks;
   }
 
-  async markRunning(taskId: string): Promise<void> {
+  async markRunning(taskId: string): Promise<boolean> {
+    if (this.options.claimable === false) {
+      this.transitions.push(`claim-missed:${taskId}`);
+      return false;
+    }
     this.transitions.push(`running:${taskId}`);
+    return true;
   }
 
   async markCompleted(taskId: string, execution: AgentTaskExecution): Promise<void> {

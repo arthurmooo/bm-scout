@@ -13,7 +13,7 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 - Worker Python OpenAI Agents SDK avec `Runner.run`, `trace`, agents spécialisés et outputs Pydantic.
 - Recherche métier provider : découverte web, fetch site, extraction signaux, job search public, emails publics, déduplication et scoring.
 - Scheduler local reproductible qui crée les routines Core, Exploration, Daily Brief, Learning, DNC check et followup review.
-- Runner de queue `scout_agent_tasks` qui passe les tâches `queued -> running -> completed/blocked/failed`.
+- Runner de queue `scout_agent_tasks` qui claim les tâches `queued -> running`, puis les passe en `completed/blocked/failed` sans double-exécution concurrente.
 - Routines Daily Brief, Learning Review, DNC check et followup review exécutables depuis les runs Supabase persistés, avec blocage explicite si elles n'ont que les fixtures.
 - Workflow GitHub Actions `.github/workflows/bm-scout-agent-tasks.yml` pour cron/dispatch, à activer avec secrets.
 - Actions UI branchées sur une API serveur : valider, rejeter, enrichir, copier, DNC, lancer routines. Les copies ne sont écrites dans le presse-papiers qu'après validation serveur.
