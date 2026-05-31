@@ -13,6 +13,7 @@ import {
   createCliAgentTaskExecutor,
   createSupabaseAgentTaskRepository,
   processAgentTaskQueue,
+  type AgentTaskRepository,
   type AgentTaskQueueResult
 } from "../src/server/agent-task-runner";
 import { loadLocalEnvFiles } from "../src/server/runtime-env";
@@ -78,6 +79,7 @@ const P0_TASK_TYPES: AgentTaskType[] = [
   "followup_review"
 ];
 const WORKER_TASK_TYPES = new Set<AgentTaskType>(["weekly_core_research", "weekly_exploration_scan"]);
+const ALL_P0_BACKFILL_HOURS = 30;
 
 const baseArtifact = {
   generated_at: new Date().toISOString(),
@@ -114,15 +116,18 @@ try {
   const scheduler = schedulerRepository!;
   const queueRepositoryReady = queueRepository!;
 
+  const scheduleNow = allP0 ? new Date(now.getTime() - ALL_P0_BACKFILL_HOURS * 60 * 60 * 1000) : now;
   const tasks = allP0
-    ? createScheduledTasks(now, DEFAULT_ROUTINE_CONFIG).filter((task) => !taskArg || task.type === taskArg)
+    ? createScheduledTasks(scheduleNow, DEFAULT_ROUTINE_CONFIG).filter((task) => !taskArg || task.type === taskArg)
     : createDueScheduledTasks(now, DEFAULT_ROUTINE_CONFIG, { task: taskArg });
-  const schedule = await enqueueScheduledAgentTasks(scheduler, tasks);
-  const queue = await processAgentTaskQueue(
-    queueRepositoryReady,
-    createCliAgentTaskExecutor({ real: mode === "real", persist: true }),
-    { limit, recoverStaleMinutes: recoverStale ? staleMinutes : undefined, now }
-  );
+  const schedule = await enqueueScheduledAgentTasks(scheduler, tasks, { force: allP0 });
+  const queue = await processScheduledAgentTasks(queueRepositoryReady, schedule, {
+    real: mode === "real",
+    limit,
+    recoverStaleMinutes: recoverStale ? staleMinutes : undefined,
+    now,
+    scoped: allP0
+  });
   const processed = queue.processed;
   const completed = processed.filter((item) => item.status === "completed");
   const blocked = processed.filter((item) => item.status === "blocked");
@@ -194,6 +199,49 @@ try {
     },
     1
   );
+}
+
+async function processScheduledAgentTasks(
+  repository: AgentTaskRepository,
+  schedule: AgentTaskScheduleResult,
+  options: {
+    real: boolean;
+    limit: number;
+    recoverStaleMinutes?: number;
+    now: Date;
+    scoped: boolean;
+  }
+): Promise<AgentTaskQueueResult> {
+  const executor = createCliAgentTaskExecutor({ real: options.real, persist: true });
+  if (!options.scoped) {
+    return processAgentTaskQueue(repository, executor, {
+      limit: options.limit,
+      recoverStaleMinutes: options.recoverStaleMinutes,
+      now: options.now
+    });
+  }
+
+  const taskIds = schedule.inserted.map((task) => task.taskId).slice(0, options.limit);
+  const processed: AgentTaskQueueResult["processed"] = [];
+  const recovered: AgentTaskQueueResult["recovered"] = [];
+
+  for (const [index, taskId] of taskIds.entries()) {
+    const result = await processAgentTaskQueue(repository, executor, {
+      limit: 1,
+      taskId,
+      recoverStaleMinutes: index === 0 ? options.recoverStaleMinutes : undefined,
+      now: options.now
+    });
+    processed.push(...result.processed);
+    recovered.push(...result.recovered);
+  }
+
+  return {
+    ok: recovered.length === 0 && processed.every((item) => item.status === "completed"),
+    processed,
+    recovered,
+    message: `${processed.length} tâche(s) de preuve traitée(s), ${recovered.length} tâche(s) running récupérée(s).`
+  };
 }
 
 async function exitWithArtifact(artifact: AgentTaskCronEvidenceArtifact, code: number): Promise<never> {

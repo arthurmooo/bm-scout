@@ -35,6 +35,12 @@ describe("github readiness workflows", () => {
 
     expect(script).toContain("createScheduledTasks");
     expect(script).toContain('args.includes("--all-p0")');
+    expect(script).toContain("ALL_P0_BACKFILL_HOURS");
+    expect(script).toContain("scheduleNow");
+    expect(script).toContain("{ force: allP0 }");
+    expect(script).toContain("processScheduledAgentTasks");
+    expect(script).toContain("taskId");
+    expect(script).toContain("scoped: allP0");
     expect(script).toContain('scheduleScope: allP0 ? "all_p0" : "due"');
   });
 });
