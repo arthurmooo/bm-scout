@@ -155,12 +155,31 @@ Contraintes de sortie :
         output = final_output.to_mission_output()
     else:
         output = MissionAgentOutput.model_validate(final_output).to_mission_output()
+    append_unselected_candidates_as_rejected(output, candidates)
     output.scanned_count = derive_provider_scanned_count(candidate_batch.run_steps, fallback=len(candidates))
     output.kept_count = len(output.leads)
     output.rejected_count = len(output.rejected)
     output.run_steps = [provider_step, *candidate_batch.run_steps, *tool_steps, *output.run_steps]
     normalize_rejected_outputs(output)
     return output
+
+
+def append_unselected_candidates_as_rejected(output: MissionOutput, candidates: list[ScoutLead]) -> None:
+    selected_ids = {lead.id for lead in [*output.leads, *output.rejected]}
+    for candidate in candidates:
+        if candidate.id in selected_ids:
+            continue
+        rejected = candidate.model_copy(deep=True)
+        rejected.verdict = "reject"
+        rejected.quality_decision = "blocked"
+        rejected.rejection_reason = rejected.rejection_reason or "Candidat analysé puis écarté de la shortlist par BM Scout."
+        rejected.next_action = "Ne pas remonter à Romu sans nouveau signal public concret."
+        rejected.quality_gates = [
+            *rejected.quality_gates,
+            QualityGate(code="not_shortlisted", passed=False, reason=rejected.rejection_reason),
+        ]
+        output.rejected.append(rejected)
+        selected_ids.add(candidate.id)
 
 
 def normalize_rejected_outputs(output: MissionOutput) -> None:

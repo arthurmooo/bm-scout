@@ -32,7 +32,14 @@ from bm_scout_worker.providers import (
 )
 from bm_scout_worker.provider_audit import compare_providers, parse_provider_list, provider_unavailable_reason
 from bm_scout_worker.quality import mission_blockers
-from bm_scout_worker.runner import agent_max_turns, code_revision, derive_provider_scanned_count, normalize_rejected_outputs, run_bm_scout_mission
+from bm_scout_worker.runner import (
+    agent_max_turns,
+    append_unselected_candidates_as_rejected,
+    code_revision,
+    derive_provider_scanned_count,
+    normalize_rejected_outputs,
+    run_bm_scout_mission,
+)
 from bm_scout_worker.schemas import FeedbackEvent, OutreachPack, QualityGate, RunStep, ScoutLead, StructuredInsights
 from bm_scout_worker.tool_recorder import capture_tool_calls, compact_payload
 
@@ -103,6 +110,24 @@ def test_rejected_outputs_are_persistable_as_qc_blocks() -> None:
     assert output.rejected[0].quality_decision == "blocked"
     assert output.rejected[0].rejection_reason
     assert any(not gate.passed for gate in output.rejected[0].quality_gates)
+
+
+def test_unselected_provider_candidates_are_persisted_as_exclusions() -> None:
+    output = offline_output("exploration")
+    candidate = output.leads[0].model_copy(deep=True)
+    candidate.id = "provider-unselected"
+    candidate.company = "Provider Unselected"
+    original_rejected_count = len(output.rejected)
+
+    append_unselected_candidates_as_rejected(output, [candidate])
+    normalize_rejected_outputs(output)
+
+    assert len(output.rejected) == original_rejected_count + 1
+    rejected = next(lead for lead in output.rejected if lead.id == "provider-unselected")
+    assert rejected.verdict == "reject"
+    assert rejected.quality_decision == "blocked"
+    assert rejected.rejection_reason == "Candidat analysé puis écarté de la shortlist par BM Scout."
+    assert any(gate.code == "not_shortlisted" and not gate.passed for gate in rejected.quality_gates)
 
 
 def test_blocked_lead_cannot_remain_in_shortlist() -> None:
