@@ -296,4 +296,4 @@ create policy "internal read scout run steps" on public.scout_run_steps for sele
 create policy "internal create feedback" on public.scout_feedback for insert to authenticated with check (true);
 create policy "internal create dnc" on public.scout_do_not_contact for insert to authenticated with check (true);
 create policy "internal update messages" on public.scout_messages for update to authenticated using (true) with check (true);
-create policy "internal update companies" on public.scout_companies for update to authenticated using (true) with check (true);
+create policy "internal update companies" on public.scout_companies for update to authenticated using (true) with check (true);;

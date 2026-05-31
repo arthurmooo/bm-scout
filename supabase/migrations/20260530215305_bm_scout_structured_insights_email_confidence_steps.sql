@@ -397,4 +397,4 @@ end;
 $$;
 
 revoke all on function public.scout_persist_mission_output(jsonb) from public, anon, authenticated;
-grant execute on function public.scout_persist_mission_output(jsonb) to service_role;
+grant execute on function public.scout_persist_mission_output(jsonb) to service_role;;

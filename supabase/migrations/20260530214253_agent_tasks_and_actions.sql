@@ -129,4 +129,4 @@ create policy "internal create scout action events" on public.scout_action_event
 
 grant select on public.scout_agent_tasks, public.scout_action_events to authenticated;
 grant insert, update on public.scout_agent_tasks to authenticated;
-grant insert on public.scout_action_events to authenticated;
+grant insert on public.scout_action_events to authenticated;;

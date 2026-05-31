@@ -9,4 +9,4 @@ alter type public.scout_action_type add value if not exists 'outcome_meeting_boo
 alter type public.scout_action_type add value if not exists 'outcome_wrong_person';
 alter type public.scout_action_type add value if not exists 'outcome_pain_confirmed';
 alter type public.scout_action_type add value if not exists 'outcome_pain_not_confirmed';
-alter type public.scout_action_type add value if not exists 'outcome_bad_timing';
+alter type public.scout_action_type add value if not exists 'outcome_bad_timing';;

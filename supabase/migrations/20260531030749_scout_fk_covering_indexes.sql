@@ -47,4 +47,4 @@ create index if not exists scout_quality_reports_company_id_idx
 on public.scout_quality_reports (company_id);
 
 create index if not exists scout_scores_created_by_run_id_idx
-on public.scout_scores (created_by_run_id);
+on public.scout_scores (created_by_run_id);;

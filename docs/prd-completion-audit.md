@@ -17,7 +17,7 @@ Verdict courant : `production_not_ready`.
 | Fiches courtes/profondes | Partiel | Modèle et fixtures, pas encore toutes issues providers réels |
 | Observé / Inféré / Incertain | Couvert en socle | Types TS, worker Pydantic, QC Observé/evidence, colonne `structured_insights` Supabase |
 | Messages personnalisés | Partiel | QC fixture, pas de preuve provider réel à volume |
-| Aucun envoi automatique | Couvert en socle | Pas d'endpoint d'envoi ; actions de copie seulement ; migration versionnée interdisant `approved` côté DB, à appliquer sur le projet distant |
+| Aucun envoi automatique | Couvert en socle | Pas d'endpoint d'envoi ; actions de copie seulement ; migration appliquée côté Supabase interne interdisant `approved` |
 | Do-not-contact hard gate | Couvert en socle | QC TS, worker offline, provider réel `dnc_pre_generation_gate` avant génération d'outreach, chargement direct `scout_do_not_contact` côté worker, trigger DB, action DNC idempotente, unicité DB versionnée par scope, blocage outcome négatif |
 | Feedback loop influente | Partiel | Effet scoring/message/blocage/angle prouvé par tests locaux TS + worker provider, outcomes neutres non bloquants et compteurs `feedback_memory_effects` ; scénario `feedback:evidence` reproductible pour Supabase avec Learning 3-5 apprentissages ; pas encore exécuté avec secrets ni prouvé sur run marché à volume |
 | Actions UI fonctionnelles | Partiel | API actions + traces SQL `message_id`/`task_id`/canal + feedback/outcomes + raisons Romu en 1 clic + centre à valider + décisions avancées + 6 routines P0 lançables, smoke Playwright/Browser repassés ; persistance réelle dépend encore de l'env Supabase |
@@ -47,7 +47,7 @@ Verdict courant : `production_not_ready`.
 - P0.3 Suppression de la dépendance fixtures : provider SerpAPI/OpenAI web/fallback public branché, search autonome à volume prouvé côté OpenAI web.
 - P0.5 Feedback loop réelle : impact causal prouvé localement dans TS et le worker Python, avec garde-fou readiness sur `feedback_memory_effects` et script Supabase prêt ; à exécuter avec secrets puis à confirmer sur runs marché à volume.
 - P0.7 : socle full-stack ajouté, à valider sur runs réels persistés.
-- P0 conformité DB récente : les migrations `scout_messages_no_approved_state` et `scout_dnc_scope_uniqueness` doivent encore être appliquées au projet Supabase interne après reconnexion MCP ou via pipeline contrôlé.
+- P0 conformité DB récente : les migrations `scout_messages_no_approved_state` et `scout_dnc_scope_uniqueness` sont appliquées au projet Supabase interne via CLI ; le MCP reste expiré, mais l'historique remote est aligné et le statut `approved` est absent des messages live.
 - P1.6 : parcours magic link à vérifier avec les vrais comptes Supabase et leurs `app_metadata`.
 
 ## Décision

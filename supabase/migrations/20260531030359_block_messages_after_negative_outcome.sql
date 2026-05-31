@@ -44,4 +44,4 @@ $$;
 drop trigger if exists scout_outcomes_block_messages on public.scout_outcomes;
 create trigger scout_outcomes_block_messages
 after insert or update of outcome on public.scout_outcomes
-for each row execute function public.scout_block_messages_after_negative_outcome();
+for each row execute function public.scout_block_messages_after_negative_outcome();;

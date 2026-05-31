@@ -23,4 +23,4 @@ $$;
 
 revoke execute on function public.rls_auto_enable() from public, anon, authenticated;
 revoke execute on function public.scout_is_do_not_contact(text, text, uuid, uuid) from public, anon;
-grant execute on function public.scout_is_do_not_contact(text, text, uuid, uuid) to authenticated, service_role;
+grant execute on function public.scout_is_do_not_contact(text, text, uuid, uuid) to authenticated, service_role;;

@@ -28,7 +28,7 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 ## Limites data
 
 - Supabase stocke runs, companies, contacts, preuves, scores, fiches, messages, feedbacks, outcomes, do-not-contact, lessons, email confidence, insights structurés et run steps.
-- Les migrations les plus récentes interdisent `approved` sur `scout_messages` et rendent les entrées do-not-contact uniques par company/domain/contact/email hash. Elles sont versionnées dans le repo, mais doivent encore être appliquées au projet Supabase interne après reconnexion MCP ou pipeline de migration.
+- Les migrations les plus récentes interdisent `approved` sur `scout_messages` et rendent les entrées do-not-contact uniques par company/domain/contact/email hash. Elles sont versionnées dans le repo et appliquées au projet Supabase interne via CLI ; le MCP Supabase reste à reconnecter pour les futures vérifications SQL catalog.
 - Le worker ne fabrique pas d'email : nominatif public sourcé = `usable/high`, générique public = `verify/medium`, pattern observé = `verify/low`, absence ou no-reply = `not_usable`.
 - Le provider réel court-circuite les domaines/companies DNC ou déjà rejetés avant fetch et les contacts/email hashes DNC ou liés à un outcome négatif avant génération d'outreach ; les preuves `dnc_pre_generation_gate` et `feedback_reject_pre_generation_gate` restent à relire dans les artefacts réels persistés avant claim V1.
 - Les feedbacks/outcomes Romu et les entrées do-not-contact sont persistés par l'API serveur et relus par le worker. Les outcomes neutres restent neutres dans la mémoire, mais l'effet à volume doit encore être démontré par runs réels persistés avec compteurs d'impact non nuls.

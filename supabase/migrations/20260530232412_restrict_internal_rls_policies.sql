@@ -120,4 +120,4 @@ create policy "scout internal update messages" on public.scout_messages
 create policy "scout internal update agent tasks" on public.scout_agent_tasks
   for update to authenticated
   using ((select public.scout_is_internal_user()))
-  with check ((select public.scout_is_internal_user()));
+  with check ((select public.scout_is_internal_user()));;
