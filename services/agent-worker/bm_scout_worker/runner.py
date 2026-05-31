@@ -5,6 +5,7 @@ from pathlib import Path
 
 from .fixtures import offline_output, seed_feedbacks
 from .memory import SupabaseConfig, SupabaseMemory
+from .agents import agent_hosted_web_search_enabled
 from .providers import build_candidate_batch_with_steps
 from .schemas import FeedbackEvent, MissionAgentOutput, MissionOutput, RunStep, ScoutMode
 
@@ -81,7 +82,8 @@ async def _run_with_agents_sdk(mode: ScoutMode, *, include_weak: bool, feedbacks
     from .tool_recorder import capture_tool_calls
 
     model = os.getenv("OPENAI_MODEL", "gpt-5.5")
-    manager = build_manager_agent(model)
+    hosted_web_search_enabled = agent_hosted_web_search_enabled()
+    manager = build_manager_agent(model, hosted_web_search_enabled=hosted_web_search_enabled)
     candidate_batch = build_candidate_batch_with_steps(
         mode,
         include_weak=include_weak,
@@ -93,7 +95,12 @@ async def _run_with_agents_sdk(mode: ScoutMode, *, include_weak: bool, feedbacks
         agent_name="bm_scout_provider",
         step="candidate_batch",
         event_type="tool_call",
-        payload={"mode": mode, "candidate_count": len(candidates), "feedback_count": len(feedbacks)},
+        payload={
+            "mode": mode,
+            "candidate_count": len(candidates),
+            "feedback_count": len(feedbacks),
+            "agent_hosted_web_search_enabled": hosted_web_search_enabled,
+        },
     )
     candidates_json = "[" + ",".join(
         lead.model_dump_json() for lead in candidates
@@ -130,7 +137,7 @@ Contraintes de sortie :
 """
     with capture_tool_calls() as tool_steps:
         with trace("BM Scout V1", metadata={"mode": mode, "include_weak": str(include_weak).lower()}):
-            result = await Runner.run(manager, prompt, max_turns=8)
+            result = await Runner.run(manager, prompt, max_turns=agent_max_turns())
     final_output = result.final_output
     if isinstance(final_output, MissionOutput):
         output = final_output
@@ -140,3 +147,11 @@ Contraintes de sortie :
         output = MissionAgentOutput.model_validate(final_output).to_mission_output()
     output.run_steps = [provider_step, *candidate_batch.run_steps, *tool_steps, *output.run_steps]
     return output
+
+
+def agent_max_turns() -> int:
+    try:
+        value = int(os.getenv("BM_SCOUT_AGENT_MAX_TURNS", "6"))
+    except ValueError:
+        return 6
+    return max(3, min(value, 10))

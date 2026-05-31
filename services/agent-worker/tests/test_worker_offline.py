@@ -7,6 +7,7 @@ from unittest.mock import patch
 
 from bm_scout_worker import provider_audit
 from bm_scout_worker import tools
+from bm_scout_worker.agents import agent_hosted_web_search_enabled, build_manager_agent
 from bm_scout_worker.fixtures import offline_output
 from bm_scout_worker.providers import (
     CompanySeed,
@@ -31,7 +32,7 @@ from bm_scout_worker.providers import (
 )
 from bm_scout_worker.provider_audit import compare_providers, parse_provider_list, provider_unavailable_reason
 from bm_scout_worker.quality import mission_blockers
-from bm_scout_worker.runner import run_bm_scout_mission
+from bm_scout_worker.runner import agent_max_turns, run_bm_scout_mission
 from bm_scout_worker.schemas import FeedbackEvent, OutreachPack, QualityGate, RunStep, ScoutLead, StructuredInsights
 from bm_scout_worker.tool_recorder import capture_tool_calls, compact_payload
 
@@ -227,6 +228,37 @@ def test_openai_search_context_and_output_tokens_are_safe_defaults(monkeypatch) 
 
     assert openai_search_context_size() == "high"
     assert openai_search_max_output_tokens() == 800
+
+
+def test_agents_sdk_hosted_web_search_is_opt_in(monkeypatch) -> None:
+    monkeypatch.delenv("BM_SCOUT_AGENT_HOSTED_WEB_SEARCH", raising=False)
+
+    manager = build_manager_agent("gpt-5.5")
+    tool_names = [getattr(tool, "name", "") for tool in manager.tools]
+
+    assert agent_hosted_web_search_enabled() is False
+    assert "web_search" not in tool_names
+    assert "search_web" in tool_names
+    assert "run_exploration" in tool_names
+    assert "summarize_learning" in tool_names
+
+    monkeypatch.setenv("BM_SCOUT_AGENT_HOSTED_WEB_SEARCH", "1")
+    manager_with_hosted_search = build_manager_agent("gpt-5.5")
+
+    assert agent_hosted_web_search_enabled() is True
+    assert "web_search" in [getattr(tool, "name", "") for tool in manager_with_hosted_search.tools]
+
+
+def test_agents_sdk_max_turns_is_bounded(monkeypatch) -> None:
+    monkeypatch.delenv("BM_SCOUT_AGENT_MAX_TURNS", raising=False)
+
+    assert agent_max_turns() == 6
+
+    monkeypatch.setenv("BM_SCOUT_AGENT_MAX_TURNS", "2")
+    assert agent_max_turns() == 3
+
+    monkeypatch.setenv("BM_SCOUT_AGENT_MAX_TURNS", "99")
+    assert agent_max_turns() == 10
 
 
 def test_default_queries_cover_prd_volume_scan_surface() -> None:

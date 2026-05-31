@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 from agents import Agent, GuardrailFunctionOutput, RunContextWrapper, WebSearchTool, output_guardrail
 
 from .providers import openai_search_context_size
@@ -68,14 +70,26 @@ async def bm_scout_output_quality(
     )
 
 
-def build_manager_agent(model: str) -> Agent[None]:
+def agent_hosted_web_search_enabled() -> bool:
+    return os.getenv("BM_SCOUT_AGENT_HOSTED_WEB_SEARCH", "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def build_manager_agent(model: str, *, hosted_web_search_enabled: bool | None = None) -> Agent[None]:
+    use_hosted_web_search = agent_hosted_web_search_enabled() if hosted_web_search_enabled is None else hosted_web_search_enabled
     hosted_web_search = WebSearchTool(search_context_size=openai_search_context_size(), external_web_access=True)
+    research_tools = [
+        *([hosted_web_search] if use_hosted_web_search else []),
+        search_web,
+        fetch_company_site,
+        extract_company_signals,
+        search_jobs,
+    ]
     core_agent = Agent(
         name="Core Research Agent",
         handoff_description="Recherche et qualification Core BM.",
         instructions=CORE_INSTRUCTIONS,
         model=model,
-        tools=[hosted_web_search, search_web, fetch_company_site, extract_company_signals, search_jobs],
+        tools=research_tools,
         output_type=MissionAgentOutput,
     )
     exploration_agent = Agent(
@@ -83,7 +97,7 @@ def build_manager_agent(model: str) -> Agent[None]:
         handoff_description="Exploration large filtrée.",
         instructions=EXPLORATION_INSTRUCTIONS,
         model=model,
-        tools=[hosted_web_search, search_web, fetch_company_site, extract_company_signals, search_jobs],
+        tools=research_tools,
         output_type=MissionAgentOutput,
     )
     outreach_agent = Agent(
@@ -114,7 +128,7 @@ def build_manager_agent(model: str) -> Agent[None]:
         instructions=MANAGER_INSTRUCTIONS,
         model=model,
         tools=[
-            hosted_web_search,
+            *([hosted_web_search] if use_hosted_web_search else []),
             search_web,
             fetch_company_site,
             extract_company_signals,

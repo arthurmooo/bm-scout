@@ -53,6 +53,8 @@ Variables serveur :
 - `OPENAI_SEARCH_MODEL` optionnel pour la découverte web OpenAI, par défaut `OPENAI_MODEL`
 - `OPENAI_SEARCH_CONTEXT_SIZE=low|medium|high` optionnel, par défaut `medium`
 - `OPENAI_SEARCH_MAX_OUTPUT_TOKENS` optionnel, par défaut `2400`
+- `BM_SCOUT_AGENT_HOSTED_WEB_SEARCH=1` optionnel pour autoriser le `WebSearchTool` hébergé dans les agents ; désactivé par défaut pour éviter une double recherche quand le provider `openai_web` a déjà sourcé le batch.
+- `BM_SCOUT_AGENT_MAX_TURNS` optionnel, borné entre 3 et 10, par défaut `6`
 - `BM_SCOUT_WORKER_TIMEOUT_MS` optionnel, par défaut `300000`
 - `SERPAPI_API_KEY` optionnel ; si présent, `auto` choisit SerpAPI avant OpenAI web.
 - `BM_SCOUT_PROVIDER=auto|serpapi|openai_web|web|configured|demo`, par défaut `auto`
@@ -109,7 +111,7 @@ cd services/agent-worker
 ```
 
 La persistance `--persist` passe par la RPC Supabase transactionnelle `scout_persist_mission_output`.
-Le chemin réel expose le `WebSearchTool` hébergé OpenAI dans l'orchestration Agents SDK, plus les tools métier `search_web`, `fetch_company_site`, `extract_company_signals`, `search_jobs`, `find_public_emails`, `dedupe_company`, `score_candidate`, `save_evidence`.
+Le chemin réel utilise OpenAI Agents SDK avec `Runner.run`, `trace`, agents spécialisés, handoff QC, agents-as-tools et les tools métier `search_web`, `fetch_company_site`, `extract_company_signals`, `search_jobs`, `find_public_emails`, `dedupe_company`, `score_candidate`, `save_evidence`. Le `WebSearchTool` hébergé OpenAI reste disponible via `BM_SCOUT_AGENT_HOSTED_WEB_SEARCH=1`, mais il est désactivé par défaut parce que le provider `openai_web` utilise déjà le tool officiel Responses API `web_search` pour sourcer le batch.
 Les scripts `worker:real:*` écrivent les artefacts `artifacts/agent-worker-real/latest-real-*.json` consommés par `quality:readiness`.
 SerpAPI est branché derrière le même contrat métier que `openai_web`. En `auto`, `BM_SCOUT_REAL_SEEDS` reste prioritaire, puis `SERPAPI_API_KEY`, puis OpenAI web, puis le fallback web public. OpenAI web couvre déjà le smoke volume PRD ; SerpAPI reste à comparer avant un choix définitif de provider par défaut.
 

@@ -18,6 +18,8 @@ Statut : `production_not_ready`. Socle utilisable pour demo interne, pas pour d�
   - `OPENAI_SEARCH_MODEL` optionnel pour la recherche web OpenAI
   - `OPENAI_SEARCH_CONTEXT_SIZE=low|medium|high` optionnel, par défaut `medium`
   - `OPENAI_SEARCH_MAX_OUTPUT_TOKENS` optionnel, par défaut `2400`
+- `BM_SCOUT_AGENT_HOSTED_WEB_SEARCH=1` optionnel pour autoriser le `WebSearchTool` hébergé dans l'orchestration Agents SDK ; désactivé par défaut pour éviter une double recherche quand le provider `openai_web` a déjà sourcé le batch.
+- `BM_SCOUT_AGENT_MAX_TURNS` optionnel, borné entre 3 et 10, par défaut `6`.
 - `BM_SCOUT_WORKER_TIMEOUT_MS` optionnel, par défaut `300000`, pour éviter qu'un run worker reste bloqué sans sortie.
 - `BM_SCOUT_PROVIDER=auto|serpapi|openai_web|web|configured|demo`
 - `BM_SCOUT_SEARCH_QUERIES` optionnel pour piloter les requêtes web
@@ -238,6 +240,7 @@ npm run worker:real:exploration:persist
 ```
 
 Les scripts `worker:real:*` lancent la CLI Python et écrivent les artefacts de preuve `artifacts/agent-worker-real/latest-real-*.json` lus par `quality:readiness`. Le runner `agent:tasks:real` écrit les mêmes artefacts quand il consomme les routines `scout_agent_tasks`. Le wrapper tue le worker après `BM_SCOUT_WORKER_TIMEOUT_MS` pour éviter les runs pendus.
+Les artefacts sont écrasés même en cas de timeout ou de sortie JSON invalide, avec `verdict=fail`, pour éviter de conserver une ancienne preuve `pass`.
 Le worker lit `scout_feedback`, `scout_outcomes` et `scout_do_not_contact` si les variables Supabase serveur sont presentes, avec le contexte `scout_companies(name, segment, website)` quand la relation PostgREST est disponible. Les artefacts exposent `feedback_memory_source`, le nombre d'événements feedback et le nombre d'événements DNC chargés. La persistance passe par la RPC transactionnelle `scout_persist_mission_output`, qui écrit aussi les insights structurés, l'email confidence, les run steps provider et les tool calls Agents SDK compactés.
 En `BM_SCOUT_PROVIDER=auto`, le worker utilise les seeds si elles existent, sinon SerpAPI si `SERPAPI_API_KEY` est présent, sinon OpenAI `web_search` si `OPENAI_API_KEY` est présent, sinon un fallback web public minimal. En `BM_SCOUT_PROVIDER=configured`, l'absence de `BM_SCOUT_REAL_SEEDS` échoue au lieu de retomber sur fixtures. Pour une demo fixture explicite : `BM_SCOUT_PROVIDER=demo`.
 SerpAPI passe par `https://serpapi.com/search.json` avec `engine=google`, `q`, `hl`, `gl` et `num`, puis BM Scout ne garde que les `organic_results` qui passent le filtre source.

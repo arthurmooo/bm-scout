@@ -15,7 +15,7 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 ## Limites agentiques
 
 - Le worker charge les feedbacks/outcomes Supabase et `scout_do_not_contact` si l'env serveur existe ; sans env, il repasse en seed local pour developpement.
-- Le chemin reel Agents SDK expose le `WebSearchTool` OpenAI, un provider `serpapi`, un provider `openai_web`, un fallback web public, un job search public minimal et des tools métier. OpenAI web est prouvé à volume PRD en smoke provider, mais pas encore en run persisté Supabase.
+- Le chemin reel Agents SDK expose un provider `serpapi`, un provider `openai_web`, un fallback web public, un job search public minimal et des tools métier. Le `WebSearchTool` OpenAI est opt-in via `BM_SCOUT_AGENT_HOSTED_WEB_SEARCH=1`; par défaut la recherche réelle passe par le provider pour éviter une double recherche lente. OpenAI web est prouvé à volume PRD en smoke provider, mais pas encore en run persisté Supabase.
 - La feedback memory modifie bien scoring/message en local côté TS et worker Python ; les feedbacks/outcomes/DNC Supabase chargent maintenant le contexte entreprise/segment/site/domaine/hash email, mais l'effet doit encore être prouvé sur runs réels persistés.
 - Les agents produisent des sorties structurees, mais la qualite commerciale finale reste a valider par Romu.
 - Les recherches SerpAPI/OpenAI web/fallback public restent dependantes de la disponibilite des sources, des coûts, des rate limits et de la qualité des requêtes.
