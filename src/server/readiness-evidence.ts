@@ -26,6 +26,24 @@ export interface RunnerRuntimeEvidence {
   runtimeModel: string;
 }
 
+export interface OperationalRunEvidenceInput {
+  mode: "core" | "exploration";
+  verdict: "pass" | "fail";
+  runtimeProvider: string;
+  runtimeMetadataComplete: boolean;
+  runtimeRevisionMatchesCurrent: boolean;
+  finalDecision: "ready" | "not_ready";
+  keptCount: number;
+  scannedCount: number;
+}
+
+export interface OperationalRunCoverage {
+  hasCoreDecision: boolean;
+  hasExplorationShortlist: boolean;
+  hasCoreVolume: boolean;
+  hasExplorationVolume: boolean;
+}
+
 export interface SupabaseRuntimeArtifactEvidence {
   status?: string;
   generated_at?: string;
@@ -290,6 +308,27 @@ export function eligibleRuntimeVerdict(
   return rawVerdict === "pass" && runtimeMetadataComplete && runtimeRevisionMatchesCurrent ? "pass" : "fail";
 }
 
+export function analyzeOperationalRunCoverage(evidence: OperationalRunEvidenceInput[]): OperationalRunCoverage {
+  const eligibleOperationalEvidence = evidence.filter(
+    (item) =>
+      item.verdict === "pass" &&
+      item.runtimeMetadataComplete &&
+      item.runtimeRevisionMatchesCurrent &&
+      isOperationalResearchProvider(item.runtimeProvider)
+  );
+
+  return {
+    hasCoreDecision: eligibleOperationalEvidence.some(
+      (item) => item.mode === "core" && item.finalDecision === "ready" && item.keptCount > 0
+    ),
+    hasExplorationShortlist: eligibleOperationalEvidence.some(
+      (item) => item.mode === "exploration" && item.keptCount > 0
+    ),
+    hasCoreVolume: eligibleOperationalEvidence.some((item) => item.mode === "core" && item.scannedCount >= 15),
+    hasExplorationVolume: eligibleOperationalEvidence.some((item) => item.mode === "exploration" && item.scannedCount >= 100)
+  };
+}
+
 function hasCompleteRuntimeMetadata(payload: Record<string, unknown>, durationMs: number, codeRevision: string): boolean {
   return Boolean(
     payload.real_mode === true &&
@@ -362,6 +401,10 @@ function detectResearchProvider(steps: RunnerStepEvidence[], declaredProvider: s
   if (steps.some((step) => step.step === "search_web" && numericAtLeast(step.payload?.discovered_count, 1))) return "web";
   if (steps.some((step) => step.step === "feedback_memory")) return "configured";
   return declaredProvider || "unknown";
+}
+
+function isOperationalResearchProvider(provider: string): boolean {
+  return ["openai_web", "serpapi", "web"].includes(provider.trim().toLowerCase());
 }
 
 function normalizeRevision(value: string): string {

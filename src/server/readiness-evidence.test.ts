@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   analyzeAgentTaskCronArtifact,
+  analyzeOperationalRunCoverage,
   analyzeRunnerSteps,
   analyzeSupabaseRuntimeArtifact,
   codeRevisionMatchesCurrent,
@@ -195,6 +196,56 @@ describe("readiness evidence", () => {
     expect(eligibleRuntimeVerdict("pass", false, true)).toBe("fail");
     expect(eligibleRuntimeVerdict("pass", true, false)).toBe("fail");
     expect(eligibleRuntimeVerdict("fail", true, true)).toBe("fail");
+  });
+
+  it("considère Exploration actionnable sans exiger final_decision ready", () => {
+    const coverage = analyzeOperationalRunCoverage([
+      {
+        mode: "core",
+        verdict: "pass",
+        runtimeProvider: "openai_web",
+        runtimeMetadataComplete: true,
+        runtimeRevisionMatchesCurrent: true,
+        finalDecision: "ready",
+        keptCount: 3,
+        scannedCount: 15
+      },
+      {
+        mode: "exploration",
+        verdict: "pass",
+        runtimeProvider: "openai_web",
+        runtimeMetadataComplete: true,
+        runtimeRevisionMatchesCurrent: true,
+        finalDecision: "not_ready",
+        keptCount: 3,
+        scannedCount: 100
+      }
+    ]);
+
+    expect(coverage).toEqual({
+      hasCoreDecision: true,
+      hasExplorationShortlist: true,
+      hasCoreVolume: true,
+      hasExplorationVolume: true
+    });
+  });
+
+  it("refuse une Exploration réelle sans shortlist", () => {
+    const coverage = analyzeOperationalRunCoverage([
+      {
+        mode: "exploration",
+        verdict: "pass",
+        runtimeProvider: "openai_web",
+        runtimeMetadataComplete: true,
+        runtimeRevisionMatchesCurrent: true,
+        finalDecision: "not_ready",
+        keptCount: 0,
+        scannedCount: 100
+      }
+    ]);
+
+    expect(coverage.hasExplorationShortlist).toBe(false);
+    expect(coverage.hasExplorationVolume).toBe(true);
   });
 
   it("accepte une preuve Supabase runtime complete sur la revision courante", () => {

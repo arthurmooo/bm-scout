@@ -7,6 +7,7 @@ import { runScoutMission, seedFeedbacks } from "../src/domain/scout-engine";
 import type { ScoutLead, ScoutRun } from "../src/domain/types";
 import {
   analyzeAgentTaskCronArtifact,
+  analyzeOperationalRunCoverage,
   analyzeRunnerSteps,
   analyzeSupabaseRuntimeArtifact,
   codeRevisionMatchesCurrent,
@@ -1034,10 +1035,7 @@ function buildProductBlockers(
     (item) => item.verdict === "pass" && item.runtimeMetadataComplete && item.runtimeRevisionMatchesCurrent
   );
   const eligibleOperationalEvidence = eligibleRealEvidence.filter((item) => isOperationalResearchProvider(item.runtimeProvider));
-  const hasCore = eligibleOperationalEvidence.some((item) => item.mode === "core" && item.finalDecision === "ready");
-  const hasExploration = eligibleOperationalEvidence.some((item) => item.mode === "exploration" && item.finalDecision === "ready");
-  const hasCoreVolume = eligibleOperationalEvidence.some((item) => item.mode === "core" && item.scannedCount >= 15);
-  const hasExplorationVolume = eligibleOperationalEvidence.some((item) => item.mode === "exploration" && item.scannedCount >= 100);
+  const operationalCoverage = analyzeOperationalRunCoverage(eligibleRealEvidence);
   const hasSupabaseCore = eligibleOperationalEvidence.some((item) => item.mode === "core" && item.sourceFile.includes("supabase-persist"));
   const hasSupabaseExploration = eligibleOperationalEvidence.some((item) => item.mode === "exploration" && item.sourceFile.includes("supabase-persist"));
   const feedbackEvidenceEligible = Boolean(
@@ -1098,10 +1096,13 @@ function buildProductBlockers(
     blockers.push(`Comparaison provider générée par la révision ${providerEvidence.codeRevision}, différente du code courant.`);
   }
 
-  if (!hasCore || !hasExploration) {
-    blockers.push("Runs OpenAI Agents SDK réels Core et Exploration incomplets avec provider marché non configuré.");
+  if (!operationalCoverage.hasCoreDecision) {
+    blockers.push("Run Agents SDK Core réel non prêt avec provider marché.");
   }
-  if (!hasCoreVolume || !hasExplorationVolume) {
+  if (!operationalCoverage.hasExplorationShortlist) {
+    blockers.push("Run Agents SDK Exploration réel sans shortlist actionnable avec provider marché.");
+  }
+  if (!operationalCoverage.hasCoreVolume || !operationalCoverage.hasExplorationVolume) {
     blockers.push("Runs OpenAI Agents SDK réels sans volumes PRD prouvés par provider marché : Core >= 15 scannés et Exploration >= 100 scannés requis.");
   }
   for (const evidence of realEvidence.filter((item) => item.verdict === "pass" && !item.runtimeMetadataComplete)) {
