@@ -12,7 +12,7 @@ from .memory import SupabaseConfig, SupabaseMemory
 from .providers import build_candidate_batch_with_steps
 from .runtime import code_revision, package_version
 from .runtime_env import load_local_env_files
-from .schemas import FeedbackEvent, MissionAgentOutput, MissionOutput, RunStep, ScoutMode
+from .schemas import FeedbackEvent, MissionAgentOutput, MissionOutput, QualityGate, RunStep, ScoutLead, ScoutMode
 
 
 async def run_bm_scout_mission(
@@ -42,6 +42,7 @@ async def run_bm_scout_mission(
     else:
         output = offline_output(mode, include_weak=include_weak)
 
+    normalize_rejected_outputs(output)
     output.run_steps = [
         RunStep(
             agent_name="bm_scout_worker",
@@ -158,7 +159,35 @@ Contraintes de sortie :
     output.kept_count = len(output.leads)
     output.rejected_count = len(output.rejected)
     output.run_steps = [provider_step, *candidate_batch.run_steps, *tool_steps, *output.run_steps]
+    normalize_rejected_outputs(output)
     return output
+
+
+def normalize_rejected_outputs(output: MissionOutput) -> None:
+    for lead in output.rejected:
+        lead.verdict = "reject"
+        lead.quality_decision = "blocked"
+        if not lead.rejection_reason:
+            lead.rejection_reason = first_failed_gate_reason(lead) or "Compte écarté par BM Scout avant validation Romu."
+        if not any(not gate.passed for gate in lead.quality_gates):
+            lead.quality_gates.append(
+                QualityGate(
+                    code="rejected_shortlist",
+                    passed=False,
+                    reason=lead.rejection_reason,
+                )
+            )
+        if not lead.next_action:
+            lead.next_action = "Ne pas traiter sans nouvel enrichissement concret."
+    output.rejected_count = len(output.rejected)
+    output.kept_count = len(output.leads)
+
+
+def first_failed_gate_reason(lead: ScoutLead) -> str | None:
+    for gate in lead.quality_gates:
+        if not gate.passed and gate.reason:
+            return gate.reason
+    return None
 
 
 def derive_provider_scanned_count(run_steps: list[RunStep], *, fallback: int) -> int:

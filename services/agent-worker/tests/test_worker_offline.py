@@ -32,7 +32,7 @@ from bm_scout_worker.providers import (
 )
 from bm_scout_worker.provider_audit import compare_providers, parse_provider_list, provider_unavailable_reason
 from bm_scout_worker.quality import mission_blockers
-from bm_scout_worker.runner import agent_max_turns, code_revision, derive_provider_scanned_count, run_bm_scout_mission
+from bm_scout_worker.runner import agent_max_turns, code_revision, derive_provider_scanned_count, normalize_rejected_outputs, run_bm_scout_mission
 from bm_scout_worker.schemas import FeedbackEvent, OutreachPack, QualityGate, RunStep, ScoutLead, StructuredInsights
 from bm_scout_worker.tool_recorder import capture_tool_calls, compact_payload
 
@@ -83,6 +83,26 @@ def test_qc_negative_blocks_weak_case() -> None:
     assert any(lead.id == "weak-studio-yoga" for lead in output.rejected)
     assert all(lead.id != "weak-studio-yoga" for lead in output.leads)
     assert mission_blockers(output) == []
+
+
+def test_rejected_outputs_are_persistable_as_qc_blocks() -> None:
+    output = offline_output("exploration")
+    rejected = output.leads[0].model_copy(deep=True)
+    rejected.id = "soft-rejected"
+    rejected.company = "Soft Rejected"
+    rejected.verdict = "watch"
+    rejected.quality_decision = "needs_enrichment"
+    rejected.rejection_reason = None
+    rejected.quality_gates = [QualityGate(code="signal", passed=True, reason="Signal partiel.")]
+    output.rejected = [rejected]
+
+    normalize_rejected_outputs(output)
+
+    assert output.rejected_count == 1
+    assert output.rejected[0].verdict == "reject"
+    assert output.rejected[0].quality_decision == "blocked"
+    assert output.rejected[0].rejection_reason
+    assert any(not gate.passed for gate in output.rejected[0].quality_gates)
 
 
 def test_blocked_lead_cannot_remain_in_shortlist() -> None:
