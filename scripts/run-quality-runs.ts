@@ -45,12 +45,20 @@ const globalScore = Math.round(
 const fixtureVerdict: RunVerdict = globalBlockers.length === 0 && globalScore >= 85 ? "pass" : "fail";
 const currentCodeRevision = await resolveCurrentCodeRevision();
 const realRunnerEvidence = await loadRealRunnerEvidence(currentCodeRevision);
+const feedbackLoopEvidence = await loadFeedbackLoopEvidence(currentCodeRevision);
 const cliPersistEvidence = await loadCliPersistEvidence();
 const cronEvidence = await loadAgentTaskCronEvidence(currentCodeRevision);
 const supabaseConsoleEvidence = await loadSupabaseConsoleEvidence(currentCodeRevision);
 const providerComparisonEvidence = await loadProviderComparisonEvidence(currentCodeRevision);
 const readinessMode = process.argv.includes("--readiness");
-const productBlockers = buildProductBlockers(realRunnerEvidence, cliPersistEvidence, cronEvidence, supabaseConsoleEvidence, providerComparisonEvidence);
+const productBlockers = buildProductBlockers(
+  realRunnerEvidence,
+  feedbackLoopEvidence,
+  cliPersistEvidence,
+  cronEvidence,
+  supabaseConsoleEvidence,
+  providerComparisonEvidence
+);
 const productReadiness: ProductReadiness = productBlockers.length === 0 ? "pilot_candidate" : "production_not_ready";
 
 const report = renderReport(
@@ -59,6 +67,7 @@ const report = renderReport(
   fixtureVerdict,
   globalBlockers,
   realRunnerEvidence,
+  feedbackLoopEvidence,
   cliPersistEvidence,
   cronEvidence,
   supabaseConsoleEvidence,
@@ -77,6 +86,7 @@ await writeFile(
       productReadiness,
       productBlockers,
       realRunnerEvidence,
+      feedbackLoopEvidence,
       cliPersistEvidence,
       cronEvidence,
       supabaseConsoleEvidence,
@@ -238,6 +248,7 @@ function renderReport(
   fixtureVerdict: RunVerdict,
   blockers: string[],
   realEvidence: RealRunnerEvidence[],
+  feedbackEvidence: FeedbackLoopEvidence | null,
   persistEvidence: CliPersistEvidence | null,
   cronEvidence: AgentTaskCronEvidence | null,
   consoleEvidence: SupabaseConsoleEvidence,
@@ -291,6 +302,28 @@ function renderReport(
             ].join("; ")
         )
       : ["- Aucun artefact réel détecté dans `artifacts/agent-worker-real/`."]),
+    "",
+    "## Evidence feedback loop Supabase",
+    "",
+    feedbackEvidence
+      ? [
+          `- Feedback loop : ${feedbackEvidence.verdict}`,
+          `trace : ${feedbackEvidence.traceId ?? "aucune"}`,
+          `provider runtime : ${feedbackEvidence.runtimeProvider}`,
+          `impacts : ${feedbackEvidence.feedbackImpactCount}`,
+          `score : ${feedbackEvidence.feedbackScoreChangedCount}`,
+          `bloqués : ${feedbackEvidence.feedbackBlockedCount}`,
+          `DNC bloqués : ${feedbackEvidence.feedbackDncBlockedCount}`,
+          `message régénéré : ${feedbackEvidence.feedbackMessageRegeneratedCount}`,
+          `angle renforcé : ${feedbackEvidence.feedbackAngleReinforcedCount}`,
+          `lessons : ${feedbackEvidence.lessonCount}`,
+          `learning feedback : ${feedbackEvidence.learningUsesFeedback ? "oui" : "non"}`,
+          `runtime metadata : ${feedbackEvidence.runtimeMetadataComplete ? "oui" : "non"}`,
+          `révision : ${feedbackEvidence.codeRevision}`,
+          `révision courante : ${feedbackEvidence.runtimeRevisionMatchesCurrent ? "oui" : "non"}`
+        ].join("; ")
+      : "- Aucune preuve `feedback:evidence` détectée dans `artifacts/feedback-loop/`.",
+    ...(feedbackEvidence?.blockers.length ? feedbackEvidence.blockers.map((blocker) => `- Blocker feedback loop : ${blocker}`) : []),
     "",
     "## Evidence Supabase runtime",
     "",
@@ -463,6 +496,68 @@ function learningUsesFeedback(lessons: { lesson?: string; recommendation?: strin
     .join(" ")
     .toLowerCase();
   return text.includes("feedback romu") && text.includes("do-not-contact");
+}
+
+interface FeedbackLoopEvidence {
+  verdict: RunVerdict;
+  sourceFile: string;
+  traceId: string | null;
+  runtimeProvider: string;
+  feedbackImpactCount: number;
+  feedbackScoreChangedCount: number;
+  feedbackBlockedCount: number;
+  feedbackDncBlockedCount: number;
+  feedbackMessageRegeneratedCount: number;
+  feedbackAngleReinforcedCount: number;
+  lessonCount: number;
+  learningUsesFeedback: boolean;
+  blockers: string[];
+  codeRevision: string;
+  runtimeMetadataComplete: boolean;
+  runtimeRevisionMatchesCurrent: boolean;
+}
+
+async function loadFeedbackLoopEvidence(currentRevision: string): Promise<FeedbackLoopEvidence | null> {
+  const sourceFile = "latest-feedback-loop.json";
+  const path = join(process.cwd(), "artifacts", "feedback-loop", sourceFile);
+  if (!existsSync(path)) return null;
+  const payload = JSON.parse(await readFile(path, "utf8")) as {
+    status?: RunVerdict;
+    generated_at?: string;
+    code_revision?: string;
+    trace_id?: string | null;
+    runtime_provider?: string;
+    feedback_impact_count?: number;
+    feedback_score_changed_count?: number;
+    feedback_blocked_count?: number;
+    feedback_dnc_blocked_count?: number;
+    feedback_message_regenerated_count?: number;
+    feedback_angle_reinforced_count?: number;
+    lesson_count?: number;
+    learning_uses_feedback?: boolean;
+    blockers?: string[];
+  };
+  const codeRevision = typeof payload.code_revision === "string" ? payload.code_revision.trim() : "";
+  const runtimeProvider = typeof payload.runtime_provider === "string" ? payload.runtime_provider.trim() : "";
+  const runtimeMetadataComplete = Boolean(payload.generated_at && codeRevision && runtimeProvider && runtimeProvider !== "unknown" && payload.trace_id);
+  return {
+    verdict: payload.status === "pass" ? "pass" : "fail",
+    sourceFile,
+    traceId: payload.trace_id ?? null,
+    runtimeProvider: runtimeProvider || "unknown",
+    feedbackImpactCount: numberValue(payload.feedback_impact_count),
+    feedbackScoreChangedCount: numberValue(payload.feedback_score_changed_count),
+    feedbackBlockedCount: numberValue(payload.feedback_blocked_count),
+    feedbackDncBlockedCount: numberValue(payload.feedback_dnc_blocked_count),
+    feedbackMessageRegeneratedCount: numberValue(payload.feedback_message_regenerated_count),
+    feedbackAngleReinforcedCount: numberValue(payload.feedback_angle_reinforced_count),
+    lessonCount: numberValue(payload.lesson_count),
+    learningUsesFeedback: Boolean(payload.learning_uses_feedback),
+    blockers: payload.blockers ?? [],
+    codeRevision: codeRevision || "unknown",
+    runtimeMetadataComplete,
+    runtimeRevisionMatchesCurrent: runtimeMetadataComplete && codeRevisionMatchesCurrent(codeRevision, currentRevision)
+  };
 }
 
 interface CliPersistEvidence {
@@ -829,6 +924,7 @@ async function resolveCurrentCodeRevision(): Promise<string> {
 
 function buildProductBlockers(
   realEvidence: RealRunnerEvidence[],
+  feedbackEvidence: FeedbackLoopEvidence | null,
   persistEvidence: CliPersistEvidence | null,
   cronEvidence: AgentTaskCronEvidence | null,
   consoleEvidence: SupabaseConsoleEvidence,
@@ -845,20 +941,30 @@ function buildProductBlockers(
   const hasExplorationVolume = eligibleOperationalEvidence.some((item) => item.mode === "exploration" && item.scannedCount >= 100);
   const hasSupabaseCore = eligibleOperationalEvidence.some((item) => item.mode === "core" && item.sourceFile.includes("supabase-persist"));
   const hasSupabaseExploration = eligibleOperationalEvidence.some((item) => item.mode === "exploration" && item.sourceFile.includes("supabase-persist"));
-  const hasLearningFromFeedback = eligibleRealEvidence.some(
-    (item) =>
-      item.mode === "core" &&
-      item.sourceFile.includes("supabase-persist") &&
-      item.memorySource === "supabase" &&
-      item.feedbackEventCount > 0 &&
-      item.doNotContactEventCount > 0 &&
-      item.feedbackImpactCount > 0 &&
-      (item.feedbackScoreChangedCount > 0 ||
-        item.feedbackBlockedCount > 0 ||
-        item.feedbackMessageRegeneratedCount > 0 ||
-        item.feedbackAngleReinforcedCount > 0) &&
-      item.learningUsesFeedback
+  const feedbackEvidenceEligible = Boolean(
+    feedbackEvidence?.verdict === "pass" &&
+      feedbackEvidence.runtimeMetadataComplete &&
+      feedbackEvidence.runtimeRevisionMatchesCurrent &&
+      feedbackEvidence.learningUsesFeedback &&
+      feedbackEvidence.feedbackImpactCount > 0 &&
+      hasCausalFeedbackEvidence(feedbackEvidence)
   );
+  const hasLearningFromFeedback =
+    feedbackEvidenceEligible ||
+    eligibleRealEvidence.some(
+      (item) =>
+        item.mode === "core" &&
+        item.sourceFile.includes("supabase-persist") &&
+        item.memorySource === "supabase" &&
+        item.feedbackEventCount > 0 &&
+        item.doNotContactEventCount > 0 &&
+        item.feedbackImpactCount > 0 &&
+        (item.feedbackScoreChangedCount > 0 ||
+          item.feedbackBlockedCount > 0 ||
+          item.feedbackMessageRegeneratedCount > 0 ||
+          item.feedbackAngleReinforcedCount > 0) &&
+        item.learningUsesFeedback
+    );
   const cronEligible = Boolean(cronEvidence?.verdict === "pass" && cronEvidence.runtimeMetadataComplete && cronEvidence.runtimeRevisionMatchesCurrent);
   if (!cronEligible) {
     blockers.push("production_not_ready: le runner agent_tasks et le cron GitHub Actions existent, mais aucun run CI avec secrets ne les prouve encore.");
@@ -904,6 +1010,15 @@ function buildProductBlockers(
   if (!hasSupabaseCore || !hasSupabaseExploration || realEvidence.some((item) => item.sourceFile.includes("supabase-persist") && !item.persistComplete)) {
     blockers.push("Runs Agents SDK réels non prouvés avec persistance Supabase et provider marché.");
   }
+  if (feedbackEvidence?.verdict === "pass" && !feedbackEvidence.runtimeMetadataComplete) {
+    blockers.push("Preuve feedback:evidence sans métadonnées runtime auditables.");
+  }
+  if (feedbackEvidence?.verdict === "pass" && feedbackEvidence.runtimeMetadataComplete && !feedbackEvidence.runtimeRevisionMatchesCurrent) {
+    blockers.push(`Preuve feedback:evidence générée par la révision ${feedbackEvidence.codeRevision}, différente du code courant.`);
+  }
+  if (feedbackEvidence?.verdict === "pass" && (!feedbackEvidence.learningUsesFeedback || !hasCausalFeedbackEvidence(feedbackEvidence))) {
+    blockers.push("Preuve feedback:evidence sans learning exploitable ou effet causal score/message/blocage/angle.");
+  }
   if (!hasLearningFromFeedback) {
     blockers.push("Learning Agent non prouvé avec feedbacks/outcomes Supabase, do-not-contact et impact causal structuré sur lead/message/score.");
   }
@@ -927,6 +1042,15 @@ function buildProductBlockers(
     blockers.push(`Console Supabase serveur prouvée par la révision ${consoleEvidence.codeRevision}, différente du code courant.`);
   }
   return blockers;
+}
+
+function hasCausalFeedbackEvidence(evidence: FeedbackLoopEvidence): boolean {
+  return (
+    evidence.feedbackScoreChangedCount > 0 ||
+    evidence.feedbackBlockedCount > 0 ||
+    evidence.feedbackMessageRegeneratedCount > 0 ||
+    evidence.feedbackAngleReinforcedCount > 0
+  );
 }
 
 function isOperationalResearchProvider(provider: string): boolean {

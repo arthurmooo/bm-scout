@@ -15,9 +15,9 @@ Verdict : `production_not_ready`.
    - Risque : proactivité structurée, mais pas encore démontrée en production.
    - Remède : exécuter le workflow avec secrets, télécharger l'artefact `bm-scout-agent-task-evidence` et vérifier les transitions sur le projet interne.
 
-3. La feedback loop causale existe localement côté TS et worker Python, avec compteurs d'impact et script de preuve Supabase, mais elle n'est pas encore exécutée avec secrets ni prouvée en run marché à volume.
+3. La feedback loop causale existe localement côté TS et worker Python, avec compteurs d'impact, synthèse Learning vérifiée et script de preuve Supabase, mais elle n'est pas encore exécutée avec secrets ni prouvée en run marché à volume.
    - Risque : les moteurs testés changent bien le scoring/message/blocage/angle, mais le pilote réel peut rester sous-exercé.
-   - Remède : exécuter `npm run feedback:evidence`, vérifier `feedback_memory_effects.impact_count > 0`, puis confirmer la même mémoire sur Core/Exploration réels à volume.
+   - Remède : exécuter `npm run feedback:evidence`, vérifier `feedback_memory_effects.impact_count > 0` et `learning_uses_feedback=true`, puis confirmer la même mémoire sur Core/Exploration réels à volume.
 
 4. Les run steps couvrent maintenant provider et function tools Agents SDK, mais le tracing OpenAI hébergé doit encore être corrélé à des runs réels persistés.
    - Risque : Arthur peut auditer les tools internes, mais pas encore prouver toute la chaîne OpenAI web/traces sur Supabase à volume.

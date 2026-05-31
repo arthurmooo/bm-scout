@@ -16,6 +16,12 @@ export interface FeedbackLoopEvidenceAnalysis {
   runtime: RunnerRuntimeEvidence;
 }
 
+export interface FeedbackLoopLesson {
+  lesson?: string;
+  recommendation?: string;
+  source?: string;
+}
+
 export const FEEDBACK_LOOP_SCENARIO_COMPANIES: FeedbackLoopScenarioCompany[] = [
   {
     externalId: "bm-feedback-proof-cambon",
@@ -90,7 +96,8 @@ export function feedbackLoopWorkerEnv(companies = FEEDBACK_LOOP_SCENARIO_COMPANI
 
 export function analyzeFeedbackLoopEvidence(
   steps: RunnerStepEvidence[],
-  currentCodeRevision: string
+  currentCodeRevision: string,
+  lessons: FeedbackLoopLesson[] = []
 ): FeedbackLoopEvidenceAnalysis {
   const runtime = analyzeRunnerSteps(steps, currentCodeRevision);
   const blockers = [
@@ -101,13 +108,26 @@ export function analyzeFeedbackLoopEvidence(
     ...(!runtime.persistComplete ? ["Run non persisté via Supabase RPC."] : []),
     ...(!runtime.runtimeMetadataComplete ? ["Métadonnées runtime incomplètes."] : []),
     ...(!runtime.runtimeRevisionMatchesCurrent ? ["Révision runtime différente du code courant ou worktree dirty."] : []),
-    ...(!hasCausalFeedbackEffect(runtime) ? ["Aucun effet causal score/message/blocage/angle mesuré."] : [])
+    ...(!hasCausalFeedbackEffect(runtime) ? ["Aucun effet causal score/message/blocage/angle mesuré."] : []),
+    ...(!feedbackLoopLearningUsesFeedback(lessons)
+      ? ["Learning Agent sans synthèse 3-5 apprentissages exploitant feedback Romu et do-not-contact."]
+      : [])
   ];
   return {
     status: blockers.length ? "fail" : "pass",
     blockers,
     runtime
   };
+}
+
+export function feedbackLoopLearningUsesFeedback(lessons: FeedbackLoopLesson[]): boolean {
+  if (lessons.length < 3 || lessons.length > 5) return false;
+  const text = lessons
+    .flatMap((lesson) => [lesson.lesson, lesson.recommendation, lesson.source])
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return text.includes("feedback romu") && text.includes("do-not-contact");
 }
 
 function hasCausalFeedbackEffect(runtime: RunnerRuntimeEvidence): boolean {

@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import {
   FEEDBACK_LOOP_SCENARIO_COMPANIES,
   analyzeFeedbackLoopEvidence,
+  feedbackLoopLearningUsesFeedback,
   feedbackLoopWorkerEnv,
   type FeedbackLoopScenarioCompany
 } from "../src/server/feedback-loop-evidence";
@@ -40,6 +41,8 @@ export async function runFeedbackLoopEvidence() {
       feedback_dnc_blocked_count: 0,
       feedback_message_regenerated_count: 0,
       feedback_angle_reinforced_count: 0,
+      lesson_count: 0,
+      learning_uses_feedback: false,
       blockers: envBlockers
     });
   }
@@ -60,6 +63,8 @@ export async function runFeedbackLoopEvidence() {
       feedback_dnc_blocked_count: 0,
       feedback_message_regenerated_count: 0,
       feedback_angle_reinforced_count: 0,
+      lesson_count: 0,
+      learning_uses_feedback: false,
       blockers: ["Client Supabase serveur indisponible."]
     });
   }
@@ -72,7 +77,8 @@ export async function runFeedbackLoopEvidence() {
     env: feedbackLoopWorkerEnv()
   });
   const workerSteps = worker.parsed?.output?.run_steps ?? [];
-  const analysis = analyzeFeedbackLoopEvidence(workerSteps, currentRevision);
+  const lessons = worker.parsed?.output?.lessons ?? [];
+  const analysis = analyzeFeedbackLoopEvidence(workerSteps, currentRevision, lessons);
   const workerBlockers = [
     ...(worker.code !== 0 ? [`Worker feedback loop sorti avec code ${worker.code ?? "inconnu"}.`] : []),
     ...(worker.parsed?.verdict !== "pass" ? ["Worker feedback loop sans verdict pass."] : []),
@@ -94,6 +100,8 @@ export async function runFeedbackLoopEvidence() {
     feedback_dnc_blocked_count: analysis.runtime.feedbackDncBlockedCount,
     feedback_message_regenerated_count: analysis.runtime.feedbackMessageRegeneratedCount,
     feedback_angle_reinforced_count: analysis.runtime.feedbackAngleReinforcedCount,
+    lesson_count: lessons.length,
+    learning_uses_feedback: feedbackLoopLearningUsesFeedback(lessons),
     blockers: workerBlockers
   });
 }

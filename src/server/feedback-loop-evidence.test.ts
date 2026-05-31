@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   analyzeFeedbackLoopEvidence,
+  feedbackLoopLearningUsesFeedback,
   feedbackLoopScenarioSeeds,
   feedbackLoopWorkerEnv
 } from "./feedback-loop-evidence";
@@ -55,7 +56,8 @@ describe("feedback loop evidence", () => {
         },
         { step: "persist_complete", event_type: "supabase_persist" }
       ],
-      "abcdef1234567890"
+      "abcdef1234567890",
+      validLearningLessons()
     );
 
     expect(analysis.status).toBe("pass");
@@ -95,11 +97,76 @@ describe("feedback loop evidence", () => {
         },
         { step: "persist_complete", event_type: "supabase_persist" }
       ],
-      "abcdef1234567890"
+      "abcdef1234567890",
+      validLearningLessons()
     );
 
     expect(analysis.status).toBe("fail");
     expect(analysis.blockers).toContain("Aucun impact feedback structuré mesuré.");
     expect(analysis.blockers).toContain("Aucun effet causal score/message/blocage/angle mesuré.");
   });
+
+  it("refuse une preuve feedback sans apprentissages exploitables", () => {
+    const analysis = analyzeFeedbackLoopEvidence(
+      [
+        {
+          step: "runner_complete",
+          payload: {
+            feedback_memory_source: "supabase",
+            feedback_event_count: 5,
+            do_not_contact_event_count: 1,
+            started_at: "2026-05-31T10:00:00.000Z",
+            completed_at: "2026-05-31T10:01:00.000Z",
+            duration_ms: 1000,
+            real_mode: true,
+            python_version: "3.14.2",
+            openai_agents_version: "0.17.4",
+            openai_sdk_version: "2.14.0",
+            code_revision: "abcdef123456"
+          }
+        },
+        {
+          step: "feedback_memory_effects",
+          event_type: "tool_call",
+          payload: {
+            impact_count: 1,
+            score_changed_count: 1,
+            blocked_count: 0,
+            message_regenerated_count: 0,
+            angle_reinforced_count: 0
+          }
+        },
+        { step: "persist_complete", event_type: "supabase_persist" }
+      ],
+      "abcdef1234567890",
+      [{ lesson: "Apprentissage générique", recommendation: "Continuer comme avant." }]
+    );
+
+    expect(analysis.status).toBe("fail");
+    expect(analysis.blockers).toContain(
+      "Learning Agent sans synthèse 3-5 apprentissages exploitant feedback Romu et do-not-contact."
+    );
+  });
+
+  it("identifie les apprentissages feedback Romu + do-not-contact", () => {
+    expect(feedbackLoopLearningUsesFeedback(validLearningLessons())).toBe(true);
+    expect(feedbackLoopLearningUsesFeedback(validLearningLessons().slice(0, 2))).toBe(false);
+  });
 });
+
+function validLearningLessons() {
+  return [
+    {
+      lesson: "Feedback Romu : les comptes M&A avec signaux deal-flow méritent un bonus.",
+      recommendation: "Renforcer les angles deal-by-deal et documents."
+    },
+    {
+      lesson: "Feedback Romu : les messages trop génériques doivent être régénérés.",
+      recommendation: "Citer un signal observé avant toute proposition."
+    },
+    {
+      lesson: "Do-not-contact actif sur un compte témoin.",
+      recommendation: "Bloquer toute relance et remonter le do-not-contact en QC."
+    }
+  ];
+}
