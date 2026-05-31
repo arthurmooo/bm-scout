@@ -16,7 +16,7 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 
 - Le worker charge les feedbacks/outcomes Supabase et `scout_do_not_contact` si l'env serveur existe ; sans env, il repasse en seed local pour developpement.
 - Le chemin reel Agents SDK expose un provider `serpapi`, un provider `openai_web`, un fallback web public, un job search public minimal et des tools métier. Le `WebSearchTool` OpenAI est opt-in via `BM_SCOUT_AGENT_HOSTED_WEB_SEARCH=1`; par défaut la recherche réelle passe par le provider pour éviter une double recherche lente. OpenAI web est prouvé à volume PRD en smoke provider, mais pas encore en run persisté Supabase.
-- La feedback memory modifie bien scoring/message en local côté TS et worker Python ; les feedbacks/outcomes/DNC Supabase chargent maintenant le contexte entreprise/segment/site/domaine/hash email, mais l'effet doit encore être prouvé sur runs réels persistés.
+- La feedback memory modifie bien scoring/message/blocage/angle en local côté TS et worker Python ; les feedbacks/outcomes/DNC Supabase chargent maintenant le contexte entreprise/segment/site/domaine/hash email, et le provider émet des compteurs `feedback_memory_effects`, mais l'effet doit encore être prouvé sur runs réels persistés.
 - Les agents produisent des sorties structurees, mais la qualite commerciale finale reste a valider par Romu.
 - Les recherches SerpAPI/OpenAI web/fallback public restent dependantes de la disponibilite des sources, des coûts, des rate limits et de la qualité des requêtes.
 - OpenAI `web_search` est branché et testé sur Core et Exploration. Dernier smoke provider réel : `15/15` comptes Core et `100/100` comptes Exploration découverts avec shortlist bornée.
@@ -27,7 +27,7 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 ## Limites data
 
 - Supabase stocke runs, companies, contacts, preuves, scores, fiches, messages, feedbacks, outcomes, do-not-contact, lessons, email confidence, insights structurés et run steps.
-- Les feedbacks/outcomes Romu et les entrées do-not-contact sont persistés par l'API serveur et relus par le worker, mais l'effet à volume doit encore être démontré par runs réels persistés.
+- Les feedbacks/outcomes Romu et les entrées do-not-contact sont persistés par l'API serveur et relus par le worker, mais l'effet à volume doit encore être démontré par runs réels persistés avec compteurs d'impact non nuls.
 - La persistance worker passe par RPC transactionnelle, mais doit etre reverifiee dans chaque env avant demo.
 - La console lit Supabase cote serveur si `SUPABASE_SERVICE_ROLE_KEY` existe. Elle n'affiche les fixtures demo que sans env Supabase serveur ; une base Supabase vide reste affichée comme vide.
 - Le dedoublonnage avance et l'historique multi-semaines complet ne sont pas encore industrialises.
@@ -64,6 +64,6 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 - `npm run verify:supabase` passe avec l'env serveur.
 - `artifacts/supabase-runtime/latest-verify.json` est produit par `verify:supabase`, porte la révision courante, n'est pas `-dirty`, et prouve aussi les actions Romu persistées.
 - `--persist` cree un run lisible en Supabase via la RPC.
-- Un run reel Agents SDK utilise les feedbacks/outcomes/DNC Supabase, écrit des artefacts avec `feedback_memory_source=supabase`, des métadonnées runtime complètes, une révision code courante, et modifie les recommandations learning.
+- Un run reel Agents SDK utilise les feedbacks/outcomes/DNC Supabase, écrit des artefacts avec `feedback_memory_source=supabase`, des compteurs `feedback_memory_effects` non nuls, des métadonnées runtime complètes, une révision code courante, et modifie les recommandations learning.
 - `npm run quality:readiness` passe.
 - L'audit thermo-nuclear final ne contient plus de P1 bloquant.

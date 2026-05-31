@@ -15,9 +15,9 @@ Verdict : `production_not_ready`.
    - Risque : proactivité structurée, mais pas encore démontrée en production.
    - Remède : exécuter le workflow avec secrets, télécharger l'artefact `bm-scout-agent-task-evidence` et vérifier les transitions sur le projet interne.
 
-3. La feedback loop causale existe localement côté TS et worker Python, mais elle n'est pas encore prouvée en run réel Supabase à volume.
-   - Risque : les moteurs testés changent bien le scoring/message, mais le pilote réel peut rester sous-exercé.
-   - Remède : exécuter Core/Exploration réels avec feedbacks/outcomes Supabase et comparer avant/après.
+3. La feedback loop causale existe localement côté TS et worker Python, avec compteurs d'impact, mais elle n'est pas encore prouvée en run réel Supabase à volume.
+   - Risque : les moteurs testés changent bien le scoring/message/blocage/angle, mais le pilote réel peut rester sous-exercé.
+   - Remède : exécuter Core/Exploration réels avec feedbacks/outcomes Supabase, vérifier `feedback_memory_effects.impact_count > 0` et comparer avant/après.
 
 4. Les run steps couvrent maintenant provider et function tools Agents SDK, mais le tracing OpenAI hébergé doit encore être corrélé à des runs réels persistés.
    - Risque : Arthur peut auditer les tools internes, mais pas encore prouver toute la chaîne OpenAI web/traces sur Supabase à volume.
@@ -33,7 +33,7 @@ Verdict : `production_not_ready`.
 - Les routines Daily Brief, Learning Review, DNC check et followup review ne restent plus bloquées par défaut : elles lisent le runtime Supabase et refusent les fixtures comme preuve opérationnelle.
 - Le worker réel ne retombe plus silencieusement sur fixtures et expose `WebSearchTool` OpenAI plus 8 tools métier Agents SDK.
 - `search_jobs` produit maintenant des preuves recrutement publiques et des run steps au lieu d'être un no-op.
-- La mémoire feedback TS et worker pénalise les secteurs faibles, bloque les leads rejetés/DNC, renforce les angles validés et régénère les messages trop génériques. Le worker charge aussi `scout_do_not_contact` directement pour les blocages domaine/hash email.
+- La mémoire feedback TS et worker pénalise les secteurs faibles, bloque les leads rejetés/DNC, renforce les angles validés et régénère les messages trop génériques. Le worker charge aussi `scout_do_not_contact` directement pour les blocages domaine/hash email et expose les impacts dans `feedback_memory_effects`.
 - Observé/Inféré/Incertain et email confidence sont maintenant portés par TS, worker Pydantic, DB et RPC.
 - Le RPC écrit des run steps minimaux (`mission_start`, `lead_persisted`, steps worker, `mission_complete`).
 - Le provider réel ajoute des run steps outil-par-outil pour déduplication, fetch, extraction, email discovery, evidence save et scoring.
@@ -66,7 +66,7 @@ Verdict : `production_not_ready`.
 - Tests actions TS : feedback bon angle, message générique, outcome RDV et DNC vers mémoire couverts.
 - Tests sécurité Supabase : policies RLS internes, absence de service role côté client, fermeture RPC security definer.
 - Import manager Agents SDK : 13 tools dont `WebSearchTool` et 8 tools métier.
-- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 46 tests
+- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 54 tests
 - Supabase interne : migrations feedback/outcome et RLS appliquées ; advisor sécurité à 0 lint.
 
 ## Décision

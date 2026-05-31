@@ -273,7 +273,13 @@ function renderReport(
               `rejetes : ${item.rejectedCount}`,
               `lessons : ${item.lessonCount}`,
               `mémoire : ${item.memorySource}`,
+              `feedbacks mémoire : ${item.feedbackEventCount}`,
               `DNC mémoire : ${item.doNotContactEventCount}`,
+              `impacts feedback : ${item.feedbackImpactCount}`,
+              `score : ${item.feedbackScoreChangedCount}`,
+              `bloqués : ${item.feedbackBlockedCount}`,
+              `message régénéré : ${item.feedbackMessageRegeneratedCount}`,
+              `angle renforcé : ${item.feedbackAngleReinforcedCount}`,
               `persist artefact : ${item.persistComplete ? "oui" : "non"}`,
               `feedback learning : ${item.learningUsesFeedback ? "oui" : "non"}`,
               `runtime metadata : ${item.runtimeMetadataComplete ? "oui" : "non"}`,
@@ -368,7 +374,15 @@ interface RealRunnerEvidence {
   sourceFile: string;
   learningUsesFeedback: boolean;
   memorySource: string;
+  feedbackEventCount: number;
   doNotContactEventCount: number;
+  feedbackImpactCount: number;
+  feedbackScoreChangedCount: number;
+  feedbackBlockedCount: number;
+  feedbackDncBlockedCount: number;
+  feedbackMessageRegeneratedCount: number;
+  feedbackAngleReinforcedCount: number;
+  feedbackSegmentDeltaCount: number;
   persistComplete: boolean;
   runtimeMetadataComplete: boolean;
   runtimeRevisionMatchesCurrent: boolean;
@@ -418,7 +432,15 @@ async function loadRealRunnerEvidence(currentRevision: string): Promise<RealRunn
       sourceFile: target.file,
       learningUsesFeedback: learningUsesFeedback(lessons),
       memorySource: memory.source,
+      feedbackEventCount: memory.feedbackEventCount,
       doNotContactEventCount: memory.doNotContactEventCount,
+      feedbackImpactCount: memory.feedbackImpactCount,
+      feedbackScoreChangedCount: memory.feedbackScoreChangedCount,
+      feedbackBlockedCount: memory.feedbackBlockedCount,
+      feedbackDncBlockedCount: memory.feedbackDncBlockedCount,
+      feedbackMessageRegeneratedCount: memory.feedbackMessageRegeneratedCount,
+      feedbackAngleReinforcedCount: memory.feedbackAngleReinforcedCount,
+      feedbackSegmentDeltaCount: memory.feedbackSegmentDeltaCount,
       persistComplete: memory.persistComplete,
       runtimeMetadataComplete: memory.runtimeMetadataComplete,
       runtimeRevisionMatchesCurrent: memory.runtimeRevisionMatchesCurrent,
@@ -824,7 +846,13 @@ function buildProductBlockers(
       item.mode === "core" &&
       item.sourceFile.includes("supabase-persist") &&
       item.memorySource === "supabase" &&
+      item.feedbackEventCount > 0 &&
       item.doNotContactEventCount > 0 &&
+      item.feedbackImpactCount > 0 &&
+      (item.feedbackScoreChangedCount > 0 ||
+        item.feedbackBlockedCount > 0 ||
+        item.feedbackMessageRegeneratedCount > 0 ||
+        item.feedbackAngleReinforcedCount > 0) &&
       item.learningUsesFeedback
   );
   const cronEligible = Boolean(cronEvidence?.verdict === "pass" && cronEvidence.runtimeMetadataComplete && cronEvidence.runtimeRevisionMatchesCurrent);
@@ -873,7 +901,7 @@ function buildProductBlockers(
     blockers.push("Runs Agents SDK réels non prouvés avec persistance Supabase.");
   }
   if (!hasLearningFromFeedback) {
-    blockers.push("Learning Agent non prouvé avec feedbacks/outcomes Supabase et do-not-contact.");
+    blockers.push("Learning Agent non prouvé avec feedbacks/outcomes Supabase, do-not-contact et impact causal structuré sur lead/message/score.");
   }
   for (const evidence of realEvidence.filter((item) => item.sourceFile.includes("supabase-persist"))) {
     if (!consoleEvidence.traces.includes(evidence.traceId)) {

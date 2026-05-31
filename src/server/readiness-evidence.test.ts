@@ -14,6 +14,7 @@ describe("readiness evidence", () => {
           step: "runner_complete",
           payload: {
             feedback_memory_source: "supabase",
+            feedback_event_count: 4,
             do_not_contact_event_count: 2,
             started_at: "2026-05-31T10:00:00.000Z",
             completed_at: "2026-05-31T10:01:00.000Z",
@@ -26,6 +27,19 @@ describe("readiness evidence", () => {
             code_revision: "abcdef123456"
           }
         },
+        {
+          step: "feedback_memory_effects",
+          event_type: "tool_call",
+          payload: {
+            impact_count: 2,
+            score_changed_count: 1,
+            blocked_count: 1,
+            blocked_do_not_contact_count: 1,
+            message_regenerated_count: 1,
+            angle_reinforced_count: 1,
+            segment_delta_count: 1
+          }
+        },
         { step: "persist_complete", event_type: "supabase_persist" }
       ],
       "abcdef1234567890"
@@ -33,7 +47,15 @@ describe("readiness evidence", () => {
 
     expect(evidence).toMatchObject({
       source: "supabase",
+      feedbackEventCount: 4,
       doNotContactEventCount: 2,
+      feedbackImpactCount: 2,
+      feedbackScoreChangedCount: 1,
+      feedbackBlockedCount: 1,
+      feedbackDncBlockedCount: 1,
+      feedbackMessageRegeneratedCount: 1,
+      feedbackAngleReinforcedCount: 1,
+      feedbackSegmentDeltaCount: 1,
       persistComplete: true,
       runtimeMetadataComplete: true,
       runtimeRevisionMatchesCurrent: true,

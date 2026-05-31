@@ -6,7 +6,15 @@ export interface RunnerStepEvidence {
 
 export interface RunnerRuntimeEvidence {
   source: string;
+  feedbackEventCount: number;
   doNotContactEventCount: number;
+  feedbackImpactCount: number;
+  feedbackScoreChangedCount: number;
+  feedbackBlockedCount: number;
+  feedbackDncBlockedCount: number;
+  feedbackMessageRegeneratedCount: number;
+  feedbackAngleReinforcedCount: number;
+  feedbackSegmentDeltaCount: number;
   persistComplete: boolean;
   runtimeMetadataComplete: boolean;
   runtimeRevisionMatchesCurrent: boolean;
@@ -85,15 +93,31 @@ export function analyzeRunnerSteps(steps: RunnerStepEvidence[], currentCodeRevis
   const runnerStep = steps.find((step) => step.step === "runner_complete");
   const payload = runnerStep?.payload ?? {};
   const source = typeof payload.feedback_memory_source === "string" ? payload.feedback_memory_source : "unknown";
+  const feedbackCount = Number(payload.feedback_event_count ?? 0);
   const dncCount = Number(payload.do_not_contact_event_count ?? 0);
   const durationMs = Number(payload.duration_ms ?? 0);
   const codeRevision = stringValue(payload.code_revision);
   const model = stringValue(payload.openai_model);
   const metadataComplete = hasCompleteRuntimeMetadata(payload, durationMs, codeRevision);
+  const feedbackImpactCount = stepNumber(steps, "feedback_memory_effects", "impact_count");
+  const feedbackScoreChangedCount = stepNumber(steps, "feedback_memory_effects", "score_changed_count");
+  const feedbackBlockedCount = stepNumber(steps, "feedback_memory_effects", "blocked_count");
+  const feedbackDncBlockedCount = stepNumber(steps, "feedback_memory_effects", "blocked_do_not_contact_count");
+  const feedbackMessageRegeneratedCount = stepNumber(steps, "feedback_memory_effects", "message_regenerated_count");
+  const feedbackAngleReinforcedCount = stepNumber(steps, "feedback_memory_effects", "angle_reinforced_count");
+  const feedbackSegmentDeltaCount = stepNumber(steps, "feedback_memory_effects", "segment_delta_count");
 
   return {
     source,
+    feedbackEventCount: Number.isFinite(feedbackCount) ? feedbackCount : 0,
     doNotContactEventCount: Number.isFinite(dncCount) ? dncCount : 0,
+    feedbackImpactCount,
+    feedbackScoreChangedCount,
+    feedbackBlockedCount,
+    feedbackDncBlockedCount,
+    feedbackMessageRegeneratedCount,
+    feedbackAngleReinforcedCount,
+    feedbackSegmentDeltaCount,
     persistComplete: steps.some((step) => step.step === "persist_complete" && step.event_type === "supabase_persist"),
     runtimeMetadataComplete: metadataComplete,
     runtimeRevisionMatchesCurrent: metadataComplete && codeRevisionMatchesCurrent(codeRevision, currentCodeRevision),
@@ -223,6 +247,12 @@ function numericAtLeast(value: unknown, minimum: number): boolean {
 
 function numberValue(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function stepNumber(steps: RunnerStepEvidence[], stepName: string, key: string): number {
+  return steps
+    .filter((step) => step.step === stepName)
+    .reduce((sum, step) => sum + numberValue(step.payload?.[key]), 0);
 }
 
 function normalizeRevision(value: string): string {

@@ -120,6 +120,7 @@ class ConfiguredWebResearchProvider:
     ) -> list[ScoutLead]:
         candidates: list[ScoutLead] = []
         seen_keys: set[str] = set()
+        feedback_effects: list[dict[str, object]] = []
         feedback_memory = build_provider_feedback_memory(feedback_events or [])
         self.run_steps = []
         self.record_step(
@@ -172,18 +173,17 @@ class ConfiguredWebResearchProvider:
             lead = to_scout_lead(seed, mode, score, signals, evidence, emails)
             adjusted = apply_provider_feedback_memory(lead, feedback_memory)
             if adjusted != lead:
+                effect = feedback_effect_payload(lead, adjusted)
+                feedback_effects.append(effect)
                 self.record_step(
                     "apply_feedback_memory",
                     {
                         "company": lead.company,
-                        "before_score": lead.score,
-                        "after_score": adjusted.score,
-                        "before_verdict": lead.verdict,
-                        "after_verdict": adjusted.verdict,
-                        "after_quality_decision": adjusted.quality_decision,
+                        **effect,
                     },
                 )
             candidates.append(adjusted)
+        self.record_step("feedback_memory_effects", summarize_feedback_effects(feedback_effects))
         return candidates
 
     def record_step(self, step: str, payload: dict[str, object]) -> None:
@@ -560,6 +560,42 @@ def build_candidate_batch_with_steps(
         )
         return CandidateBatch(leads=leads, run_steps=provider.run_steps)
     raise RuntimeError("Provider BM Scout inconnu.")
+
+
+def feedback_effect_payload(before: ScoutLead, after: ScoutLead) -> dict[str, object]:
+    return {
+        "before_score": before.score,
+        "after_score": after.score,
+        "score_changed": before.score != after.score,
+        "before_verdict": before.verdict,
+        "after_verdict": after.verdict,
+        "verdict_changed": before.verdict != after.verdict,
+        "after_quality_decision": after.quality_decision,
+        "blocked_by_feedback": after.quality_decision == "blocked"
+        or after.verdict == "reject",
+        "blocked_do_not_contact": (
+            "do-not-contact" in (after.rejection_reason or "").lower()
+            or "do-not-contact" in after.outreach.cold_email.lower()
+        ),
+        "message_regenerated": "message régénéré" in after.score_justification.lower(),
+        "angle_reinforced": "angle validé romu" in after.score_justification.lower(),
+        "segment_delta_applied": (
+            "mémoire romu : bonus segment" in after.score_justification.lower()
+            or "mémoire romu : pénalité segment" in after.score_justification.lower()
+        ),
+    }
+
+
+def summarize_feedback_effects(effects: list[dict[str, object]]) -> dict[str, object]:
+    return {
+        "impact_count": len(effects),
+        "score_changed_count": sum(1 for effect in effects if effect.get("score_changed") is True),
+        "blocked_count": sum(1 for effect in effects if effect.get("blocked_by_feedback") is True),
+        "blocked_do_not_contact_count": sum(1 for effect in effects if effect.get("blocked_do_not_contact") is True),
+        "message_regenerated_count": sum(1 for effect in effects if effect.get("message_regenerated") is True),
+        "angle_reinforced_count": sum(1 for effect in effects if effect.get("angle_reinforced") is True),
+        "segment_delta_count": sum(1 for effect in effects if effect.get("segment_delta_applied") is True),
+    }
 
 
 def parse_company_seeds(value: str) -> list[CompanySeed]:

@@ -484,6 +484,11 @@ def test_provider_feedback_memory_rewrites_generic_message_and_angle() -> None:
     assert "Angle validé Romu" in lead.score_justification
     assert "message régénéré" in lead.score_justification
     assert "J'ai relevé un signal public précis" in lead.outreach.cold_email
+    effects = next(step.payload for step in provider.run_steps if step.step == "feedback_memory_effects")
+    assert effects["impact_count"] == 1
+    assert effects["score_changed_count"] == 1
+    assert effects["message_regenerated_count"] == 1
+    assert effects["angle_reinforced_count"] == 1
 
 
 def test_provider_feedback_memory_hard_blocks_dnc() -> None:
@@ -507,6 +512,9 @@ def test_provider_feedback_memory_hard_blocks_dnc() -> None:
     assert lead.quality_decision == "blocked"
     assert all(persona.do_not_contact for persona in lead.personas)
     assert "do-not-contact" in lead.outreach.cold_email.lower()
+    effects = next(step.payload for step in provider.run_steps if step.step == "feedback_memory_effects")
+    assert effects["blocked_count"] == 1
+    assert effects["blocked_do_not_contact_count"] == 1
 
 
 def test_parse_company_seeds_supports_json_and_compact_format() -> None:

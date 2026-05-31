@@ -95,7 +95,7 @@ npm run worker:test
 npm run provider:compare
 ```
 
-`quality:runs` valide seulement le socle fixture. `quality:readiness` doit rester bloquant tant que BM Scout est `production_not_ready`; les artefacts réels doivent indiquer une mémoire Supabase, un DNC Supabase chargé, des métadonnées runtime auditables et une révision code compatible avec le commit courant pour prouver le learning runtime.
+`quality:runs` valide seulement le socle fixture. `quality:readiness` doit rester bloquant tant que BM Scout est `production_not_ready`; les artefacts réels doivent indiquer une mémoire Supabase, des feedbacks/outcomes chargés, un DNC Supabase chargé, des compteurs `feedback_memory_effects` prouvant un impact sur score/message/blocage/angle, des métadonnées runtime auditables et une révision code compatible avec le commit courant pour prouver le learning runtime.
 Les artefacts worker réels ne comptent plus pour la readiness s'ils ne prouvent pas `scanned_count >= 15` en Core et `scanned_count >= 100` en Exploration.
 `quality:readiness` attend aussi un artefact cron GitHub Actions `artifacts/agent-tasks/latest-ci-run.json` en mode `real`, avec secrets Supabase/OpenAI présents, transitions `completed`, zéro tâche récupérée/échouée/bloquée et révision courante.
 `verify:supabase` écrit aussi `artifacts/supabase-runtime/latest-verify.json`. `quality:readiness` peut utiliser cet artefact si l'env Supabase serveur n'est pas présente au moment du gate, mais uniquement si l'artefact est `pass`, porte la révision courante, contient des compteurs runtime complets et n'a pas été produit par un worktree `-dirty`.
