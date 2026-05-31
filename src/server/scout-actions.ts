@@ -193,6 +193,7 @@ export async function recordScoutAction(input: ScoutActionInput): Promise<ScoutA
   const { error } = await client.from("scout_action_events").insert({
     company_id: companyId,
     message_id: mutationTrace?.messageId ?? null,
+    task_id: mutationTrace?.taskId ?? null,
     action: input.action,
     note: input.note ?? input.reason ?? ACTION_LABELS[input.action],
     payload: {

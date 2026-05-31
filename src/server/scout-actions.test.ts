@@ -65,6 +65,7 @@ describe("scout actions", () => {
         (call) =>
           call.table === "scout_action_events" &&
           call.op === "insert" &&
+          JSON.stringify(call.payload).includes('"task_id":"task-1"') &&
           JSON.stringify(call.payload).includes('"taskId":"task-1"') &&
           JSON.stringify(call.payload).includes('"taskType":"weekly_core_research"') &&
           JSON.stringify(call.payload).includes('"taskStatus":"queued"')
@@ -93,6 +94,7 @@ describe("scout actions", () => {
           call.table === "scout_action_events" &&
           call.op === "insert" &&
           JSON.stringify(call.payload).includes('"leadId":"core-cambon"') &&
+          JSON.stringify(call.payload).includes('"task_id":"task-1"') &&
           JSON.stringify(call.payload).includes('"taskId":"task-1"') &&
           JSON.stringify(call.payload).includes('"taskType":"weekly_core_research"')
       )
