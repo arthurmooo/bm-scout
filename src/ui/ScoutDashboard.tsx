@@ -1,4 +1,20 @@
-import { Check, CircleDot, Clipboard, Compass, FileText, GraduationCap, Play, Search, ShieldCheck, X } from "lucide-react";
+import {
+  Ban,
+  Check,
+  CircleDot,
+  Clipboard,
+  Compass,
+  Eye,
+  FileText,
+  GraduationCap,
+  Play,
+  RefreshCw,
+  Search,
+  ShieldCheck,
+  Timer,
+  UserX,
+  X
+} from "lucide-react";
 import type { AgentTask, ScoutLead, ScoutSnapshot, StructuredInsights } from "@/domain/types";
 import { ScoutActionButton } from "./ScoutActionButton";
 
@@ -140,6 +156,7 @@ function PrimaryLead({ lead }: { lead: ScoutLead }) {
         <ScoutActionButton className="button" action="copy_email" leadId={lead.id} copyText={lead.outreach.coldEmail}><Clipboard size={17} /> Copier email</ScoutActionButton>
         <ScoutActionButton className="button" action="copy_follow_up" leadId={lead.id} copyText={lead.outreach.followUp}><Clipboard size={17} /> Copier relance</ScoutActionButton>
         <ScoutActionButton className="button" action="copy_linkedin" leadId={lead.id} copyText={lead.outreach.linkedin}><Clipboard size={17} /> Copier LinkedIn</ScoutActionButton>
+        <ScoutActionButton className="button" action="mark_message_used" leadId={lead.id}><Check size={17} /> Utilisé</ScoutActionButton>
         <ScoutActionButton className="button danger" action="add_do_not_contact" leadId={lead.id} reason="Ajout manuel Romu depuis la console."><X size={17} /> DNC</ScoutActionButton>
       </div>
       <div className="feedback-row" aria-label="Feedback Romu">
@@ -150,6 +167,20 @@ function PrimaryLead({ lead }: { lead: ScoutLead }) {
         <ScoutActionButton className="button compact danger" action="feedback_bad_lead" leadId={lead.id} note="Mauvais lead : à exclure du prochain scoring."><X size={15} /> Mauvais</ScoutActionButton>
         <ScoutActionButton className="button compact danger" action="outcome_negative" leadId={lead.id} note="Outcome : réponse négative."><X size={15} /> Négatif</ScoutActionButton>
       </div>
+      <details className="secondary-actions">
+        <summary><CircleDot size={15} /> Décisions</summary>
+        <div className="secondary-action-grid">
+          <ScoutActionButton className="button compact" action="watch_lead" leadId={lead.id}><Eye size={15} /> Surveiller</ScoutActionButton>
+          <ScoutActionButton className="button compact" action="rerun_qc" leadId={lead.id}><RefreshCw size={15} /> Relancer QC</ScoutActionButton>
+          <ScoutActionButton className="button compact" action="outcome_no_response" leadId={lead.id} note="Outcome : pas de réponse."><Timer size={15} /> Sans réponse</ScoutActionButton>
+          <ScoutActionButton className="button compact" action="outcome_positive" leadId={lead.id} note="Outcome : réponse positive."><Check size={15} /> Positif</ScoutActionButton>
+          <ScoutActionButton className="button compact" action="outcome_wrong_person" leadId={lead.id} note="Outcome : mauvais interlocuteur."><UserX size={15} /> Mauvais contact</ScoutActionButton>
+          <ScoutActionButton className="button compact" action="outcome_bad_timing" leadId={lead.id} note="Outcome : timing mauvais, à retenter plus tard."><Timer size={15} /> Timing</ScoutActionButton>
+          <ScoutActionButton className="button compact" action="outcome_pain_confirmed" leadId={lead.id} note="Outcome : douleur confirmée."><Check size={15} /> Douleur OK</ScoutActionButton>
+          <ScoutActionButton className="button compact danger" action="outcome_pain_not_confirmed" leadId={lead.id} note="Outcome : douleur non confirmée."><X size={15} /> Douleur non</ScoutActionButton>
+          <ScoutActionButton className="button compact danger" action="exclude_lead" leadId={lead.id} reason="Exclusion manuelle Romu."><Ban size={15} /> Exclure</ScoutActionButton>
+        </div>
+      </details>
       <details className="deep-card">
         <summary><FileText size={17} /> Fiche profonde</summary>
         <p>{lead.deepCard}</p>
@@ -335,6 +366,8 @@ function RoutineActions() {
       <ScoutActionButton className="button" action="launch_exploration"><Play size={16} /> Exploration</ScoutActionButton>
       <ScoutActionButton className="button" action="launch_daily_brief"><Play size={16} /> Daily Brief</ScoutActionButton>
       <ScoutActionButton className="button" action="launch_learning_review"><Play size={16} /> Learning</ScoutActionButton>
+      <ScoutActionButton className="button" action="launch_dnc_check"><Play size={16} /> Contrôle DNC</ScoutActionButton>
+      <ScoutActionButton className="button" action="launch_followup_review"><Play size={16} /> Relances</ScoutActionButton>
     </div>
   );
 }

@@ -182,6 +182,8 @@ export function routineTypeForAction(action: string): AgentTaskType | null {
   if (action === "launch_exploration") return "weekly_exploration_scan";
   if (action === "launch_daily_brief") return "daily_brief";
   if (action === "launch_learning_review") return "learning_review";
+  if (action === "launch_dnc_check") return "dnc_check";
+  if (action === "launch_followup_review") return "followup_review";
   return null;
 }
 

@@ -16,7 +16,7 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 - Runner de queue `scout_agent_tasks` qui claim les tâches `queued -> running`, récupère explicitement les `running` trop anciennes, puis passe en `completed/blocked/failed` seulement si elles sont encore `running`.
 - Routines Daily Brief, Learning Review, DNC check et followup review exécutables depuis les runs Supabase persistés, avec blocage explicite si elles n'ont que les fixtures.
 - Workflow GitHub Actions `.github/workflows/bm-scout-agent-tasks.yml` pour cron/dispatch, avec artefact de preuve `artifacts/agent-tasks/latest-ci-run.json`, à activer avec secrets.
-- Actions UI branchées sur une API serveur : valider, rejeter, enrichir, copier, DNC, lancer routines. Les copies ne sont écrites dans le presse-papiers qu'après validation serveur.
+- Actions UI branchées sur une API serveur : valider, surveiller, rejeter, exclure, enrichir, relancer QC, copier, DNC, outcomes, lancer routines. Les copies ne sont écrites dans le presse-papiers qu'après validation serveur.
 - Feedbacks et outcomes Romu persistés dans `scout_feedback` / `scout_outcomes` : bon/mauvais lead, bon angle, message générique, RDV, positif/négatif, timing, mauvais interlocuteur.
 - DNC hard gate côté qualité TS, côté worker offline et côté DB pour empêcher un message non bloqué sur une cible DNC ou un outcome négatif.
 - Feedback memory TS + worker provider : mauvais lead/secteur/outcome négatif pénalisé, angle validé renforcé, message générique régénéré, DNC bloquant, contexte entreprise/segment et table `scout_do_not_contact` chargés depuis Supabase.

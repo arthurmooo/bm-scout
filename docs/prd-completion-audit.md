@@ -20,7 +20,7 @@ Verdict courant : `production_not_ready`.
 | Aucun envoi automatique | Couvert | Pas d'endpoint d'envoi ; actions de copie seulement |
 | Do-not-contact hard gate | Couvert en socle | QC TS, worker offline, chargement direct `scout_do_not_contact` côté worker, trigger DB, action DNC, blocage outcome négatif |
 | Feedback loop influente | Partiel | Effet scoring/message/blocage/angle prouvé par tests locaux TS + worker provider et compteurs `feedback_memory_effects` ; scénario `feedback:evidence` reproductible pour Supabase avec Learning 3-5 apprentissages ; pas encore exécuté avec secrets ni prouvé sur run marché à volume |
-| Actions UI fonctionnelles | Partiel | API actions + traces + feedback/outcomes + centre à valider, smoke Playwright + Browser intégré passés en mode local ; persistance réelle dépend encore de l'env Supabase |
+| Actions UI fonctionnelles | Partiel | API actions + traces + feedback/outcomes + centre à valider + décisions avancées + 6 routines P0 lançables, smoke Playwright/Browser repassés ; persistance réelle dépend encore de l'env Supabase |
 | Run steps/tool calls auditables | Partiel | RPC écrit run start/lead saved/worker steps ; provider + function tools Agents SDK poussent des étapes compactées ; scripts `worker:real:*` produisent les artefacts readiness |
 | Supabase mémoire | Partiel | Schéma/RPC/actions, env runtime non vérifiée ici |
 | RLS / sécurité interne | Partiel | Policies Supabase restreintes par `app_metadata`, service role serveur, advisor sécurité à 0 lint ; Auth SSR UI/API branchée, claims réels Romu/Arthur encore à poser et vérifier dans Supabase |
@@ -33,7 +33,7 @@ Verdict courant : `production_not_ready`.
 - P0.2 Volumes : les objectifs `coreWeeklyTarget`, `explorationScanTarget` et `explorationShortlistTarget` sont propagés au worker ; `quality:readiness` bloque un artefact réel qui ne prouve pas Core >= 15 scannés et Exploration >= 100 scannés.
 - P0.4 Do-not-contact : gate déterministe ajouté côté TS, worker offline et DB.
 - P0.5 Feedback loop : mémoire locale causale ajoutée côté TS et worker provider pour rejet, pénalité secteur, bonus angle, anti-générique et DNC ; le worker lit maintenant feedbacks, outcomes et DNC Supabase, agrège les impacts feedback dans les run steps, et un script `feedback:evidence` seed la mémoire avant run persisté puis exige une synthèse Learning exploitable.
-- P0.6 Actions UI : actions principales, feedbacks Romu, outcomes, copie, DNC et routines branchées à une API serveur et tracées.
+- P0.6 Actions UI : actions principales, décisions avancées, feedbacks Romu, outcomes, copie, DNC, QC et routines branchées à une API serveur et tracées.
 - P0.7 Observé/Inféré/Incertain : contrat TS + worker Pydantic + DB/RPC ajoutés.
 - P1.6 RLS/sécurité : policies `authenticated` resserrées, fonctions RPC security definer non publiques, advisors sécurité repassés à 0 lint.
 - P1.6 Auth interne : page login, callback/logout, proxy cookie Supabase et garde API ajoutés ; les décisions d'accès ignorent `user_metadata`.

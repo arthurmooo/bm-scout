@@ -38,7 +38,9 @@ export type LeadActionType =
   | "launch_core"
   | "launch_exploration"
   | "launch_daily_brief"
-  | "launch_learning_review";
+  | "launch_learning_review"
+  | "launch_dnc_check"
+  | "launch_followup_review";
 
 export interface Evidence {
   id?: string;

@@ -67,7 +67,9 @@ const ACTION_LABELS: Record<LeadActionType, string> = {
   launch_core: "Routine Core mise en file.",
   launch_exploration: "Routine Exploration mise en file.",
   launch_daily_brief: "Daily Brief mis en file.",
-  launch_learning_review: "Learning Review mise en file."
+  launch_learning_review: "Learning Review mise en file.",
+  launch_dnc_check: "Contrôle do-not-contact mis en file.",
+  launch_followup_review: "Revue relances mise en file."
 };
 
 const FEEDBACK_ACTIONS: Partial<Record<LeadActionType, FeedbackActionEffect>> = {
@@ -430,7 +432,14 @@ async function checked<T extends { error: { message: string } | null }>(request:
 }
 
 function requiresLead(action: LeadActionType): boolean {
-  return !["launch_core", "launch_exploration", "launch_daily_brief", "launch_learning_review"].includes(action);
+  return ![
+    "launch_core",
+    "launch_exploration",
+    "launch_daily_brief",
+    "launch_learning_review",
+    "launch_dnc_check",
+    "launch_followup_review"
+  ].includes(action);
 }
 
 function failure(message: string): ScoutActionResult {

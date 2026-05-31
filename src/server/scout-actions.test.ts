@@ -42,7 +42,37 @@ describe("scout actions", () => {
     const result = await recordScoutAction({ action: "launch_core" });
 
     expect(result.ok).toBe(true);
-    expect(calls.some((call) => call.table === "scout_agent_tasks" && call.op === "insert")).toBe(true);
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        table: "scout_agent_tasks",
+        op: "insert",
+        payload: expect.objectContaining({ type: "weekly_core_research", status: "queued" })
+      })
+    );
+  });
+
+  it("met les routines DNC et relances en file sans lead", async () => {
+    reset();
+
+    const dnc = await recordScoutAction({ action: "launch_dnc_check" });
+    const followup = await recordScoutAction({ action: "launch_followup_review" });
+
+    expect(dnc.ok).toBe(true);
+    expect(followup.ok).toBe(true);
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        table: "scout_agent_tasks",
+        op: "insert",
+        payload: expect.objectContaining({ type: "dnc_check", status: "queued" })
+      })
+    );
+    expect(calls).toContainEqual(
+      expect.objectContaining({
+        table: "scout_agent_tasks",
+        op: "insert",
+        payload: expect.objectContaining({ type: "followup_review", status: "queued" })
+      })
+    );
   });
 
   it("ajoute un do-not-contact et bloque le lead", async () => {

@@ -90,6 +90,13 @@ describe("supabase security posture", () => {
     expect(migration).toContain("create trigger scout_outcomes_block_messages");
     expect(migration).toContain("set status = 'blocked'");
   });
+
+  it("autorise les actions manuelles pour les routines DNC et relances", () => {
+    const migration = readMigration("scout_manual_dnc_followup_routines");
+
+    expect(migration).toContain("alter type public.scout_action_type add value if not exists 'launch_dnc_check'");
+    expect(migration).toContain("alter type public.scout_action_type add value if not exists 'launch_followup_review'");
+  });
 });
 
 function readMigration(name: string): string {

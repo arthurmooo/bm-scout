@@ -33,7 +33,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Migration Supabase `20260530232128_restrict_internal_rls_policies.sql` : suppression des policies `using (true)` et restriction aux rôles internes `app_metadata`.
 - Migration Supabase `20260530232456_close_security_definer_rpc_exposure.sql` : fermeture des fonctions `SECURITY DEFINER` exposées en RPC publique.
 - API `POST /api/scout/actions`.
-- Actions UI : valider, enrichir, rejeter, copier email/relance/LinkedIn, DNC, lancer routines.
+- Actions UI : valider, surveiller, enrichir, rejeter, exclure, relancer QC, copier email/relance/LinkedIn, marquer utilisé, DNC, outcomes et lancer les 6 routines P0.
 - Actions feedback/outcome : bon lead, mauvais lead, bon angle, message trop générique, RDV pris, positif/négatif, mauvais timing, mauvais interlocuteur, douleur confirmée/non confirmée. Ces actions écrivent `scout_feedback` ou `scout_outcomes`, pas seulement `scout_action_events`.
 - Triggers DB `scout_prevent_dnc_message` et `scout_messages_prevent_blocking_outcome` pour empêcher un message non bloqué sur une cible DNC ou un outcome négatif ; un outcome négatif bloque aussi les messages existants.
 - QC TS : DNC déterministe et Observé relié à une preuve.
@@ -85,7 +85,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 ## Vérifications exécutées
 
-- `npm run test` : 79 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/outcome négatif/email incertain bloquée, indexes FK Supabase, index anti-doublon, policy Auth BM Scout, actions Romu, provider runtime des preuves et scénario `feedback:evidence`.
+- `npm run test` : 81 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/outcome négatif/email incertain bloquée, routines DNC/followup lançables, indexes FK Supabase, index anti-doublon, policy Auth BM Scout, actions Romu, provider runtime des preuves et scénario `feedback:evidence`.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.
@@ -102,7 +102,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - `npm run agent:tasks` sans env serveur : fail attendu avec message env Supabase requis.
 - `npm exec tsx -- scripts/run-agent-worker-evidence.ts --offline --mode=core` : pass, artefact `latest-offline-core.json` écrit.
 - `npm run test:e2e` : pass, 2 scénarios Playwright ; le smoke force `BM_SCOUT_AUTH_MODE=demo`, vérifie dashboard/actions et page login interne.
-- Browser intégré : pass sur `http://127.0.0.1:3030` ; login interne visible, dashboard `production_not_ready` visible, clic feedback `Bon lead` passe en état `Erreur` attendu sans env Supabase serveur.
+- Browser intégré : pass sur `http://localhost:3000` ; dashboard `production_not_ready` visible, routines `Contrôle DNC` et `Relances` visibles, 0 erreur console.
 - `npm audit --omit=dev` : fail modéré connu via `next -> postcss <8.5.10`; `npm audit fix --force` propose un downgrade Next cassant vers 9.x, donc non appliqué dans cette passe.
 - Supabase interne `Interne_Agentic_prospection` : migrations `agent_tasks_and_actions`, `bm_scout_structured_insights_email_confidence_steps`, `scout_feedback_outcome_actions`, `restrict_internal_rls_policies`, `close_security_definer_rpc_exposure` et `block_messages_after_negative_outcome` appliquées.
 - Supabase interne : triggers `scout_messages_prevent_blocking_outcome` et `scout_outcomes_block_messages` vérifiés en base via MCP ; advisor sécurité à 0 lint après application.
