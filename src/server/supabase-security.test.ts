@@ -113,6 +113,27 @@ describe("supabase security posture", () => {
     expect(migration).not.toContain("security definer");
   });
 
+  it("rend les cibles do-not-contact uniques cote base par scope", () => {
+    const migration = readMigration("scout_dnc_scope_uniqueness");
+
+    expect(migration).toContain("row_number() over (partition by company_id");
+    expect(migration).toContain("row_number() over (partition by normalized_domain");
+    expect(migration).toContain("row_number() over (partition by contact_id");
+    expect(migration).toContain("row_number() over (partition by normalized_email_hash");
+    expect(migration).toContain("duplicate.duplicate_rank > 1");
+    for (const indexName of [
+      "scout_dnc_company_unique",
+      "scout_dnc_domain_unique",
+      "scout_dnc_contact_unique",
+      "scout_dnc_contact_email_hash_unique"
+    ]) {
+      expect(migration).toContain(`create unique index if not exists ${indexName}`);
+    }
+    expect(migration).toContain("where scope = 'company'::public.scout_dnc_scope");
+    expect(migration).toContain("where scope = 'domain'::public.scout_dnc_scope");
+    expect(migration).toContain("where scope = 'contact'::public.scout_dnc_scope");
+  });
+
   it("autorise les actions manuelles pour les routines DNC et relances", () => {
     const migration = readMigration("scout_manual_dnc_followup_routines");
 

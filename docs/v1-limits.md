@@ -19,15 +19,16 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 - La feedback memory modifie bien scoring/message/blocage/angle en local côté TS et worker Python ; les feedbacks/outcomes/DNC Supabase chargent maintenant le contexte entreprise/segment/site/domaine/hash email, le provider émet des compteurs `feedback_memory_effects`, et `feedback:evidence` prépare une preuve Supabase contrôlée avec synthèse Learning vérifiée. Cette preuve porte `BM_SCOUT_EVIDENCE_PURPOSE=feedback_loop` et ne remplace pas les runs marché à volume.
 - Les agents produisent des sorties structurees, mais la qualite commerciale finale reste a valider par Romu.
 - Les recherches SerpAPI/OpenAI web/fallback public restent dependantes de la disponibilite des sources, des coûts, des rate limits et de la qualité des requêtes.
-- OpenAI `web_search` est branché et testé sur Core et Exploration. Dernier smoke provider réel : `15/15` comptes Core et `100/100` comptes Exploration découverts avec shortlist bornée.
+- OpenAI `web_search` est branché et testé sur Core et Exploration. Des artefacts précédents prouvent `15/15` comptes Core et `100/100` comptes Exploration découverts avec shortlist bornée, mais `quality:readiness` les refuse tant qu'ils ne portent pas la révision courante.
 - `provider:compare` mesure la couverture des providers, mais ne remplace pas un run Agents SDK persisté ni une validation commerciale Romu.
-- Les volumes PRD 15 Core / 100 Exploration sont prouvés côté comparaison provider OpenAI web, pas encore comme routine persistée Supabase/cron.
+- Les volumes PRD 15 Core / 100 Exploration doivent être reprouvés côté comparaison provider OpenAI web ou SerpAPI sur la révision courante, puis comme routine persistée Supabase/cron.
 - Les tâches Core/Exploration transmettent maintenant leurs objectifs au worker Python, et le runner comme `quality:readiness` refusent les artefacts réels persistés dont `scanned_count` reste sous 15/100 ou dont la persistance Supabase n'est pas prouvée par `persist_complete`.
 - Les runs `configured`/`BM_SCOUT_REAL_SEEDS` ne comptent pas comme preuve de recherche marché dans `quality:readiness`; ils servent uniquement aux scénarios contrôlés comme la feedback loop.
 
 ## Limites data
 
 - Supabase stocke runs, companies, contacts, preuves, scores, fiches, messages, feedbacks, outcomes, do-not-contact, lessons, email confidence, insights structurés et run steps.
+- Les migrations les plus récentes interdisent `approved` sur `scout_messages` et rendent les entrées do-not-contact uniques par company/domain/contact/email hash. Elles sont versionnées dans le repo, mais doivent encore être appliquées au projet Supabase interne après reconnexion MCP ou pipeline de migration.
 - Le worker ne fabrique pas d'email : nominatif public sourcé = `usable/high`, générique public = `verify/medium`, pattern observé = `verify/low`, absence ou no-reply = `not_usable`.
 - Le provider réel court-circuite les domaines/companies DNC ou déjà rejetés avant fetch et les contacts/email hashes DNC ou liés à un outcome négatif avant génération d'outreach ; les preuves `dnc_pre_generation_gate` et `feedback_reject_pre_generation_gate` restent à relire dans les artefacts réels persistés avant claim V1.
 - Les feedbacks/outcomes Romu et les entrées do-not-contact sont persistés par l'API serveur et relus par le worker. Les outcomes neutres restent neutres dans la mémoire, mais l'effet à volume doit encore être démontré par runs réels persistés avec compteurs d'impact non nuls.
@@ -43,6 +44,7 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 - La V1 prepare seulement des messages en copier-coller manuel.
 - Les statuts do-not-contact, opposition et negative outcome sont presents.
 - Le DNC et l'outcome négatif sont maintenant bloqués par QC/mémoire TS, worker offline, triggers DB sur messages, blocage DB des messages existants et gate serveur avant copie presse-papiers.
+- Le statut `approved` n'est plus un état V1 acceptable : un message peut être proposé, copié ou marqué `used_manually`, mais jamais approuvé/envoyé automatiquement par BM Scout.
 - Une action DNC Romu écrit les scopes company/domain/contact disponibles, mais ne remplace pas encore un centre de gestion DNC granulaire par personne avec interface dédiée.
 - Les copies email/relance et le marquage "message utilisé" sont bloqués si l'email contact est `verify` ou `not_usable`; LinkedIn seul reste copiable si le DNC/QC passe.
 - Les copies et marquages `used_manually` sont bornés aux IDs de messages validés côté serveur. Le client copie le texte relu et autorisé par le serveur, tandis que les traces d'action conservent seulement les IDs/canaux. Cela évite de marquer des anciens brouillons historiques comme copiés ou utilisés, de copier une version locale périmée et de créer un statut d'envoi.
@@ -69,6 +71,7 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 - `artifacts/provider-comparison/latest-comparison.json` recommande un provider réel couvrant Core et Exploration à volume configuré/PRD, avec métadonnées runtime et révision code courante.
 - `npm run verify:supabase` passe avec l'env serveur.
 - `artifacts/supabase-runtime/latest-verify.json` est produit par `verify:supabase`, porte la révision courante, n'est pas `-dirty`, prouve les actions Romu persistées, prouve au moins une action reliée à une tâche agentique par `task_id`, et prouve la fusion RPC par domaine avec priorité Core et cleanup à zéro.
+- Les migrations `scout_messages_no_approved_state` et `scout_dnc_scope_uniqueness` sont appliquées sur la base distante avant tout claim pilote.
 - `--persist` cree un run lisible en Supabase via la RPC.
 - Un run reel Agents SDK utilise les feedbacks/outcomes/DNC Supabase, écrit des artefacts avec `feedback_memory_source=supabase`, `dnc_pre_generation_gate`, `feedback_reject_pre_generation_gate`, des compteurs `feedback_memory_effects` non nuls, des métadonnées runtime complètes, une révision code courante, et modifie les recommandations learning. Pour les volumes Core/Exploration, le provider runtime doit être `openai_web`, `serpapi` ou `web`, pas `configured`.
 - `npm run quality:readiness` passe.
