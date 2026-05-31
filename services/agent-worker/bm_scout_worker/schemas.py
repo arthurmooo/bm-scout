@@ -14,6 +14,7 @@ FeedbackKind = Literal[
     "good_angle",
     "positive_outcome",
     "negative_outcome",
+    "neutral_outcome",
     "do_not_contact",
 ]
 
@@ -25,12 +26,28 @@ class Evidence(BaseModel):
     reliability: Literal["high", "medium", "low"] = "medium"
 
 
+class ObservedInsight(BaseModel):
+    text: str
+    evidence_id: str
+
+
+class StructuredInsights(BaseModel):
+    observed: list[ObservedInsight] = Field(default_factory=list)
+    inferred: list[str] = Field(default_factory=list)
+    uncertain: list[str] = Field(default_factory=list)
+
+
 class Persona(BaseModel):
     name: str | None = None
     role: str
     reason: str
     contact_confidence: Literal["confirmed", "role_only", "uncertain"] = "role_only"
     do_not_contact: bool = False
+    email: str | None = None
+    email_type: Literal["public_named", "generic", "probable_pattern", "unknown"] = "unknown"
+    email_source_url: str | None = None
+    email_confidence: Literal["high", "medium", "low"] = "low"
+    email_status: Literal["usable", "verify", "not_usable"] = "not_usable"
 
 
 class OutreachPack(BaseModel):
@@ -61,6 +78,7 @@ class ScoutLead(BaseModel):
     deep_card: str
     personas: list[Persona]
     evidence: list[Evidence]
+    insights: StructuredInsights | None = None
     outreach: OutreachPack
     quality_gates: list[QualityGate]
     next_action: str
@@ -81,6 +99,19 @@ class FeedbackEvent(BaseModel):
     kind: FeedbackKind
     note: str
     created_at: str
+    company_name: str | None = None
+    segment: str | None = None
+    website: str | None = None
+    normalized_domain: str | None = None
+    normalized_email_hash: str | None = None
+    contact_id: str | None = None
+
+
+class RunStep(BaseModel):
+    agent_name: str
+    step: str
+    event_type: str
+    payload: dict[str, object] = Field(default_factory=dict)
 
 
 class MissionOutput(BaseModel):
@@ -93,5 +124,23 @@ class MissionOutput(BaseModel):
     leads: list[ScoutLead]
     rejected: list[ScoutLead]
     lessons: list[LearningLesson]
+    run_steps: list[RunStep] = Field(default_factory=list)
     final_decision: Literal["ready", "not_ready"]
     qualitative_report: str
+
+
+class MissionAgentOutput(BaseModel):
+    run_id: str
+    mode: ScoutMode
+    trace_id: str
+    scanned_count: int = Field(ge=0)
+    kept_count: int = Field(ge=0)
+    rejected_count: int = Field(ge=0)
+    leads: list[ScoutLead]
+    rejected: list[ScoutLead]
+    lessons: list[LearningLesson]
+    final_decision: Literal["ready", "not_ready"]
+    qualitative_report: str
+
+    def to_mission_output(self) -> MissionOutput:
+        return MissionOutput(**self.model_dump(), run_steps=[])

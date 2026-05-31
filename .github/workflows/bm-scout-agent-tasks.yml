@@ -1,0 +1,73 @@
+name: BM Scout agent tasks
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Queue mode"
+        required: true
+        default: "real"
+        type: choice
+        options:
+          - real
+          - offline
+  schedule:
+    - cron: "30 12 * * 1-5"
+
+jobs:
+  consume-agent-tasks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: ${{ vars.OPENAI_MODEL || 'gpt-4.1-mini' }}
+      OPENAI_SEARCH_MODEL: ${{ vars.OPENAI_SEARCH_MODEL || vars.OPENAI_MODEL || 'gpt-4.1-mini' }}
+      BM_SCOUT_PROVIDER: ${{ vars.BM_SCOUT_PROVIDER || 'auto' }}
+      BM_SCOUT_SEARCH_QUERIES: ${{ vars.BM_SCOUT_SEARCH_QUERIES }}
+      BM_SCOUT_REAL_SEEDS: ${{ vars.BM_SCOUT_REAL_SEEDS }}
+      BM_SCOUT_WORKER_TIMEOUT_MS: ${{ vars.BM_SCOUT_WORKER_TIMEOUT_MS || '900000' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - run: python -m venv .venv
+      - run: .venv/bin/python -m pip install -e "services/agent-worker[dev]"
+      - name: OpenAI runtime preflight
+        id: openai_preflight
+        shell: bash
+        run: |
+          set +e
+          npm run openai:preflight
+          if node -e "const fs=require('fs'); const p='artifacts/openai-runtime/latest-preflight.json'; process.exit(fs.existsSync(p) && JSON.parse(fs.readFileSync(p,'utf8')).status === 'pass' ? 0 : 1)"; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run cron and write readiness evidence
+        run: |
+          MODE="real"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.mode }}" = "offline" ]; then
+            MODE="offline"
+          fi
+          if [ "$MODE" = "real" ] && [ "${{ steps.openai_preflight.outputs.available }}" != "true" ]; then
+            npm run agent:tasks:openai-blocker
+            exit 0
+          fi
+          npm run agent:cron:evidence -- --mode="$MODE" --limit=10 --stale-minutes=90
+      - name: Upload cron evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bm-scout-agent-task-evidence
+          path: |
+            artifacts/agent-tasks/*.json
+            artifacts/openai-runtime/*.json
+          if-no-files-found: warn

@@ -1,0 +1,171 @@
+import type { OpenAiPreflightArtifact } from "./openai-preflight";
+import { analyzeRunnerSteps, codeRevisionMatchesCurrent, type RunnerRuntimeEvidence, type RunnerStepEvidence } from "./readiness-evidence";
+
+export interface FeedbackLoopScenarioCompany {
+  externalId: string;
+  name: string;
+  website: string;
+  segment: string;
+  feedbacks: Array<{ kind: "good_lead" | "bad_lead" | "generic_message" | "good_angle" | "do_not_contact"; note: string }>;
+  outcomes?: Array<{ outcome: "interested" | "not_now" | "not_relevant" | "meeting_booked" | "negative" | "no_response"; note: string }>;
+  doNotContactReason?: string;
+}
+
+export interface FeedbackLoopEvidenceAnalysis {
+  status: "pass" | "fail";
+  blockers: string[];
+  runtime: RunnerRuntimeEvidence;
+}
+
+export interface FeedbackLoopLesson {
+  lesson?: string;
+  recommendation?: string;
+  source?: string;
+}
+
+export const FEEDBACK_LOOP_SCENARIO_COMPANIES: FeedbackLoopScenarioCompany[] = [
+  {
+    externalId: "bm-feedback-proof-cambon",
+    name: "Cambon Partners",
+    website: "https://www.cambonpartners.com",
+    segment: "Conseil M&A",
+    feedbacks: [
+      {
+        kind: "good_lead",
+        note: "Feedback Romu : très bon lead Core, fort potentiel, bon secteur M&A."
+      },
+      {
+        kind: "good_angle",
+        note: "Feedback Romu : très bon angle deal-by-deal, documents et reporting."
+      },
+      {
+        kind: "generic_message",
+        note: "Feedback Romu : message trop générique, repartir d'un signal observé précis."
+      }
+    ]
+  },
+  {
+    externalId: "bm-feedback-proof-inextenso",
+    name: "In Extenso",
+    website: "https://www.inextenso.fr",
+    segment: "Expertise comptable",
+    feedbacks: [
+      {
+        kind: "bad_lead",
+        note: "Feedback Romu : mauvais lead pour cette semaine, douleur faible et mauvais secteur prioritaire."
+      }
+    ],
+    outcomes: [
+      {
+        outcome: "negative",
+        note: "Outcome Romu : réponse négative, ne pas remettre ce compte sans preuve nouvelle."
+      }
+    ]
+  },
+  {
+    externalId: "bm-feedback-proof-lefebvre-dalloz",
+    name: "Lefebvre Dalloz Compétences",
+    website: "https://formation.lefebvre-dalloz.fr",
+    segment: "Formation B2B",
+    feedbacks: [
+      {
+        kind: "do_not_contact",
+        note: "Feedback Romu : do-not-contact actif pour ce compte."
+      }
+    ],
+    doNotContactReason: "Preuve feedback loop BM Scout : do-not-contact actif, aucune relance autorisée."
+  }
+];
+
+export function feedbackLoopScenarioSeeds(companies = FEEDBACK_LOOP_SCENARIO_COMPANIES) {
+  return companies.map((company) => ({
+    company: company.name,
+    website: company.website,
+    segment: company.segment,
+    region: "fr"
+  }));
+}
+
+export function feedbackLoopWorkerEnv(companies = FEEDBACK_LOOP_SCENARIO_COMPANIES): Record<string, string> {
+  return {
+    BM_SCOUT_PROVIDER: "configured",
+    BM_SCOUT_EVIDENCE_PURPOSE: "feedback_loop",
+    BM_SCOUT_REAL_SEEDS: JSON.stringify(feedbackLoopScenarioSeeds(companies)),
+    BM_SCOUT_FETCH_TIMEOUT_SECONDS: process.env.BM_SCOUT_FETCH_TIMEOUT_SECONDS ?? "8",
+    BM_SCOUT_AGENT_MAX_TURNS: process.env.BM_SCOUT_AGENT_MAX_TURNS ?? "6"
+  };
+}
+
+export function analyzeFeedbackLoopEvidence(
+  steps: RunnerStepEvidence[],
+  currentCodeRevision: string,
+  lessons: FeedbackLoopLesson[] = []
+): FeedbackLoopEvidenceAnalysis {
+  const runtime = analyzeRunnerSteps(steps, currentCodeRevision);
+  const blockers = [
+    ...(runtime.source !== "supabase" ? ["Mémoire feedback non chargée depuis Supabase."] : []),
+    ...(runtime.feedbackEventCount < 3 ? ["Moins de 3 feedbacks/outcomes Supabase chargés."] : []),
+    ...(runtime.doNotContactEventCount < 1 ? ["Aucun do-not-contact Supabase chargé."] : []),
+    ...(runtime.feedbackImpactCount < 1 ? ["Aucun impact feedback structuré mesuré."] : []),
+    ...(runtime.doNotContactEventCount > 0 && runtime.dncPreGenerationBlockedCount < 1
+      ? ["Do-not-contact chargé sans preuve `dnc_pre_generation_gate` avant génération d'outreach."]
+      : []),
+    ...(runtime.feedbackPreGenerationRejectedCount < 1
+      ? ["Feedback négatif chargé sans preuve `feedback_reject_pre_generation_gate` avant génération d'outreach."]
+      : []),
+    ...(!runtime.persistComplete ? ["Run non persisté via Supabase RPC."] : []),
+    ...(!runtime.runtimeMetadataComplete ? ["Métadonnées runtime incomplètes."] : []),
+    ...(!runtime.runtimeRevisionMatchesCurrent ? ["Révision runtime différente du code courant ou worktree dirty."] : []),
+    ...(!hasCausalFeedbackEffect(runtime) ? ["Aucun effet causal score/message/blocage/angle mesuré."] : []),
+    ...(!feedbackLoopLearningUsesFeedback(lessons)
+      ? ["Learning Agent sans synthèse 3-5 apprentissages exploitant feedback Romu et do-not-contact."]
+      : [])
+  ];
+  return {
+    status: blockers.length ? "fail" : "pass",
+    blockers,
+    runtime
+  };
+}
+
+export function feedbackLoopLearningUsesFeedback(lessons: FeedbackLoopLesson[]): boolean {
+  if (lessons.length < 3 || lessons.length > 5) return false;
+  const text = lessons
+    .flatMap((lesson) => [lesson.lesson, lesson.recommendation, lesson.source])
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return text.includes("feedback romu") && text.includes("do-not-contact");
+}
+
+export function feedbackLoopOpenAiPreflightBlockers(
+  payload: OpenAiPreflightArtifact,
+  currentCodeRevision: string
+): string[] {
+  if (payload.status === "pass") return [];
+  if (!codeRevisionMatchesCurrent(payload.code_revision, currentCodeRevision) && !sameHeadRevision(payload.code_revision, currentCodeRevision)) {
+    return [];
+  }
+  return payload.blockers.length
+    ? payload.blockers
+    : ["OpenAI preflight échoué sur la révision courante : feedback loop non lancée pour éviter une mutation Supabase inutile."];
+}
+
+function sameHeadRevision(left: string, right: string): boolean {
+  const cleanLeft = left.replace(/-dirty$/, "");
+  const cleanRight = right.replace(/-dirty$/, "");
+  if (!cleanLeft || !cleanRight || cleanLeft === "unknown" || cleanRight === "unknown") return false;
+  if (cleanLeft.length < 7 || cleanRight.length < 7) return false;
+  return cleanLeft.startsWith(cleanRight) || cleanRight.startsWith(cleanLeft);
+}
+
+function hasCausalFeedbackEffect(runtime: RunnerRuntimeEvidence): boolean {
+  return (
+    runtime.feedbackScoreChangedCount > 0 ||
+    runtime.feedbackBlockedCount > 0 ||
+    runtime.dncPreGenerationBlockedCount > 0 ||
+    runtime.feedbackPreGenerationRejectedCount > 0 ||
+    runtime.feedbackMessageRegeneratedCount > 0 ||
+    runtime.feedbackAngleReinforcedCount > 0
+  );
+}

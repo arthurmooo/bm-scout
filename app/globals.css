@@ -128,6 +128,41 @@ a {
   font-size: 14px;
 }
 
+.topbar-right {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  min-width: 0;
+}
+
+.logout-form {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.logout-form span {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.logout-form button {
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  min-height: 32px;
+  padding: 0 10px;
+  background: var(--surface);
+  color: var(--deep);
+  font-weight: 650;
+  cursor: pointer;
+}
+
 .status-dot {
   width: 9px;
   height: 9px;
@@ -144,6 +179,7 @@ a {
 .decision-area {
   padding: 32px;
   display: grid;
+  align-content: start;
   gap: 22px;
 }
 
@@ -247,10 +283,54 @@ a {
   text-transform: uppercase;
 }
 
+.contact-summary {
+  display: grid;
+  gap: 5px;
+}
+
+.contact-summary a,
+.contact-warning {
+  color: var(--gold);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.contact-warning {
+  color: var(--muted);
+}
+
 .action-row {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+}
+
+.feedback-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.secondary-actions {
+  margin-top: 10px;
+}
+
+.secondary-actions summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 720;
+}
+
+.secondary-action-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
 }
 
 .button {
@@ -269,10 +349,91 @@ a {
   cursor: pointer;
 }
 
+.button:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.button-state {
+  color: inherit;
+  font-size: 11px;
+  font-weight: 760;
+}
+
 .button.primary {
   border-color: var(--deep);
   background: var(--deep);
   color: white;
+}
+
+.button.compact {
+  min-height: 34px;
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.routine-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.deep-card {
+  margin-top: 14px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.deep-card summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--deep);
+  cursor: pointer;
+  font-weight: 720;
+}
+
+.deep-card p {
+  margin: 10px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.insights-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.insight-column {
+  border-left: 2px solid var(--line);
+  padding-left: 10px;
+}
+
+.insight-column strong {
+  color: var(--deep);
+  font-size: 13px;
+}
+
+.insight-item p {
+  margin: 7px 0 0;
+  font-size: 13px;
+  line-height: 1.42;
+}
+
+.insight-item a,
+.insight-item span {
+  display: inline-block;
+  margin-top: 5px;
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: 0;
+}
+
+.insight-item.missing-source span {
+  color: var(--red);
 }
 
 .button.danger {
@@ -328,15 +489,90 @@ a {
 }
 
 .proof-list,
-.learning-list {
+.learning-list,
+.brief-list,
+.approval-list,
+.task-list {
   display: grid;
   gap: 12px;
 }
 
 .proof,
-.lesson {
+.lesson,
+.brief-group,
+.approval-row,
+.task-row {
   border-bottom: 1px solid var(--line);
   padding-bottom: 12px;
+}
+
+.brief-group strong,
+.task-row strong {
+  color: var(--deep);
+  font-size: 14px;
+}
+
+.brief-group p,
+.task-row p {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.42;
+}
+
+.task-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.approval-row {
+  display: grid;
+  gap: 10px;
+}
+
+.approval-row.danger {
+  border-color: rgba(128, 42, 48, 0.24);
+}
+
+.approval-kind {
+  display: block;
+  color: var(--gold);
+  font-size: 11px;
+  font-weight: 760;
+  letter-spacing: 0;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.approval-row strong {
+  color: var(--deep);
+  font-size: 14px;
+}
+
+.approval-row p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.approval-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.task-row span {
+  color: var(--gold);
+  font-weight: 760;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.task-row.blocked span,
+.task-row.failed span {
+  color: var(--red);
 }
 
 .proof a {
@@ -385,6 +621,94 @@ a {
   font-size: 13px;
 }
 
+.auth-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg);
+}
+
+.auth-card {
+  width: min(100%, 440px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-strong);
+  padding: 30px;
+  box-shadow: 0 18px 42px rgba(42, 16, 83, 0.07);
+  display: grid;
+  gap: 18px;
+}
+
+.auth-kicker {
+  margin: 0 0 8px;
+  color: var(--gold);
+  font-size: 13px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.auth-card h1 {
+  margin: 0;
+  color: var(--deep);
+  font-size: 28px;
+  line-height: 1.1;
+}
+
+.auth-copy {
+  margin: 10px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.auth-form {
+  display: grid;
+  gap: 10px;
+}
+
+.auth-form label {
+  color: var(--deep);
+  font-size: 13px;
+  font-weight: 720;
+}
+
+.auth-form input {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  min-height: 44px;
+  padding: 0 12px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.auth-status,
+.auth-error {
+  margin: 0;
+  border-radius: 7px;
+  padding: 12px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.auth-status {
+  border: 1px solid #d7eadf;
+  background: #f5fbf7;
+  color: #17633f;
+}
+
+.auth-error {
+  border: 1px solid #f0d4d1;
+  background: #fff8f7;
+  color: var(--red);
+}
+
+.auth-link {
+  color: var(--deep);
+  font-weight: 720;
+  font-size: 14px;
+}
+
 @media (max-width: 980px) {
   .app-shell {
     grid-template-columns: 1fr;
@@ -427,6 +751,16 @@ a {
     font-size: 13px;
     line-height: 1.25;
     text-align: right;
+  }
+
+  .topbar-right {
+    align-items: flex-end;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .logout-form span {
+    max-width: 170px;
   }
 
   .decision-area,
@@ -504,6 +838,21 @@ a {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
+  }
+
+  .feedback-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .secondary-action-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .insights-grid {
+    grid-template-columns: 1fr;
   }
 
   .button {

@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import os
+import sys
+import time
+from datetime import UTC, datetime
 from pathlib import Path
 
-from .fixtures import candidate_leads, offline_output, seed_feedbacks
+from .agents import agent_hosted_web_search_enabled
+from .fixtures import offline_output, seed_feedbacks
 from .memory import SupabaseConfig, SupabaseMemory
-from .schemas import FeedbackEvent, MissionOutput, ScoutMode
+from .providers import build_candidate_batch_with_steps
+from .runtime import code_revision, package_version
+from .runtime_env import load_local_env_files
+from .schemas import FeedbackEvent, MissionAgentOutput, MissionOutput, QualityGate, RunStep, ScoutLead, ScoutMode
 
 
 async def run_bm_scout_mission(
@@ -16,18 +23,56 @@ async def run_bm_scout_mission(
     persist: bool = False,
     artifacts_dir: Path | None = None,
 ) -> MissionOutput:
+    load_local_env_files()
+    started_at = datetime.now(UTC)
+    started_perf = time.perf_counter()
     config = SupabaseConfig.from_env()
     memory = SupabaseMemory(config) if config else None
+    feedbacks: list[FeedbackEvent] = []
+    memory_source = "offline_fixture"
 
     if real:
-        feedbacks = memory.load_feedback_events() if memory else seed_feedbacks()
+        if memory:
+            feedbacks = memory.load_feedback_events()
+            memory_source = "supabase"
+        else:
+            feedbacks = seed_feedbacks()
+            memory_source = "seed"
         output = await _run_with_agents_sdk(mode, include_weak=include_weak, feedbacks=feedbacks)
     else:
         output = offline_output(mode, include_weak=include_weak)
 
+    normalize_rejected_outputs(output)
+    output.run_steps = [
+        RunStep(
+            agent_name="bm_scout_worker",
+            step="runner_complete",
+            event_type="offline_run" if not real else "agents_sdk_run",
+            payload={
+                "mode": mode,
+                "include_weak": include_weak,
+                "persist_requested": persist,
+                "feedback_memory_loaded": bool(feedbacks),
+                "feedback_memory_source": memory_source,
+                "feedback_event_count": len(feedbacks),
+                "do_not_contact_event_count": sum(1 for feedback in feedbacks if feedback.kind == "do_not_contact"),
+                **runtime_metadata(started_at, started_perf, real=real),
+            },
+        ),
+        *output.run_steps,
+    ]
+
     if persist:
         if memory is None:
             raise RuntimeError("Persistance demandée mais SUPABASE_URL/NEXT_PUBLIC_SUPABASE_URL ou SUPABASE_SERVICE_ROLE_KEY manque.")
+        output.run_steps.append(
+            RunStep(
+                agent_name="bm_scout_worker",
+                step="persist_complete",
+                event_type="supabase_persist",
+                payload={"mode": mode, "trace_id": output.trace_id, "run_id": output.run_id},
+            )
+        )
         memory.persist_output(output)
 
     if artifacts_dir:
@@ -44,11 +89,31 @@ async def _run_with_agents_sdk(mode: ScoutMode, *, include_weak: bool, feedbacks
     from agents import Runner, trace
 
     from .agents import build_manager_agent
+    from .tool_recorder import capture_tool_calls
 
-    model = os.getenv("OPENAI_MODEL", "gpt-5.5")
-    manager = build_manager_agent(model)
+    model = os.getenv("OPENAI_MODEL", "gpt-4.1-mini")
+    hosted_web_search_enabled = agent_hosted_web_search_enabled()
+    manager = build_manager_agent(model, hosted_web_search_enabled=hosted_web_search_enabled)
+    candidate_batch = build_candidate_batch_with_steps(
+        mode,
+        include_weak=include_weak,
+        feedback_notes=[feedback.note for feedback in feedbacks],
+        feedback_events=feedbacks,
+    )
+    candidates = candidate_batch.leads
+    provider_step = RunStep(
+        agent_name="bm_scout_provider",
+        step="candidate_batch",
+        event_type="tool_call",
+        payload={
+            "mode": mode,
+            "candidate_count": len(candidates),
+            "feedback_count": len(feedbacks),
+            "agent_hosted_web_search_enabled": hosted_web_search_enabled,
+        },
+    )
     candidates_json = "[" + ",".join(
-        lead.model_dump_json() for lead in candidate_leads(mode, include_weak=include_weak)
+        lead.model_dump_json() for lead in candidates
     ) + "]"
     feedback_json = "[" + ",".join(feedback.model_dump_json() for feedback in feedbacks) + "]"
     prompt = f"""
@@ -56,7 +121,7 @@ Mission BM Scout V1.
 Mode: {mode}
 Inclure cas faibles pour QC négatif: {include_weak}
 
-Batch structuré à analyser. Tu dois partir de ces données, les vérifier qualitativement, filtrer, enrichir la décision et produire un MissionOutput complet. Ne retourne jamais une liste vide si un compte passe les critères.
+Batch à analyser fourni par le provider BM Scout configuré. Tu dois partir de ces données, appeler les tools utiles si nécessaire, filtrer, enrichir la décision et produire un MissionOutput complet. Ne retourne jamais une liste vide si un compte passe les critères.
 
 Candidates JSON:
 {candidates_json}
@@ -72,15 +137,182 @@ Produis une mission complète conforme au PRD BM Scout :
 - décision finale prête/pas prête.
 
 Contraintes de sortie :
-- En Core, conserve au moins Cambon Partners si les preuves et le message passent.
+- En Core, conserve les candidats `quality_decision=pass` avec preuves publiques ; le meilleur candidat Core pass doit rester `verdict=validate`.
 - En Exploration, ne génère aucun message direct.
 - Pour chaque lead Exploration retenu, `outreach.cold_email`, `outreach.follow_up` et `outreach.linkedin` doivent commencer par `Brouillon bloqué`.
 - Tout contact non confirmé reste `role_only` ou `uncertain`.
+- Pour chaque `insights.observed[]`, `evidence_id` doit être exactement égal à une URL ou un label déjà présent dans `evidence`.
+- Produis toujours 3 à 5 `lessons`, même si elles sont prudentes et issues du QC, des exclusions ou des limites de sourcing.
 - Les textes doivent rester en français.
 """
-    with trace("BM Scout V1", metadata={"mode": mode, "include_weak": str(include_weak).lower()}):
-        result = await Runner.run(manager, prompt, max_turns=8)
+    with capture_tool_calls() as tool_steps:
+        with trace("BM Scout V1", metadata={"mode": mode, "include_weak": str(include_weak).lower()}):
+            result = await Runner.run(manager, prompt, max_turns=agent_max_turns())
     final_output = result.final_output
     if isinstance(final_output, MissionOutput):
-        return final_output
-    return MissionOutput.model_validate(final_output)
+        output = final_output
+    elif isinstance(final_output, MissionAgentOutput):
+        output = final_output.to_mission_output()
+    else:
+        output = MissionAgentOutput.model_validate(final_output).to_mission_output()
+    append_unselected_candidates_as_rejected(output, candidates)
+    output.scanned_count = derive_provider_scanned_count(candidate_batch.run_steps, fallback=len(candidates))
+    output.kept_count = len(output.leads)
+    output.rejected_count = len(output.rejected)
+    output.run_steps = [
+        provider_step,
+        *candidate_batch.run_steps,
+        *tool_steps,
+        agents_sdk_runner_step(
+            manager=manager,
+            mode=mode,
+            include_weak=include_weak,
+            model=model,
+            hosted_web_search_enabled=hosted_web_search_enabled,
+            candidate_count=len(candidates),
+            feedback_count=len(feedbacks),
+            tool_call_count=len(tool_steps),
+            final_output_type=type(final_output).__name__,
+            mission_trace_id=output.trace_id,
+        ),
+        *output.run_steps,
+    ]
+    normalize_rejected_outputs(output)
+    return output
+
+
+def agents_sdk_runner_step(
+    *,
+    manager: object,
+    mode: ScoutMode,
+    include_weak: bool,
+    model: str,
+    hosted_web_search_enabled: bool,
+    candidate_count: int,
+    feedback_count: int,
+    tool_call_count: int,
+    final_output_type: str,
+    mission_trace_id: str,
+) -> RunStep:
+    return RunStep(
+        agent_name=object_name(manager) or "BM Scout Manager",
+        step="agents_sdk_runner_complete",
+        event_type="agents_sdk_trace",
+        payload={
+            "trace_name": "BM Scout V1",
+            "trace_metadata": {"mode": mode, "include_weak": str(include_weak).lower()},
+            "mission_trace_id": mission_trace_id,
+            "runner": "Runner.run",
+            "model": model,
+            "max_turns": agent_max_turns(),
+            "manager_agent": object_name(manager),
+            "manager_tools": object_names(getattr(manager, "tools", [])),
+            "manager_handoffs": object_names(getattr(manager, "handoffs", [])),
+            "output_type": object_name(getattr(manager, "output_type", None)),
+            "final_output_type": final_output_type,
+            "hosted_web_search_enabled": hosted_web_search_enabled,
+            "candidate_count": candidate_count,
+            "feedback_count": feedback_count,
+            "captured_tool_call_count": tool_call_count,
+        },
+    )
+
+
+def object_names(items: object) -> list[str]:
+    try:
+        values = list(items)  # type: ignore[arg-type]
+    except TypeError:
+        return []
+    return [name for item in values if (name := object_name(item))]
+
+
+def object_name(value: object) -> str | None:
+    for attr in ("name", "tool_name", "agent_name", "__name__"):
+        name = getattr(value, attr, None)
+        if isinstance(name, str) and name:
+            return name
+    return None
+
+
+def append_unselected_candidates_as_rejected(output: MissionOutput, candidates: list[ScoutLead]) -> None:
+    selected_ids = {lead.id for lead in [*output.leads, *output.rejected]}
+    for candidate in candidates:
+        if candidate.id in selected_ids:
+            continue
+        rejected = candidate.model_copy(deep=True)
+        rejected.verdict = "reject"
+        rejected.quality_decision = "blocked"
+        rejected.rejection_reason = rejected.rejection_reason or "Candidat analysé puis écarté de la shortlist par BM Scout."
+        rejected.next_action = "Ne pas remonter à Romu sans nouveau signal public concret."
+        rejected.quality_gates = [
+            *rejected.quality_gates,
+            QualityGate(code="not_shortlisted", passed=False, reason=rejected.rejection_reason),
+        ]
+        output.rejected.append(rejected)
+        selected_ids.add(candidate.id)
+
+
+def normalize_rejected_outputs(output: MissionOutput) -> None:
+    for lead in output.rejected:
+        lead.verdict = "reject"
+        lead.quality_decision = "blocked"
+        if not lead.rejection_reason:
+            lead.rejection_reason = first_failed_gate_reason(lead) or "Compte écarté par BM Scout avant validation Romu."
+        if not any(not gate.passed for gate in lead.quality_gates):
+            lead.quality_gates.append(
+                QualityGate(
+                    code="rejected_shortlist",
+                    passed=False,
+                    reason=lead.rejection_reason,
+                )
+            )
+        if not lead.next_action:
+            lead.next_action = "Ne pas traiter sans nouvel enrichissement concret."
+    output.rejected_count = len(output.rejected)
+    output.kept_count = len(output.leads)
+
+
+def first_failed_gate_reason(lead: ScoutLead) -> str | None:
+    for gate in lead.quality_gates:
+        if not gate.passed and gate.reason:
+            return gate.reason
+    return None
+
+
+def derive_provider_scanned_count(run_steps: list[RunStep], *, fallback: int) -> int:
+    discovered_counts = [
+        int(step.payload["discovered_count"])
+        for step in run_steps
+        if step.step == "search_web" and isinstance(step.payload.get("discovered_count"), int)
+    ]
+    if discovered_counts:
+        return max(discovered_counts)
+    return fallback
+
+
+def agent_max_turns() -> int:
+    try:
+        value = int(os.getenv("BM_SCOUT_AGENT_MAX_TURNS", "6"))
+    except ValueError:
+        return 6
+    return max(3, min(value, 10))
+
+
+def runtime_metadata(started_at: datetime, started_perf: float, *, real: bool) -> dict[str, object]:
+    completed_at = datetime.now(UTC)
+    return {
+        "started_at": started_at.isoformat(),
+        "completed_at": completed_at.isoformat(),
+        "duration_ms": round((time.perf_counter() - started_perf) * 1000),
+        "real_mode": real,
+        "openai_model": os.getenv("OPENAI_MODEL", "gpt-4.1-mini") if real else None,
+        "openai_search_model": os.getenv("OPENAI_SEARCH_MODEL", os.getenv("OPENAI_MODEL", "gpt-4.1-mini")) if real else None,
+        "bm_scout_provider": os.getenv("BM_SCOUT_PROVIDER", "auto"),
+        "agent_hosted_web_search_enabled": agent_hosted_web_search_enabled() if real else False,
+        "agent_max_turns": agent_max_turns() if real else None,
+        "worker_timeout_ms": os.getenv("BM_SCOUT_WORKER_TIMEOUT_MS"),
+        "python_version": sys.version.split()[0],
+        "openai_agents_version": package_version("openai-agents"),
+        "openai_sdk_version": package_version("openai"),
+        "code_revision": code_revision(),
+    }

@@ -1,152 +1,140 @@
-# BM Scout V1 - Etat d'integration
+# BM Scout - Etat d'intégration
 
-Date : 2026-05-30
+Date : 2026-05-31
 
 ## Verdict PM actuel
 
-BM Scout V1 est pret pour une V1 interne pilotee par Romu.
+Statut : `production_not_ready`.
 
-La readiness ne signifie pas prospection autonome ni industrialisation de volume. Elle signifie que le scope PRD V1 est executable et verifie : console Romu, memoire Supabase, worker OpenAI Agents SDK, runs Core/Exploration, feedback learning, do-not-contact, QC negatif, rapport qualite et documentation de lancement.
+Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la démo en socle plus pilotable : tâches proactives, traces d'actions, DNC hard gate, feedback memory causale, Observé/Inféré/Incertain full-stack, auth interne SSR et dashboard moins fictif. Ce n'est pas encore un employé IA complet : des artefacts antérieurs prouvent que le provider OpenAI web peut atteindre les volumes PRD en smoke, mais ces preuves sont anciennes face au commit courant. Le cron production, la persistance Supabase réelle sur révision courante et la feedback loop runtime restent à prouver avec impact structuré.
 
-Preuves runtime ajoutees le 30 mai 2026 :
+## Décisions reprises de l'audit
 
-- `npm run verify:supabase` passe avec env serveur et lit Supabase ;
-- CLI `--persist` executee avec service role via RPC atomique ;
-- run reel Agents SDK Core + Supabase persist : `qc-candidates-json-romu-seed` ;
-- run reel Agents SDK Exploration + Supabase persist : `qc-exploration-candidates-user-provided` ;
-- Learning Agent utilise les feedbacks/outcomes Supabase et bloque le do-not-contact ;
-- `npm run quality:readiness` passe avec preuves runtime.
+- Ne plus assimiler fixtures et readiness produit.
+- Introduire `scout_agent_tasks` pour représenter le travail proactif attendu.
+- Tracer les actions Romu dans `scout_action_events`.
+- Remplacer la routine UI codée en dur par un brief construit depuis runs/tasks.
+- Mettre `quality:readiness` en échec tant que les preuves runtime réelles manquent.
+- Bloquer le DNC avant copie/message, pas seulement dans une table décorative.
+- Faire influencer le run suivant par les feedbacks Romu, pas seulement produire une synthèse ou enrichir un prompt.
+- Stocker Observé/Inféré/Incertain et les statuts d'email dans Supabase.
+- Ne plus exposer la console hors démo sans Auth Supabase et claims internes `app_metadata`.
 
-## Sous-threads
+## Implémenté dans cette passe
 
-Complete :
+- Module scheduler TS : `src/domain/scheduler.ts`.
+- Runner de queue : `src/server/agent-task-runner.ts` et `scripts/run-agent-task-queue.ts`, avec claim `queued -> running` conditionné au statut, récupération explicite des tâches `running` trop anciennes, et transitions terminales limitées aux tâches encore `running`, pour éviter deux runners, un process mort ou une annulation écrasée.
+- Routines non-worker : Daily Brief, Learning Review, DNC check et followup review lisent le snapshot Supabase runtime, produisent un résumé actionnable ou se bloquent si aucun run persistant n'existe.
+- Cron GitHub Actions versionné : `.github/workflows/bm-scout-agent-tasks.yml`, maintenant branché sur `agent:cron:evidence` avec artefact `artifacts/agent-tasks/latest-ci-run.json`, qui doit prouver les 6 routines P0 complétées et les traces worker Core/Exploration.
+- Workflow manuel readiness complet : `.github/workflows/bm-scout-readiness.yml` lance tests, provider comparison, feedback loop, workers persistés, cron `--all-p0`, `verify:supabase` et `quality:readiness`, puis upload tous les artefacts.
+- Tests scheduler avec routines Core, Exploration, Daily Brief, Learning, DNC, followup.
+- Migration Supabase `20260530210927_agent_tasks_and_actions.sql`.
+- Migration Supabase `20260531030736_agent_tasks_active_dedupe.sql` : index unique partiel pour empêcher deux tâches `queued/running` identiques sur le même créneau.
+- Migration Supabase `20260531030749_scout_fk_covering_indexes.sql` : indexes couvrants pour les clés étrangères de persistance, actions, messages, outcomes, evidence et learning.
+- Migration Supabase `20260531043451_scout_company_persistence_dedupe.sql` : la RPC `scout_persist_mission_output` cherche d'abord `external_id`, puis le domaine généré, fusionne les companies existantes, priorise Core sur Exploration et trace `dedupe_decision`.
+- Migration Supabase `20260530232128_restrict_internal_rls_policies.sql` : suppression des policies `using (true)` et restriction aux rôles internes `app_metadata`.
+- Migration Supabase `20260530232456_close_security_definer_rpc_exposure.sql` : fermeture des fonctions `SECURITY DEFINER` exposées en RPC publique.
+- API `POST /api/scout/actions`.
+- Actions UI : valider, surveiller, enrichir, rejeter, exclure, relancer QC, copier email/relance/LinkedIn, marquer utilisé, DNC, outcomes, raisons feedback en 1 clic et lancer les 6 routines P0.
+- Traces actions routines : les lancements manuels Core/Exploration/Daily/Learning/DNC/Relances écrivent maintenant le `task_id` SQL plus l'ID/type/statut de `scout_agent_tasks` dans `scout_action_events`, et un échec de mise en file est aussi tracé comme action Romu non réussie.
+- Boutons d'action : le client attend le verdict JSON serveur avant copie presse-papiers, copie uniquement le texte autorisé renvoyé par le serveur et affiche une erreur courte spécifique (`DNC`, `QC`, `Email`) quand le gate bloque l'action.
+- Actions feedback/outcome : bon lead, mauvais lead, raisons de fit ou rejet, bon angle, feedback message détaillé, RDV pris, positif/négatif, mauvais timing, mauvais interlocuteur, douleur confirmée/non confirmée. Ces actions écrivent `scout_feedback` ou `scout_outcomes`, pas seulement `scout_action_events`; les outcomes neutres ne déclenchent pas un rejet mémoire.
+- Actions message auditables : copie et marquage utilisé ciblent les derniers `scout_messages.id` validés par canal, jamais tous les messages historiques d'une company ; les traces `scout_action_events` portent `message_id`, `task_id`, canal et IDs utilisés manuellement sans journaliser le corps complet du message.
+- Action DNC Romu : persiste les cibles réutilisables disponibles (`company`, `domain`, `contact` avec `email_hash`) pour que la mémoire agentique bloque aussi les futurs doublons par domaine/email, pas seulement l'ID company courant.
+- Action DNC Romu idempotente : le serveur relit les cibles DNC déjà présentes avant insertion, évite les doublons sur double clic et trace les scopes insérés ou déjà bloqués.
+- Migrations Supabase `20260531125047_scout_messages_no_approved_state.sql` et `20260531125826_scout_dnc_scope_uniqueness.sql` : le statut `approved` est interdit côté base, les anciens `approved` sont convertis en `used_manually`, et les cibles DNC sont uniques par scope company/domain/contact/email hash.
+- Triggers DB `scout_prevent_dnc_message`, `scout_dnc_blocks_existing_messages`, `scout_contacts_block_existing_dnc_messages`, `scout_companies_block_existing_dnc_messages` et `scout_messages_prevent_blocking_outcome` pour empêcher un message non bloqué sur une cible DNC ou un outcome négatif ; un nouveau DNC, un enrichissement contact/company DNC ou un outcome négatif bloque aussi les messages existants.
+- QC TS : DNC déterministe et Observé relié à une preuve.
+- Worker offline : DNC interdit en shortlist.
+- Provider réel : les domaines/companies DNC et les leads déjà rejetés/outcomes négatifs sont bloqués avant fetch quand la mémoire suffit ; les emails/hash DNC ou négatifs sont bloqués avant `to_scout_lead`; les run steps `dnc_pre_generation_gate` et `feedback_reject_pre_generation_gate` prouvent que la génération d'outreach a été court-circuitée.
+- Worker réel : provider `auto` avec seeds, SerpAPI, OpenAI `web_search` ou fallback web public, plus 8 tools métier Agents SDK. Le `WebSearchTool` hébergé OpenAI est disponible en opt-in via `BM_SCOUT_AGENT_HOSTED_WEB_SEARCH=1`, mais désactivé par défaut pour éviter de relancer une deuxième recherche web non bornée après le provider.
+- Chargement secrets local : les scripts Node de preuve et le worker Python chargent `.env.local` puis `.env` sans écraser l'environnement shell, ce qui permet d'utiliser `OPENAI_API_KEY` et les secrets Supabase localement sans les passer en ligne de commande ni les versionner.
+- Provider OpenAI web : utilise le tool officiel Responses API `{ "type": "web_search" }` avec `tool_choice=required`, conserve les sources/traces, parse JSON ou sources web, et n'utilise pas OpenAI récursivement pour les recherches jobs sauf opt-in `BM_SCOUT_OPENAI_SEARCH_JOBS=1`.
+- Preuve provider : `latest-comparison.json` porte maintenant `code_revision`, `python_version` et `openai_sdk_version`; `quality:readiness` refuse une comparaison provider ancienne ou sans métadonnées runtime.
+- Provider SerpAPI : `BM_SCOUT_PROVIDER=serpapi` ou sélection auto via `SERPAPI_API_KEY`, parsing des `organic_results`, filtrage des sources faibles et run step `serpapi_search`.
+- `search_jobs` n'est plus décoratif : le provider web cherche des sources recrutement publiques, les transforme en preuves et les trace dans `run_steps`.
+- Déduplication provider renforcée : clés multiples domaine, domaine enregistrable, identité légale normalisée + pays/ville, LinkedIn et identifiant public si disponible, avec run steps `dedupe_company` exposant les clés de doublon. Côté Supabase, la persistance fusionne aussi les companies par `external_id` ou domaine pour éviter un doublon Core/Exploration.
+- Scripts `worker:real:*` : exécution reproductible Core/Exploration réelle, avec artefacts `latest-real-*.json` consommés par `quality:readiness`, incluant modèle, provider, versions SDK, révision code, timestamps et durée. Un artefact réel ne compte pas pour la readiness si sa révision ne correspond pas au commit courant.
+- Les routines Core/Exploration transmettent maintenant leurs objectifs payload au worker Python ; le worker dérive `scanned_count` des steps provider `discovered_count`, et `quality:readiness` exige Core >= 15 scannés et Exploration >= 100 scannés.
+- Le runner refuse aussi de marquer un worker réel persisté comme preuve valide si `scanned_count` est sous l'objectif PRD ou si le step `persist_complete` Supabase manque.
+- Mémoire feedback TS : rejet lead, pénalité secteur, bonus angle validé, régénération anti-générique.
+- Mémoire feedback worker : chargement feedbacks/outcomes Supabase avec contexte entreprise/segment/site, chargement direct de `scout_do_not_contact`, blocage DNC/rejets par domaine/hash email, pénalités segments faibles, bonus angles validés, outcomes neutres séparés des opt-outs et régénération anti-générique dans le provider Python.
+- Run steps feedback worker : chaque application de mémoire produit un step `apply_feedback_memory`, les DNC pré-génération produisent `dnc_pre_generation_gate`, les rejets/outcomes négatifs pré-génération produisent `feedback_reject_pre_generation_gate`, puis un agrégat `feedback_memory_effects` compte les impacts score, blocage, DNC, message régénéré, angle renforcé et delta segment.
+- Script `feedback:evidence` : seed contrôlé Supabase feedback/outcome/DNC, run Core Agents SDK persisté avec `BM_SCOUT_EVIDENCE_PURPOSE=feedback_loop` et artefact `artifacts/feedback-loop/latest-feedback-loop.json` pour prouver la causalité feedback et une synthèse Learning 3-5 apprentissages, sans prétendre prouver la recherche marché.
+- `quality:readiness` distingue maintenant le provider runtime réel : `configured` peut servir à une preuve feedback contrôlée, mais seuls `openai_web`, `serpapi` ou `web` comptent pour les runs marché Core/Exploration et les volumes PRD.
+- Les anciens artefacts bruts `pass` sont affichés comme `fail (artefact pass inéligible)` dans le rapport si les métadonnées runtime ou la révision courante manquent.
+- Worker Pydantic : contrat Observé/Inféré/Incertain, email confidence, run steps.
+- Email confidence worker : un email public nominatif sourcé devient `usable/high`, un email générique reste `verify/medium`, un pattern observé reste `verify/low`, et l'absence d'email reste `not_usable` sans pattern inventé.
+- Recorder Agents SDK : les function tools poussent maintenant leurs entrées/sorties compactées dans `run_steps` pendant `Runner.run`.
+- Migration Supabase `20260530214847_bm_scout_structured_insights_email_confidence_steps.sql` appliquée au projet interne.
+- Documentation et rapport qualité repassés en statut honnête.
+- Auth Supabase SSR : `@supabase/ssr`, page login magic link, callback/logout, proxy de refresh cookie et garde serveur sur la home/API actions.
+- Policy applicative : les décisions d'accès lisent uniquement `app_metadata` (`bm_scout_role`, `bm_scout_roles`, `bm_scout_access`) et ignorent les metadata modifiables utilisateur.
 
-- Architecture produit & technique ;
-- Supabase memoire / schema / RLS ;
-- Worker agentique OpenAI Agents SDK ;
-- Console Romu epuree ;
-- Conformite prospection / opt-out / do-not-contact ;
-- Runs E2E qualite agentique ;
-- Audit thermo-nuclear baseline.
+## Encore fixture/demo
 
-Restent hors scope V1 :
+- `quality:runs` reste un harnais fixture.
+- `demoSnapshot()` reste le fallback sans env Supabase serveur. Avec Supabase configuré mais vide, la console affiche un état runtime vide et les tâches, jamais les fixtures comme vérité produit.
+- Le worker réel peut découvrir des candidats sans seeds via SerpAPI, OpenAI `web_search` ou fallback web public ; OpenAI web est prouvé à volume PRD en comparaison provider et deux runs Agents SDK réels ont été persistés dans Supabase via MCP (`15` Core scannés, `100` Exploration scannés). Ce n'est pas encore une preuve cron CI ni une preuve `--persist` depuis l'env locale.
+- `verify:supabase` produit maintenant `artifacts/supabase-runtime/latest-verify.json`. `quality:readiness` refuse cet artefact s'il est ancien, `-dirty`, incomplet, sans actions Romu persistées, sans action Romu reliée à `scout_agent_tasks.task_id` ou sans traces Supabase.
+- `verify:supabase` exécute aussi un probe temporaire Core puis Exploration sur le même domaine via `scout_persist_mission_output`, exige une seule company conservée en Core, un run step `dedupe_decision=merged_existing`, puis vérifie que le cleanup laisse zéro company/run de probe.
+- `quality:readiness` refuse aussi le cron si l'artefact `latest-ci-run.json` n'est pas issu de GitHub Actions, pas en mode `real`, pas sur la révision courante, sans secrets Supabase/OpenAI, sans les 6 routines P0 complétées, sans traces worker Core/Exploration ou sans transition `completed`.
+- Une comparaison provider Core seule ne peut plus déclarer les volumes PRD prouvés ; `prd_volume_proven` exige Core + Exploration.
+- Les providers `search_web`, `fetch_company_site`, `search_jobs`, `find_public_emails`, `dedupe_company` existent ; `search_jobs` reste minimal et la robustesse search dépend encore des sources publiques.
+- Les volumes 15 Core / 100 Exploration ont déjà été prouvés par artefacts OpenAI Agents SDK et persistance Supabase, mais ces artefacts ne correspondent plus à la révision courante. Ils doivent être régénérés par le chemin automatisé complet : `worker:real:*:persist`, `agent:cron:evidence -- --all-p0`, `verify:supabase`, puis `quality:readiness` avec env Supabase serveur.
+- Le feedback influence le moteur TS et le provider Python en tests locaux, avec compteurs d'impact audités. Le scénario `feedback:evidence` rend la preuve Supabase reproductible et consommable par `quality:readiness` pour P0.5, mais elle doit encore être exécutée avec secrets et ne remplace pas un run marché à volume.
 
-- volume hebdo production 15 Core / scan 100 Exploration a monitorer en usage reel ;
-- recherche web/email gratuite a industrialiser ;
-- monitoring couts/tokens/outils a enrichir ;
-- validation humaine Romu obligatoire avant tout envoi.
+## Réellement end-to-end aujourd'hui
 
-## Decisions integrees
+- Scheduler reproductible : `npm run agent:schedule` affiche le plan et les tâches dues ; `agent:schedule:run` met en file les 6 routines P0 quand elles sont dues, avec déduplication journalière sauf `--force`.
+- Runner queue reproductible : `npm run agent:tasks:offline` ou `npm run agent:tasks:real` avec env Supabase serveur ; les routines brief/learning/DNC/followup ne s'appuient pas sur les fixtures demo.
+- Artefacts de run réel reproductibles : `npm run worker:real:core`, `npm run worker:real:exploration`, puis variantes `:persist` avec env Supabase.
+- Actions API persistantes si `NEXT_PUBLIC_SUPABASE_URL` et `SUPABASE_SERVICE_ROLE_KEY` existent ; si Auth SSR est configurée, l'API exige aussi un compte interne BM Scout.
+- Console runtime : si Supabase serveur est configuré mais ne contient aucun run, elle affiche zéro lead et les routines à lancer au lieu de retomber sur les fixtures.
+- Auth interne : home protégée en mode `BM_SCOUT_AUTH_MODE=internal`, login magic link Supabase, fallback démo seulement si l'auth publique est absente ou explicitement forcée.
+- DNC/outcome négatif bloque côté TS, actions serveur, worker offline et triggers Supabase.
+- Les actions de copie attendent maintenant la validation serveur avant d'écrire dans le presse-papiers ; le client copie le corps validé que le serveur vient de relire depuis `scout_messages`, pas la version affichée localement. Côté serveur, un message bloqué QC, une cible DNC, un outcome négatif ou un email `verify/not_usable` refuse la copie et trace l'échec. `mark_message_used` repasse par les mêmes gates avant de passer uniquement les messages courants validés par ID en `used_manually`, sans statut d'envoi.
+- Feedback Romu influence le scoring et les messages dans le moteur TS et le worker provider testés, le provider émet des compteurs d'impact exploitables, et un script dédié peut produire la preuve Supabase contrôlée avec Learning exploitable.
+- Run steps et email confidence sont écrits par le worker/RPC quand `--persist` est exécuté.
+- Console Next buildée avec route d'action dynamique.
 
-- Ancien cockpit scrappe, nouveau socle reduit dans `bm-commercial-cockpit`.
-- Console centree sur prochaine action Romu, file courte, preuves/QC, learning.
-- Quality report local declare maintenant `Decision produit BM Scout V1 : pas pret`.
-- Worker Python separe dans `services/agent-worker`.
-- Worker structure autour de Pydantic, agents-as-tools, handoff QC, `Runner.run` et `trace` dans le chemin reel.
-- Migration Supabase V1 appliquee au projet interne avec tables `scout_*`, RLS et fonction do-not-contact.
-- Repo GitHub dedie cree : `https://github.com/arthurmooo/bm-scout`.
-- Run reel OpenAI Agents SDK execute : `qual-core-cambon-eight-001`.
-- Run Exploration reel OpenAI Agents SDK execute : `mission-json-candidates-provided-qc`.
-- Faux pass corrige : le guardrail Python bloque maintenant tout lead `blocked` encore present en shortlist.
-- Feedbacks Romu simules persistés dans Supabase : good lead, bad lead, message generique, bon angle, outcome positif, outcome negatif, do-not-contact.
-- Fallback console durci : une erreur Supabase configuree remonte au lieu de repasser silencieusement en demo.
-- Persistance worker remplacee par la RPC transactionnelle `scout_persist_mission_output`.
-- Worker reel branche sur `scout_feedback` et `scout_outcomes` quand l'env Supabase serveur existe.
-- `quality:readiness` separe du harnais fixture et passe seulement si les preuves runtime existent.
-- Documentation de livraison completee : runbook, scenario demo, limites V1, audit de couverture PRD.
+## Vérifications exécutées
 
-## Deja implemente
+- `npm run test` : 127 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou marquage `used_manually` DNC/QC/outcome négatif/email incertain bloqué, bouton client attendant `result.ok` puis `result.copyText` avant copie, non-persistance du corps de message dans les traces action, action DNC idempotente, blocage DB des messages existants quand une cible devient DNC, unicité DB des cibles DNC, interdiction DB du statut `approved`, outcomes neutres non assimilés à un opt-out, raisons feedback en 1 clic, routines DNC/followup lançables et traçables avec `taskId`, échec de mise en file tracé, schéma API dérivé de la liste canonique des actions UI, indexes FK Supabase, statut message utilisé distinct d'un envoi, index anti-doublon, fusion Supabase company par `external_id`/domaine, preuve `verify:supabase` de fusion RPC + gates DB avec cleanup, cron readiness couvrant les 6 routines P0, workflow GitHub readiness complet, worker réel persisté refusé sous volume PRD, Exploration acceptée comme shortlist sans exiger `final_decision=ready`, exception explicite `feedback_loop` pour la preuve causale contrôlée, affichage inéligible des anciens artefacts `pass`, policy Auth BM Scout, actions Romu, provider runtime des preuves et scénario `feedback:evidence`.
+- `npm run typecheck` : pass.
+- `npm run lint` : pass.
+- `npm run build` : pass.
+- `npm run quality:runs` : pass fixture, décision produit `production_not_ready`.
+- `npm run quality:readiness` : fail attendu, décision produit `production_not_ready`. Les anciens artefacts réels ne suffisent plus à prouver le learning si la mémoire ne vient pas de Supabase, si aucun feedback/outcome Supabase ni DNC Supabase n'est chargé, si aucun impact `feedback_memory_effects` n'est mesuré, si le provider opérationnel est seulement `configured`, si les métadonnées runtime sont absentes, si la révision code ne correspond pas au commit courant ou si le cron ne couvre pas les 6 routines P0.
+- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 69 tests pass, dont provider SerpAPI, provider OpenAI web, schéma strict Agents SDK, hosted web search opt-in, max turns borné, métadonnées runtime, chargement `.env.local`, contexte/verbosité OpenAI compatibles, surface de requêtes PRD, DNC table/domaine/hash email, outcomes neutres non bloquants, email confidence public/générique/pattern/no-reply, seuil Core validable, fallback jobs, parsing sources, comparaison provider, déduplication domaine/nom/pays/ville/LinkedIn/identifiant, impact feedback structuré et anti-faux-positif PRD sur smoke Core seul.
+- `npm run verify:supabase` vérifie maintenant aussi `scout_agent_tasks`, `scout_feedback`, `scout_outcomes`, `scout_do_not_contact`, `scout_run_steps`, `scout_action_events`, au moins une action liée à une tâche par `task_id`, la fusion RPC domain/Core, le refus DB de `scout_messages.status=approved` et l'unicité DB DNC par company/domain/contact/email hash, avec cleanup à zéro des probes temporaires.
+- Avec `OPENAI_API_KEY` présent en env, `OPENAI_MODEL=gpt-4.1-mini`, `OPENAI_SEARCH_MODEL=gpt-4.1-mini` et `BM_SCOUT_FETCH_LIMIT=3`, `npm run provider:compare -- --providers=openai_web --modes=core,exploration` : pass réel. Core atteint `15/15`, Exploration atteint `100/100`, `openai_web` est recommandé et `prd_volume_proven=true`.
+- Avec `OPENAI_API_KEY` présent en env, `OPENAI_MODEL=gpt-4.1-mini`, `OPENAI_SEARCH_MODEL=gpt-4.1-mini`, `BM_SCOUT_PROVIDER=openai_web` et `BM_SCOUT_FETCH_LIMIT=3`, `npm run worker:real:core` : pass réel Agents SDK, artefact `latest-real-core.json`, 15 scannés, 3 leads retenus, 5 lessons.
+- Avec les mêmes env, `npm run worker:real:exploration` : pass réel Agents SDK, artefact `latest-real-exploration.json`, 100 scannés, 3 leads retenus, 5 lessons, aucun message direct ; `final_decision=not_ready` est acceptable pour Exploration tant que la shortlist reste actionnable.
+- Import Agents SDK manager : par défaut, 12 tools disponibles sans `WebSearchTool` hébergé, dont 8 tools métier provider et 4 agents-as-tools. Avec `BM_SCOUT_AGENT_HOSTED_WEB_SEARCH=1`, le manager ajoute le `WebSearchTool`.
+- `npm run agent:schedule -- --now=2026-06-01T06:00:00.000Z` : pass, 6 routines planifiées et 6 routines dues le lundi ouvré.
+- `npm run agent:schedule:run -- --now=2026-06-01T06:00:00.000Z` sans env serveur : fail attendu avec message env Supabase requis.
+- `npm run agent:tasks` sans env serveur : fail attendu avec message env Supabase requis.
+- `npm exec tsx -- scripts/run-agent-worker-evidence.ts --offline --mode=core` : pass, artefact `latest-offline-core.json` écrit.
+- `npm run test:e2e` : pass, 2 scénarios Playwright ; le smoke force `BM_SCOUT_AUTH_MODE=demo`, vérifie dashboard/actions et page login interne.
+- Browser intégré : pass sur `http://localhost:3000` ; dashboard `production_not_ready` visible, routines `Contrôle DNC` et `Relances` visibles, 0 erreur console.
+- `npm audit --omit=dev` : fail modéré connu via `next -> postcss <8.5.10`; `npm audit fix --force` propose un downgrade Next cassant vers 9.x, donc non appliqué dans cette passe.
+- Supabase interne `Interne_Agentic_prospection` : migrations `agent_tasks_and_actions`, `bm_scout_structured_insights_email_confidence_steps`, `scout_feedback_outcome_actions`, `restrict_internal_rls_policies`, `close_security_definer_rpc_exposure` et `block_messages_after_negative_outcome` appliquées.
+- Supabase interne : triggers `scout_messages_prevent_blocking_outcome` et `scout_outcomes_block_messages` vérifiés en base via MCP ; advisor sécurité à 0 lint après application.
+- Supabase interne : migrations `agent_tasks_active_dedupe` et `scout_fk_covering_indexes` alignées avec l'historique distant ; index `scout_agent_tasks_active_type_schedule_uniq` et 17 indexes FK vérifiés en base via MCP.
+- Supabase interne : migration `scout_company_persistence_dedupe` appliquée ; vérification distante par scénario temporaire Core puis Exploration sur le même domaine, fusion en une seule company, priorité Core conservée, run step `dedupe_decision=merged_existing`, nettoyage confirmé.
+- Supabase interne : migrations `scout_manual_dnc_followup_routines`, `scout_message_used_manually_status` et `scout_dnc_blocks_existing_messages` appliquées via MCP ; enums `launch_dnc_check`, `launch_followup_review`, `used_manually` et triggers DNC existants vérifiés. Test rollback confirmé : un message existant passe en `blocked` quand une cible devient do-not-contact, sans ligne de test restante.
+- Supabase interne : migrations `scout_messages_no_approved_state` et `scout_dnc_scope_uniqueness` appliquées via Supabase CLI sur `urlggighkvdcyzsxxzcc` après dry-run `--include-all`. Vérification CLI : historique local/remote aligné jusqu'à `20260531125826`, aucun message `approved`, `137` messages bloqués, `3` entrées DNC. Vérification comportementale `verify:supabase` : `approved` refusé, doublons DNC company/domain/contact/email hash refusés, cleanup probes à zéro.
+- Supabase interne : runs OpenAI Agents SDK réels persistés via RPC `scout_persist_mission_output` depuis les artefacts courants. Core `trace-2024-06-24-BM-Scout` -> run `403e2246-d0f0-4d9f-b882-ea8be2d5322a`, 15 scannés, 3 leads, 36 run steps, 9 messages proposés. Exploration `trace-20240615-0001` -> run `3404d3f4-21fc-4dc0-9bde-e734e27e0623`, 100 scannés, 3 leads, 41 run steps, 9 messages bloqués.
+- Supabase interne : deux tâches agentiques complétées backfill MCP liées aux runs réels (`weekly_core_research`, `weekly_exploration_scan`) et deux `scout_action_events` avec `task_id`. Cette preuve améliore l'audit console, mais ne remplace pas le cron GitHub Actions réel exigé par `quality:readiness`.
+- Supabase advisor performance : plus aucun lint `unindexed_foreign_keys`; les lints restants sont `unused_index`, attendus sur une base de test à faible volume.
+- Supabase advisor sécurité : 0 lint après durcissement RLS/RPC.
 
-- App Next.js locale ;
-- types/domain TS ;
-- QC TS et tests unitaires ;
-- script `quality:runs` ;
-- script `verify:supabase` pour prouver la lecture console avec env serveur ;
-- rapport `artifacts/quality-runs/latest-report.md` ;
-- docs `launch-runbook.md`, `demo-scenario.md`, `v1-limits.md`, `prd-completion-audit.md` ;
-- migration locale `supabase/migrations/20260530161000_bm_scout_v1.sql` ;
-- migration locale `supabase/migrations/20260530150744_bm_scout_atomic_persist_and_feedback_memory.sql` ;
-- migration appliquee au projet Supabase `Interne_Agentic_prospection` ;
-- run Core de verification persiste dans Supabase ;
-- run Core reel Agents SDK persiste dans Supabase ;
-- run Core reel Agents SDK post-feedback Supabase persiste dans Supabase ;
-- run Exploration reel Agents SDK post-feedback Supabase persiste dans Supabase ;
-- feedbacks/outcomes Romu simules persistés dans Supabase ;
-- worker Python installable ;
-- CLI offline worker ;
-- tests worker offline.
+## Prochaine tranche P0
 
-## Encore fixture / demo
-
-- `src/server/scout-repository.ts` retourne `demoSnapshot()` quand l'env serveur Supabase manque ou que la requete echoue ;
-- `quality:runs` consomme les fixtures TS ;
-- worker offline consomme les fixtures Python ;
-- Supabase est lisible par `src/server/scout-repository.ts` si `SUPABASE_SERVICE_ROLE_KEY` est disponible côté serveur, sinon fallback demo ;
-- les volumes production ne sont pas encore prouves sur 15 Core / 100 Exploration ;
-- les recherches web gratuites et emails publics restent semi-structurees ;
-- le fallback demo reste volontaire pour developpement local sans env serveur.
-
-## Verifications actuelles
-
-Valide :
-
-- `npm run quality:runs` : socle fixture OK ;
-- `npm run worker:install` : OK ;
-- `npm run worker:test` : 7 tests offline/memory OK ;
-- `npm run verify:supabase` : OK avec env serveur, Cambon prioritaire, 3 runs, 4 leads, 2 rejets, 4 lessons ;
-- `npm run worker:offline` : CLI offline OK ;
-- CLI `--offline --mode core --persist` : OK, trace `trace_bm_scout_core_offline` persistée ;
-- import Agents SDK : manager cree avec 4 tools et 1 handoff QC.
-- Navigateur : smoke local `http://localhost:3020` OK en mode demo fallback, desktop/mobile captures, actions primaires visibles, aucun warning/error console.
-- Navigateur : smoke local `http://localhost:3021` OK avec Supabase serveur, Cambon/Dalloz/Learning/actions visibles, aucun warning/error console. Captures : `artifacts/browser-smoke/supabase-playwright-desktop.png`, `artifacts/browser-smoke/supabase-playwright-mobile.png`.
-- Supabase : 13 tables `scout_*`, RLS activee partout ;
-- Supabase : RPC `scout_persist_mission_output(jsonb)` appliquee ;
-- Supabase : smoke RPC `rpc-smoke-atomic-20260530` -> 1 run succeeded, 1 company, 1 preuve, 3 messages, 1 QC, 1 lesson ;
-- Supabase : runs et donnees Core/Exploration/feedbacks persistés ;
-- Supabase : 7 feedbacks Romu simules et 2 outcomes persistés ;
-- Supabase : `scout_is_do_not_contact('blocked@example.com')` retourne `true` après commit.
-- OpenAI Agents SDK reel : `Runner.run` a produit un output pass apres correction du guardrail.
-- Artefact reel : `artifacts/agent-worker-real/latest-real-core.json`.
-- Artefact reel : `artifacts/agent-worker-real/latest-real-exploration.json`.
-- Supabase reel : trace `qual-core-cambon-eight-001`, Cambon `pass`, Eight `blocked`, DNC company `true`.
-- OpenAI Agents SDK reel + Supabase feedback/persist : trace `qc-candidates-json-romu-seed`, Cambon retenu, Eight bloqué do-not-contact, 5 lessons.
-- OpenAI Agents SDK reel + Exploration + Supabase persist : trace `qc-exploration-candidates-user-provided`, Dalloz retenu, Studio Yoga bloqué, 5 lessons.
-- `npm run quality:readiness` : OK avec preuves runtime.
-
-A relancer en routine avant demo :
-
-- `npm run typecheck` ;
-- `npm run test` ;
-- `npm run lint` ;
-- `npm run build` ;
-- `npm run quality:readiness` avec env serveur ;
-- smoke browser console branchee Supabase serveur ;
-- audit thermo-nuclear final : `docs/thermo-nuclear-final-audit.md`.
-
-## GitHub
-
-Repo cree :
-
-- `bm-scout` : `https://github.com/arthurmooo/bm-scout`
-
-Remote local ajoute :
-
-- `bm-scout` -> `https://github.com/arthurmooo/bm-scout.git`
-
-Decision : ne pas push le worktree parent tel quel. Il contient encore les suppressions massives de l'ancien cockpit, des artefacts locaux, et des changements hors BM Scout.
-
-Publication propre effectuee :
-
-1. `bm-commercial-cockpit` isole comme contenu du repo dedie ;
-2. `.next`, `.venv`, `node_modules`, `.env`, artefacts et metadata Python generées exclus ;
-3. branche `main` poussee ;
-4. repo garde prive tant que le worker et Supabase ne sont pas finalises.
-
-Dernier etat publie sur la branche `main` du repo dedie.
-
-## Prochaine tranche
-
-1. Repasser les tests complets.
-2. Tester la console Navigateur branchée Supabase serveur.
-3. Repasser l'audit thermo-nuclear final sans P1.
-4. Mettre a jour le repo dedie apres validation finale.
+1. Fournir l'env service role au runner local/cron et tester `agent:tasks:offline` contre Supabase.
+2. Ajouter `SERPAPI_API_KEY`, relancer `npm run provider:compare`, puis comparer couverture, coût et qualité des sources contre OpenAI web avant choix par défaut.
+3. Prouver les volumes PRD 15 Core / 100 Exploration en run Agents SDK persisté Supabase sur la révision courante, pas seulement via anciens artefacts ou smoke provider.
+4. Exécuter `npm run feedback:evidence` avec secrets serveur pour produire une preuve Supabase de causalité feedback, puis prouver la même mémoire sur runs marché Core/Exploration à volume.
+5. Exécuter le workflow GitHub Actions `BM Scout readiness evidence` avec secrets, télécharger `bm-scout-readiness-evidence` et vérifier que `quality:readiness` est le gate final.
+6. Affecter les claims Supabase réels aux comptes Romu/Arthur et valider le parcours magic link sur le projet interne.

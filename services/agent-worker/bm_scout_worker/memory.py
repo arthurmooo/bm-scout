@@ -39,7 +39,7 @@ class SupabaseMemory:
         feedback_rows = self.get_json(
             "scout_feedback",
             {
-                "select": "id,company_id,kind,note,created_at",
+                "select": "id,company_id,kind,note,created_at,scout_companies(name,segment,website)",
                 "order": "created_at.desc",
                 "limit": str(limit),
             },
@@ -47,34 +47,78 @@ class SupabaseMemory:
         outcome_rows = self.get_json(
             "scout_outcomes",
             {
-                "select": "id,company_id,outcome,note,occurred_at",
+                "select": "id,company_id,outcome,note,occurred_at,scout_companies(name,segment,website)",
                 "order": "occurred_at.desc",
+                "limit": str(limit),
+            },
+        )
+        dnc_rows = self.get_json(
+            "scout_do_not_contact",
+            {
+                "select": (
+                    "id,scope,normalized_email_hash,normalized_domain,company_id,contact_id,"
+                    "reason,created_at,scout_companies(name,segment,website),scout_contacts(name,role,email)"
+                ),
+                "order": "created_at.desc",
                 "limit": str(limit),
             },
         )
         events = [self._feedback_event(row) for row in feedback_rows]
         events.extend(self._outcome_event(row) for row in outcome_rows)
+        events.extend(self._dnc_event(row) for row in dnc_rows)
         return sorted(events, key=lambda event: event.created_at, reverse=True)[:limit]
 
     def _feedback_event(self, row: dict[str, Any]) -> FeedbackEvent:
+        company = self._company_context(row)
         return FeedbackEvent(
             id=str(row["id"]),
             lead_id=str(row.get("company_id") or "unknown"),
             kind=row["kind"],
             note=row["note"],
             created_at=row["created_at"],
+            company_name=company.get("name"),
+            segment=company.get("segment"),
+            website=company.get("website"),
         )
 
     def _outcome_event(self, row: dict[str, Any]) -> FeedbackEvent:
         outcome = str(row.get("outcome") or "")
-        kind: FeedbackKind = "positive_outcome" if outcome in {"interested", "meeting_booked"} else "negative_outcome"
+        note = str(row.get("note") or f"Outcome: {outcome}")
+        kind = outcome_feedback_kind(outcome, note)
+        company = self._company_context(row)
         return FeedbackEvent(
             id=f"outcome-{row['id']}",
             lead_id=str(row.get("company_id") or "unknown"),
             kind=kind,
-            note=str(row.get("note") or f"Outcome: {outcome}"),
+            note=note,
             created_at=row["occurred_at"],
+            company_name=company.get("name"),
+            segment=company.get("segment"),
+            website=company.get("website"),
         )
+
+    def _dnc_event(self, row: dict[str, Any]) -> FeedbackEvent:
+        company = self._company_context(row)
+        domain = str(row.get("normalized_domain") or "")
+        reason = str(row.get("reason") or "Do-not-contact actif.")
+        scope = str(row.get("scope") or "unknown")
+        return FeedbackEvent(
+            id=f"dnc-{row['id']}",
+            lead_id=str(row.get("company_id") or row.get("contact_id") or domain or row["id"]),
+            kind="do_not_contact",
+            note=f"{reason} Scope: {scope}.",
+            created_at=row["created_at"],
+            company_name=company.get("name") or (domain if domain else None),
+            segment=company.get("segment"),
+            website=company.get("website") or (f"https://{domain}" if domain else None),
+            normalized_domain=domain or None,
+            normalized_email_hash=row.get("normalized_email_hash"),
+            contact_id=str(row.get("contact_id")) if row.get("contact_id") else None,
+        )
+
+    def _company_context(self, row: dict[str, Any]) -> dict[str, Any]:
+        value = row.get("scout_companies") or row.get("company") or {}
+        return value if isinstance(value, dict) else {}
 
     def get_json(self, path: str, params: dict[str, str]) -> list[dict[str, Any]]:
         query = urllib.parse.urlencode(params)
@@ -102,3 +146,14 @@ class SupabaseMemory:
             body = error.read().decode("utf-8", errors="replace")
             raise RuntimeError(f"Supabase request failed for {path}: {error.code} {body}") from error
         return json.loads(body) if body else None
+
+
+def outcome_feedback_kind(outcome: str, note: str) -> FeedbackKind:
+    if outcome in {"interested", "meeting_booked"}:
+        return "positive_outcome"
+    if outcome == "negative":
+        return "negative_outcome"
+    normalized_note = note.lower()
+    if outcome == "not_relevant" and ("douleur non" in normalized_note or "pain not" in normalized_note):
+        return "negative_outcome"
+    return "neutral_outcome"
