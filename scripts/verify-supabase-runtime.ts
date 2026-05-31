@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { getScoutSnapshot } from "../src/server/scout-repository";
 import { createServerSupabaseClient } from "../src/server/supabase";
-import { verifySupabasePersistenceDedupe } from "../src/server/supabase-runtime-verification";
+import { verifySupabaseComplianceGates, verifySupabasePersistenceDedupe } from "../src/server/supabase-runtime-verification";
 import { loadLocalEnvFiles } from "../src/server/runtime-env";
 
 const execFileAsync = promisify(execFile);
@@ -36,6 +36,16 @@ interface SupabaseRuntimeVerificationArtifact {
   persistenceDedupeCleanupRemainingCompanies: number;
   persistenceDedupeCleanupRemainingRuns: number;
   persistenceDedupeTraceIds: string[];
+  complianceGatesVerified: boolean;
+  noApprovedMessageConstraint: boolean;
+  dncUniqueCompany: boolean;
+  dncUniqueDomain: boolean;
+  dncUniqueContact: boolean;
+  dncUniqueEmailHash: boolean;
+  complianceCleanupRemainingCompanies: number;
+  complianceCleanupRemainingContacts: number;
+  complianceCleanupRemainingDncRows: number;
+  complianceCleanupRemainingMessages: number;
   traces: string[];
   primaryLead?: string;
   error?: string;
@@ -87,6 +97,7 @@ try {
   const lessonCount = snapshot.lessons.length;
   const traces = snapshot.runs.map((run) => run.traceId).filter(Boolean);
   const persistenceDedupe = await verifySupabasePersistenceDedupe(supabaseClient);
+  const complianceGates = await verifySupabaseComplianceGates(supabaseClient);
 
   const blockers: string[] = [];
 
@@ -104,6 +115,7 @@ try {
   if (taskActionLinkCount < 1) blockers.push("Aucune action Romu reliée à une tâche agentique par task_id.");
   if (!traces.length) blockers.push("Aucune trace de run Supabase disponible.");
   blockers.push(...persistenceDedupe.blockers);
+  blockers.push(...complianceGates.blockers);
 
   const artifact: SupabaseRuntimeVerificationArtifact = {
     status: blockers.length ? "fail" : "pass",
@@ -129,6 +141,16 @@ try {
     persistenceDedupeCleanupRemainingCompanies: persistenceDedupe.cleanupRemainingCompanies,
     persistenceDedupeCleanupRemainingRuns: persistenceDedupe.cleanupRemainingRuns,
     persistenceDedupeTraceIds: persistenceDedupe.traceIds,
+    complianceGatesVerified: complianceGates.verified,
+    noApprovedMessageConstraint: complianceGates.noApprovedMessageConstraint,
+    dncUniqueCompany: complianceGates.dncUniqueCompany,
+    dncUniqueDomain: complianceGates.dncUniqueDomain,
+    dncUniqueContact: complianceGates.dncUniqueContact,
+    dncUniqueEmailHash: complianceGates.dncUniqueEmailHash,
+    complianceCleanupRemainingCompanies: complianceGates.cleanupRemainingCompanies,
+    complianceCleanupRemainingContacts: complianceGates.cleanupRemainingContacts,
+    complianceCleanupRemainingDncRows: complianceGates.cleanupRemainingDncRows,
+    complianceCleanupRemainingMessages: complianceGates.cleanupRemainingMessages,
     traces
   };
 
@@ -184,6 +206,16 @@ function emptyArtifact(
     persistenceDedupeCleanupRemainingCompanies: 0,
     persistenceDedupeCleanupRemainingRuns: 0,
     persistenceDedupeTraceIds: [],
+    complianceGatesVerified: false,
+    noApprovedMessageConstraint: false,
+    dncUniqueCompany: false,
+    dncUniqueDomain: false,
+    dncUniqueContact: false,
+    dncUniqueEmailHash: false,
+    complianceCleanupRemainingCompanies: 0,
+    complianceCleanupRemainingContacts: 0,
+    complianceCleanupRemainingDncRows: 0,
+    complianceCleanupRemainingMessages: 0,
     traces: []
   };
 }

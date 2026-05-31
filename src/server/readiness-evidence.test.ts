@@ -272,6 +272,16 @@ describe("readiness evidence", () => {
         persistenceDedupeRunStepCount: 1,
         persistenceDedupeCleanupRemainingCompanies: 0,
         persistenceDedupeCleanupRemainingRuns: 0,
+        complianceGatesVerified: true,
+        noApprovedMessageConstraint: true,
+        dncUniqueCompany: true,
+        dncUniqueDomain: true,
+        dncUniqueContact: true,
+        dncUniqueEmailHash: true,
+        complianceCleanupRemainingCompanies: 0,
+        complianceCleanupRemainingContacts: 0,
+        complianceCleanupRemainingDncRows: 0,
+        complianceCleanupRemainingMessages: 0,
         traces: ["trace-1"]
       },
       "abcdef1234567890"
@@ -310,6 +320,16 @@ describe("readiness evidence", () => {
         persistenceDedupeRunStepCount: 1,
         persistenceDedupeCleanupRemainingCompanies: 0,
         persistenceDedupeCleanupRemainingRuns: 0,
+        complianceGatesVerified: true,
+        noApprovedMessageConstraint: true,
+        dncUniqueCompany: true,
+        dncUniqueDomain: true,
+        dncUniqueContact: true,
+        dncUniqueEmailHash: true,
+        complianceCleanupRemainingCompanies: 0,
+        complianceCleanupRemainingContacts: 0,
+        complianceCleanupRemainingDncRows: 0,
+        complianceCleanupRemainingMessages: 0,
         traces: ["trace-1"]
       },
       "abcdef123456"
@@ -336,6 +356,16 @@ describe("readiness evidence", () => {
         persistenceDedupeRunStepCount: 1,
         persistenceDedupeCleanupRemainingCompanies: 0,
         persistenceDedupeCleanupRemainingRuns: 0,
+        complianceGatesVerified: true,
+        noApprovedMessageConstraint: true,
+        dncUniqueCompany: true,
+        dncUniqueDomain: true,
+        dncUniqueContact: true,
+        dncUniqueEmailHash: true,
+        complianceCleanupRemainingCompanies: 0,
+        complianceCleanupRemainingContacts: 0,
+        complianceCleanupRemainingDncRows: 0,
+        complianceCleanupRemainingMessages: 0,
         traces: ["trace-1"]
       },
       "abcdef123456"
@@ -428,6 +458,16 @@ describe("readiness evidence", () => {
         persistenceDedupeRunStepCount: 1,
         persistenceDedupeCleanupRemainingCompanies: 0,
         persistenceDedupeCleanupRemainingRuns: 0,
+        complianceGatesVerified: true,
+        noApprovedMessageConstraint: true,
+        dncUniqueCompany: true,
+        dncUniqueDomain: true,
+        dncUniqueContact: true,
+        dncUniqueEmailHash: true,
+        complianceCleanupRemainingCompanies: 0,
+        complianceCleanupRemainingContacts: 0,
+        complianceCleanupRemainingDncRows: 0,
+        complianceCleanupRemainingMessages: 0,
         traces: ["trace-1"]
       },
       "abcdef123456"
@@ -436,6 +476,52 @@ describe("readiness evidence", () => {
     expect(evidence.runtimeMetadataComplete).toBe(false);
     expect(evidence.verdict).toBe("fail");
     expect(evidence.blockers).toContain("Preuve Supabase manquante: aucune action Romu reliée à agent_tasks par task_id.");
+  });
+
+  it("refuse une preuve Supabase sans gates DB no-auto-send et DNC uniques", () => {
+    const evidence = analyzeSupabaseRuntimeArtifact(
+      {
+        status: "pass",
+        generated_at: "2026-05-31T10:00:00.000Z",
+        source: "supabase_live",
+        code_revision: "abcdef123456",
+        runCount: 1,
+        leadCount: 2,
+        rejectedCount: 1,
+        lessonCount: 3,
+        taskCount: 1,
+        feedbackCount: 1,
+        outcomeCount: 1,
+        dncCount: 1,
+        runStepCount: 1,
+        actionEventCount: 1,
+        taskActionLinkCount: 1,
+        persistenceDedupeVerified: true,
+        persistenceDedupeCompanyCount: 1,
+        persistenceDedupeRetainedMode: "core",
+        persistenceDedupeRunStepCount: 1,
+        persistenceDedupeCleanupRemainingCompanies: 0,
+        persistenceDedupeCleanupRemainingRuns: 0,
+        complianceGatesVerified: false,
+        noApprovedMessageConstraint: true,
+        dncUniqueCompany: true,
+        dncUniqueDomain: true,
+        dncUniqueContact: false,
+        dncUniqueEmailHash: true,
+        complianceCleanupRemainingCompanies: 0,
+        complianceCleanupRemainingContacts: 0,
+        complianceCleanupRemainingDncRows: 0,
+        complianceCleanupRemainingMessages: 0,
+        traces: ["trace-1"]
+      },
+      "abcdef123456"
+    );
+
+    expect(evidence.runtimeMetadataComplete).toBe(false);
+    expect(evidence.verdict).toBe("fail");
+    expect(evidence.blockers).toContain(
+      "Preuve Supabase manquante: les gates DB no-auto-send et unicité do-not-contact ne sont pas prouvés."
+    );
   });
 
   it("accepte une preuve cron GitHub Actions réelle avec transition completed", () => {

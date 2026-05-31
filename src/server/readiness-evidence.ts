@@ -67,6 +67,16 @@ export interface SupabaseRuntimeArtifactEvidence {
   persistenceDedupeCleanupRemainingCompanies?: number;
   persistenceDedupeCleanupRemainingRuns?: number;
   persistenceDedupeTraceIds?: string[];
+  complianceGatesVerified?: boolean;
+  noApprovedMessageConstraint?: boolean;
+  dncUniqueCompany?: boolean;
+  dncUniqueDomain?: boolean;
+  dncUniqueContact?: boolean;
+  dncUniqueEmailHash?: boolean;
+  complianceCleanupRemainingCompanies?: number;
+  complianceCleanupRemainingContacts?: number;
+  complianceCleanupRemainingDncRows?: number;
+  complianceCleanupRemainingMessages?: number;
   traces?: string[];
   blockers?: string[];
   error?: string;
@@ -183,10 +193,14 @@ export function analyzeSupabaseRuntimeArtifact(
   const codeRevision = stringValue(payload.code_revision);
   const blockers = Array.isArray(payload.blockers) ? payload.blockers.filter((item): item is string => typeof item === "string") : [];
   const persistenceDedupeComplete = hasPersistenceDedupeProof(payload);
+  const complianceGatesComplete = hasComplianceGateProof(payload);
   const derivedBlockers = [
     ...blockers,
     ...(!numericAtLeast(payload.taskActionLinkCount, 1) ? ["Preuve Supabase manquante: aucune action Romu reliée à agent_tasks par task_id."] : []),
-    ...(!persistenceDedupeComplete ? ["Preuve Supabase manquante: la RPC ne prouve pas la fusion par domaine avec priorité Core et cleanup."] : [])
+    ...(!persistenceDedupeComplete ? ["Preuve Supabase manquante: la RPC ne prouve pas la fusion par domaine avec priorité Core et cleanup."] : []),
+    ...(!complianceGatesComplete
+      ? ["Preuve Supabase manquante: les gates DB no-auto-send et unicité do-not-contact ne sont pas prouvés."]
+      : [])
   ];
   const runtimeMetadataComplete = Boolean(
     stringValue(payload.generated_at) &&
@@ -203,6 +217,7 @@ export function analyzeSupabaseRuntimeArtifact(
       numericAtLeast(payload.actionEventCount, 1) &&
       numericAtLeast(payload.taskActionLinkCount, 1) &&
       persistenceDedupeComplete &&
+      complianceGatesComplete &&
       Array.isArray(payload.traces) &&
       payload.traces.length > 0
   );
@@ -373,6 +388,21 @@ function hasPersistenceDedupeProof(payload: SupabaseRuntimeArtifactEvidence): bo
       numericAtLeast(payload.persistenceDedupeRunStepCount, 1) &&
       payload.persistenceDedupeCleanupRemainingCompanies === 0 &&
       payload.persistenceDedupeCleanupRemainingRuns === 0
+  );
+}
+
+function hasComplianceGateProof(payload: SupabaseRuntimeArtifactEvidence): boolean {
+  return Boolean(
+    payload.complianceGatesVerified === true &&
+      payload.noApprovedMessageConstraint === true &&
+      payload.dncUniqueCompany === true &&
+      payload.dncUniqueDomain === true &&
+      payload.dncUniqueContact === true &&
+      payload.dncUniqueEmailHash === true &&
+      payload.complianceCleanupRemainingCompanies === 0 &&
+      payload.complianceCleanupRemainingContacts === 0 &&
+      payload.complianceCleanupRemainingDncRows === 0 &&
+      payload.complianceCleanupRemainingMessages === 0
   );
 }
 

@@ -188,6 +188,12 @@ describe("supabase security posture", () => {
     expect(verifier).toContain('client.from("scout_runs").delete().in("id", allRunIds)');
     expect(runtimeScript).toContain("persistenceDedupeVerified");
     expect(runtimeScript).toContain("verifySupabasePersistenceDedupe");
+    expect(verifier).toContain("verifySupabaseComplianceGates");
+    expect(verifier).toContain("assertApprovedMessageBlocked");
+    expect(verifier).toContain("assertDuplicateDncBlocked");
+    expect(runtimeScript).toContain("complianceGatesVerified");
+    expect(runtimeScript).toContain("noApprovedMessageConstraint");
+    expect(runtimeScript).toContain("dncUniqueEmailHash");
   });
 });
 
