@@ -3,7 +3,8 @@ import {
   analyzeAgentTaskCronArtifact,
   analyzeRunnerSteps,
   analyzeSupabaseRuntimeArtifact,
-  codeRevisionMatchesCurrent
+  codeRevisionMatchesCurrent,
+  eligibleRuntimeVerdict
 } from "./readiness-evidence";
 
 describe("readiness evidence", () => {
@@ -169,6 +170,13 @@ describe("readiness evidence", () => {
     expect(codeRevisionMatchesCurrent("abcdef123456", "abcdef123456-dirty")).toBe(false);
     expect(codeRevisionMatchesCurrent("abc", "abcdef123456")).toBe(false);
     expect(codeRevisionMatchesCurrent("unknown", "abcdef123456")).toBe(false);
+  });
+
+  it("ne rend pass qu'un artefact runtime complet sur la révision courante", () => {
+    expect(eligibleRuntimeVerdict("pass", true, true)).toBe("pass");
+    expect(eligibleRuntimeVerdict("pass", false, true)).toBe("fail");
+    expect(eligibleRuntimeVerdict("pass", true, false)).toBe("fail");
+    expect(eligibleRuntimeVerdict("fail", true, true)).toBe("fail");
   });
 
   it("accepte une preuve Supabase runtime complete sur la revision courante", () => {

@@ -265,6 +265,14 @@ export function codeRevisionMatchesCurrent(artifactRevision: string, currentRevi
   return artifact.startsWith(current) || current.startsWith(artifact);
 }
 
+export function eligibleRuntimeVerdict(
+  rawVerdict: string | undefined,
+  runtimeMetadataComplete: boolean,
+  runtimeRevisionMatchesCurrent: boolean
+): "pass" | "fail" {
+  return rawVerdict === "pass" && runtimeMetadataComplete && runtimeRevisionMatchesCurrent ? "pass" : "fail";
+}
+
 function hasCompleteRuntimeMetadata(payload: Record<string, unknown>, durationMs: number, codeRevision: string): boolean {
   return Boolean(
     payload.real_mode === true &&

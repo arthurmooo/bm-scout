@@ -10,6 +10,7 @@ import {
   analyzeRunnerSteps,
   analyzeSupabaseRuntimeArtifact,
   codeRevisionMatchesCurrent,
+  eligibleRuntimeVerdict,
   type AgentTaskCronArtifactEvidence,
   type RunnerStepEvidence,
   type SupabaseRuntimeArtifactEvidence
@@ -284,7 +285,11 @@ function renderReport(
       ? realEvidence.map(
           (item) =>
             [
-              `- ${item.name} : ${item.verdict}`,
+              `- ${item.name} : ${renderRuntimeVerdict(
+                item.verdict,
+                item.runtimeMetadataComplete,
+                item.runtimeRevisionMatchesCurrent
+              )}`,
               `trace : ${item.traceId}`,
               `scannés : ${item.scannedCount}`,
               `leads retenus : ${item.keptCount}`,
@@ -314,7 +319,11 @@ function renderReport(
     "",
     feedbackEvidence
       ? [
-          `- Feedback loop : ${feedbackEvidence.verdict}`,
+          `- Feedback loop : ${renderRuntimeVerdict(
+            feedbackEvidence.verdict,
+            feedbackEvidence.runtimeMetadataComplete,
+            feedbackEvidence.runtimeRevisionMatchesCurrent
+          )}`,
           `trace : ${feedbackEvidence.traceId ?? "aucune"}`,
           `provider runtime : ${feedbackEvidence.runtimeProvider}`,
           `impacts : ${feedbackEvidence.feedbackImpactCount}`,
@@ -352,7 +361,11 @@ function renderReport(
     "",
     ...(providerEvidence
       ? [
-          `- Comparaison : ${providerEvidence.verdict}; provider recommandé : ${providerEvidence.recommendedDefault ?? "aucun"}; volumes PRD : ${providerEvidence.prdVolumeProven ? "oui" : "non"}`,
+          `- Comparaison : ${renderRuntimeVerdict(
+            providerEvidence.verdict,
+            providerEvidence.runtimeMetadataComplete,
+            providerEvidence.runtimeRevisionMatchesCurrent
+          )}; provider recommandé : ${providerEvidence.recommendedDefault ?? "aucun"}; volumes PRD : ${providerEvidence.prdVolumeProven ? "oui" : "non"}`,
           `- Comparaison runtime : metadata ${providerEvidence.runtimeMetadataComplete ? "oui" : "non"}; révision ${providerEvidence.codeRevision}; révision courante ${providerEvidence.runtimeRevisionMatchesCurrent ? "oui" : "non"}`,
           `- Providers testés : ${providerEvidence.providers.join(", ")}`,
           `- Modes testés : ${providerEvidence.modes.join(", ")}`,
@@ -401,6 +414,12 @@ function renderReport(
     "- La validation humaine d'Arthur/Romu reste obligatoire sur les messages et la qualite commerciale."
   ];
   return lines.join("\n");
+}
+
+function renderRuntimeVerdict(verdict: RunVerdict, runtimeMetadataComplete: boolean, runtimeRevisionMatchesCurrent: boolean): string {
+  const eligibleVerdict = eligibleRuntimeVerdict(verdict, runtimeMetadataComplete, runtimeRevisionMatchesCurrent);
+  if (verdict === "pass" && eligibleVerdict === "fail") return "fail (artefact pass inéligible)";
+  return eligibleVerdict;
 }
 
 interface RealRunnerEvidence {
