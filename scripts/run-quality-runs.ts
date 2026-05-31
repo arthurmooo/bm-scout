@@ -1,12 +1,17 @@
 import { existsSync } from "node:fs";
+import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { promisify } from "node:util";
 import { runScoutMission, seedFeedbacks } from "../src/domain/scout-engine";
 import type { ScoutLead, ScoutRun } from "../src/domain/types";
+import { analyzeRunnerSteps, type RunnerStepEvidence } from "../src/server/readiness-evidence";
 import { getScoutSnapshot } from "../src/server/scout-repository";
 
 type RunVerdict = "pass" | "fail";
 type ProductReadiness = "pilot_candidate" | "production_not_ready";
+
+const execFileAsync = promisify(execFile);
 
 interface EvaluatedRun {
   name: string;
@@ -29,7 +34,8 @@ const globalScore = Math.round(
   evaluatedRuns.reduce((sum, item) => sum + item.score, 0) / evaluatedRuns.length
 );
 const fixtureVerdict: RunVerdict = globalBlockers.length === 0 && globalScore >= 85 ? "pass" : "fail";
-const realRunnerEvidence = await loadRealRunnerEvidence();
+const currentCodeRevision = await resolveCurrentCodeRevision();
+const realRunnerEvidence = await loadRealRunnerEvidence(currentCodeRevision);
 const cliPersistEvidence = await loadCliPersistEvidence();
 const supabaseConsoleEvidence = await loadSupabaseConsoleEvidence();
 const providerComparisonEvidence = await loadProviderComparisonEvidence();
@@ -45,7 +51,8 @@ const report = renderReport(
   realRunnerEvidence,
   cliPersistEvidence,
   supabaseConsoleEvidence,
-  providerComparisonEvidence
+  providerComparisonEvidence,
+  currentCodeRevision
 );
 const artifactsDir = join(process.cwd(), "artifacts", "quality-runs");
 await mkdir(artifactsDir, { recursive: true });
@@ -62,6 +69,7 @@ await writeFile(
       cliPersistEvidence,
       supabaseConsoleEvidence,
       providerComparisonEvidence,
+      currentCodeRevision,
       readinessMode,
       runs: evaluatedRuns
     },
@@ -220,7 +228,8 @@ function renderReport(
   realEvidence: RealRunnerEvidence[],
   persistEvidence: CliPersistEvidence | null,
   consoleEvidence: SupabaseConsoleEvidence,
-  providerEvidence: ProviderComparisonEvidence | null
+  providerEvidence: ProviderComparisonEvidence | null,
+  currentRevision: string
 ): string {
   const lines = [
     "# Rapport qualite BM Scout - socle fixture",
@@ -232,6 +241,7 @@ function renderReport(
     readinessMode
       ? "Ce rapport valide le socle fixture et les preuves runtime disponibles."
       : "Ce rapport valide uniquement les fixtures locales et affiche les preuves runtime disponibles.",
+    `Révision code courante : ${currentRevision}`,
     "",
     "## Blockers produit restants",
     "",
@@ -255,6 +265,7 @@ function renderReport(
               `runtime metadata : ${item.runtimeMetadataComplete ? "oui" : "non"}`,
               `modèle : ${item.runtimeModel}`,
               `révision : ${item.runtimeCodeRevision}`,
+              `révision courante : ${item.runtimeRevisionMatchesCurrent ? "oui" : "non"}`,
               `durée : ${item.runtimeDurationMs}ms`
             ].join("; ")
         )
@@ -338,12 +349,13 @@ interface RealRunnerEvidence {
   doNotContactEventCount: number;
   persistComplete: boolean;
   runtimeMetadataComplete: boolean;
+  runtimeRevisionMatchesCurrent: boolean;
   runtimeCodeRevision: string;
   runtimeDurationMs: number;
   runtimeModel: string;
 }
 
-async function loadRealRunnerEvidence(): Promise<RealRunnerEvidence[]> {
+async function loadRealRunnerEvidence(currentRevision: string): Promise<RealRunnerEvidence[]> {
   const targets = [
     { name: "Core reel Supabase persist", file: "latest-real-core-supabase-persist.json" },
     { name: "Exploration reelle Supabase persist", file: "latest-real-exploration-supabase-persist.json" },
@@ -363,13 +375,13 @@ async function loadRealRunnerEvidence(): Promise<RealRunnerEvidence[]> {
         rejected_count?: number;
         lessons?: { lesson?: string; recommendation?: string; source?: string }[];
         final_decision?: "ready" | "not_ready";
-        run_steps?: RunnerStep[];
+        run_steps?: RunnerStepEvidence[];
       };
     };
     if (!payload.output?.trace_id) continue;
     const lessons = payload.output.lessons ?? [];
     const lessonCount = lessons.length;
-    const memory = runnerMemoryEvidence(payload.output.run_steps ?? []);
+    const memory = analyzeRunnerSteps(payload.output.run_steps ?? [], currentRevision);
     evidence.push({
       name: target.name,
       verdict: payload.verdict === "pass" ? "pass" : "fail",
@@ -385,54 +397,13 @@ async function loadRealRunnerEvidence(): Promise<RealRunnerEvidence[]> {
       doNotContactEventCount: memory.doNotContactEventCount,
       persistComplete: memory.persistComplete,
       runtimeMetadataComplete: memory.runtimeMetadataComplete,
+      runtimeRevisionMatchesCurrent: memory.runtimeRevisionMatchesCurrent,
       runtimeCodeRevision: memory.runtimeCodeRevision,
       runtimeDurationMs: memory.runtimeDurationMs,
       runtimeModel: memory.runtimeModel
     });
   }
   return evidence;
-}
-
-interface RunnerStep {
-  step?: string;
-  event_type?: string;
-  payload?: Record<string, unknown>;
-}
-
-function runnerMemoryEvidence(steps: RunnerStep[]): {
-  source: string;
-  doNotContactEventCount: number;
-  persistComplete: boolean;
-  runtimeMetadataComplete: boolean;
-  runtimeCodeRevision: string;
-  runtimeDurationMs: number;
-  runtimeModel: string;
-} {
-  const runnerStep = steps.find((step) => step.step === "runner_complete");
-  const payload = runnerStep?.payload ?? {};
-  const source = typeof payload.feedback_memory_source === "string" ? payload.feedback_memory_source : "unknown";
-  const dncCount = Number(payload.do_not_contact_event_count ?? 0);
-  const durationMs = Number(payload.duration_ms ?? 0);
-  const codeRevision = typeof payload.code_revision === "string" ? payload.code_revision : "";
-  const model = typeof payload.openai_model === "string" ? payload.openai_model : "";
-  return {
-    source,
-    doNotContactEventCount: Number.isFinite(dncCount) ? dncCount : 0,
-    persistComplete: steps.some((step) => step.step === "persist_complete" && step.event_type === "supabase_persist"),
-    runtimeMetadataComplete: Boolean(
-      runnerStep &&
-        payload.started_at &&
-        payload.completed_at &&
-        Number.isFinite(durationMs) &&
-        durationMs >= 0 &&
-        payload.python_version &&
-        payload.openai_agents_version &&
-        codeRevision
-    ),
-    runtimeCodeRevision: codeRevision || "unknown",
-    runtimeDurationMs: Number.isFinite(durationMs) ? durationMs : 0,
-    runtimeModel: model || "unknown"
-  };
 }
 
 function learningUsesFeedback(lessons: { lesson?: string; recommendation?: string; source?: string }[]): boolean {
@@ -458,14 +429,14 @@ async function loadCliPersistEvidence(): Promise<CliPersistEvidence | null> {
   if (!existsSync(path)) return null;
   const payload = JSON.parse(await readFile(path, "utf8")) as {
     verdict?: RunVerdict;
-    output?: { trace_id?: string; run_steps?: RunnerStep[] };
+    output?: { trace_id?: string; run_steps?: RunnerStepEvidence[] };
   };
   if (!payload.output?.trace_id) return null;
   return {
     verdict: payload.verdict === "pass" ? "pass" : "fail",
     traceId: payload.output.trace_id,
     sourceFile,
-    persistComplete: runnerMemoryEvidence(payload.output.run_steps ?? []).persistComplete
+    persistComplete: analyzeRunnerSteps(payload.output.run_steps ?? [], "unknown").persistComplete
   };
 }
 
@@ -552,6 +523,26 @@ async function loadSupabaseConsoleEvidence(): Promise<SupabaseConsoleEvidence> {
   }
 }
 
+async function resolveCurrentCodeRevision(): Promise<string> {
+  const configured = process.env.BM_SCOUT_CODE_REVISION ?? process.env.GITHUB_SHA ?? process.env.VERCEL_GIT_COMMIT_SHA;
+  if (configured?.trim()) return configured.trim();
+  try {
+    const { stdout } = await execFileAsync("git", ["rev-parse", "HEAD"], {
+      cwd: process.cwd(),
+      timeout: 2000
+    });
+    const revision = stdout.trim();
+    if (!revision) return "unknown";
+    const { stdout: status } = await execFileAsync("git", ["status", "--porcelain"], {
+      cwd: process.cwd(),
+      timeout: 2000
+    });
+    return status.trim() ? `${revision}-dirty` : revision;
+  } catch {
+    return "unknown";
+  }
+}
+
 function buildProductBlockers(
   realEvidence: RealRunnerEvidence[],
   persistEvidence: CliPersistEvidence | null,
@@ -559,15 +550,14 @@ function buildProductBlockers(
   providerEvidence: ProviderComparisonEvidence | null
 ): string[] {
   const blockers: string[] = [];
-  const hasCore = realEvidence.some((item) => item.mode === "core" && item.verdict === "pass" && item.finalDecision === "ready");
-  const hasExploration = realEvidence.some(
-    (item) => item.mode === "exploration" && item.verdict === "pass" && item.finalDecision === "ready"
+  const eligibleRealEvidence = realEvidence.filter(
+    (item) => item.verdict === "pass" && item.runtimeMetadataComplete && item.runtimeRevisionMatchesCurrent
   );
-  const hasSupabaseCore = realEvidence.some((item) => item.mode === "core" && item.sourceFile.includes("supabase-persist") && item.verdict === "pass");
-  const hasSupabaseExploration = realEvidence.some(
-    (item) => item.mode === "exploration" && item.sourceFile.includes("supabase-persist") && item.verdict === "pass"
-  );
-  const hasLearningFromFeedback = realEvidence.some(
+  const hasCore = eligibleRealEvidence.some((item) => item.mode === "core" && item.finalDecision === "ready");
+  const hasExploration = eligibleRealEvidence.some((item) => item.mode === "exploration" && item.finalDecision === "ready");
+  const hasSupabaseCore = eligibleRealEvidence.some((item) => item.mode === "core" && item.sourceFile.includes("supabase-persist"));
+  const hasSupabaseExploration = eligibleRealEvidence.some((item) => item.mode === "exploration" && item.sourceFile.includes("supabase-persist"));
+  const hasLearningFromFeedback = eligibleRealEvidence.some(
     (item) =>
       item.mode === "core" &&
       item.sourceFile.includes("supabase-persist") &&
@@ -593,6 +583,9 @@ function buildProductBlockers(
   }
   for (const evidence of realEvidence.filter((item) => item.verdict === "pass" && !item.runtimeMetadataComplete)) {
     blockers.push(`Run ${evidence.traceId} sans métadonnées runtime auditables.`);
+  }
+  for (const evidence of realEvidence.filter((item) => item.verdict === "pass" && item.runtimeMetadataComplete && !item.runtimeRevisionMatchesCurrent)) {
+    blockers.push(`Run ${evidence.traceId} généré par la révision ${evidence.runtimeCodeRevision}, différente du code courant.`);
   }
   if (!hasSupabaseCore || !hasSupabaseExploration || realEvidence.some((item) => item.sourceFile.includes("supabase-persist") && !item.persistComplete)) {
     blockers.push("Runs Agents SDK réels non prouvés avec persistance Supabase.");

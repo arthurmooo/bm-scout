@@ -206,4 +206,17 @@ def code_revision() -> str:
         )
     except Exception:
         return "unknown"
-    return result.stdout.strip() or "unknown"
+    revision = result.stdout.strip()
+    if not revision:
+        return "unknown"
+    try:
+        status = subprocess.run(
+            ["git", "status", "--porcelain"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=2,
+        )
+    except Exception:
+        return revision
+    return f"{revision}-dirty" if status.stdout.strip() else revision

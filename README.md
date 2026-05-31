@@ -92,7 +92,7 @@ npm run worker:test
 npm run provider:compare
 ```
 
-`quality:runs` valide seulement le socle fixture. `quality:readiness` doit rester bloquant tant que BM Scout est `production_not_ready`; les artefacts réels doivent indiquer une mémoire Supabase, un DNC Supabase chargé et des métadonnées runtime auditables pour prouver le learning runtime.
+`quality:runs` valide seulement le socle fixture. `quality:readiness` doit rester bloquant tant que BM Scout est `production_not_ready`; les artefacts réels doivent indiquer une mémoire Supabase, un DNC Supabase chargé, des métadonnées runtime auditables et une révision code compatible avec le commit courant pour prouver le learning runtime.
 `provider:compare` est un gate de recherche réelle : sans `SERPAPI_API_KEY` ou `OPENAI_API_KEY`, un échec est attendu et doit rester visible.
 OpenAI a bien un tool officiel de recherche web via Responses API (`web_search`) et le provider `openai_web` l'utilise. Dans le dernier smoke réel provider, OpenAI web passe Core et Exploration à volume PRD (`15/15` Core, `100/100` Exploration) ; SerpAPI reste utile pour comparer coût, stabilité et qualité des sources.
 
@@ -112,7 +112,7 @@ cd services/agent-worker
 
 La persistance `--persist` passe par la RPC Supabase transactionnelle `scout_persist_mission_output`.
 Le chemin réel utilise OpenAI Agents SDK avec `Runner.run`, `trace`, agents spécialisés, handoff QC, agents-as-tools et les tools métier `search_web`, `fetch_company_site`, `extract_company_signals`, `search_jobs`, `find_public_emails`, `dedupe_company`, `score_candidate`, `save_evidence`. Le `WebSearchTool` hébergé OpenAI reste disponible via `BM_SCOUT_AGENT_HOSTED_WEB_SEARCH=1`, mais il est désactivé par défaut parce que le provider `openai_web` utilise déjà le tool officiel Responses API `web_search` pour sourcer le batch.
-Les scripts `worker:real:*` écrivent les artefacts `artifacts/agent-worker-real/latest-real-*.json` consommés par `quality:readiness`, avec modèle, provider, version SDK, révision code, timestamps et durée dans `runner_complete`.
+Les scripts `worker:real:*` écrivent les artefacts `artifacts/agent-worker-real/latest-real-*.json` consommés par `quality:readiness`, avec modèle, provider, version SDK, révision code, timestamps et durée dans `runner_complete`. Un artefact ancien ne compte pas pour la readiness si sa révision ne correspond pas au code courant ; un worktree sale est marqué `-dirty` et reste non éligible.
 SerpAPI est branché derrière le même contrat métier que `openai_web`. En `auto`, `BM_SCOUT_REAL_SEEDS` reste prioritaire, puis `SERPAPI_API_KEY`, puis OpenAI web, puis le fallback web public. OpenAI web couvre déjà le smoke volume PRD ; SerpAPI reste à comparer avant un choix définitif de provider par défaut.
 
 ## Documentation
