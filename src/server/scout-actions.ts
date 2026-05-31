@@ -315,7 +315,7 @@ async function assertMessageCopyAllowed(companyId: string, channel: MessageChann
 
   const { data, error } = await client
     .from("scout_messages")
-    .select("id,status,body,contact_id,scout_contacts(email),scout_companies(domain)")
+    .select("id,status,body,contact_id,scout_contacts(email,email_status,email_type),scout_companies(domain)")
     .eq("company_id", companyId)
     .eq("channel", channel)
     .order("created_at", { ascending: false })
@@ -327,6 +327,9 @@ async function assertMessageCopyAllowed(companyId: string, channel: MessageChann
   if (!message) throw new Error("Copie bloquée : message introuvable.");
   if (message.status === "blocked" || message.body.toLowerCase().startsWith("brouillon blo")) {
     throw new Error("Copie bloquée : message non autorisé par le Quality Control.");
+  }
+  if ((channel === "email" || channel === "follow_up") && message.scout_contacts?.email_status !== "usable") {
+    throw new Error("Copie bloquée : email contact à vérifier ou non utilisable.");
   }
 
   const { data: isDnc, error: dncError } = await client.rpc("scout_is_do_not_contact", {
@@ -404,6 +407,6 @@ interface CopyableMessageRow {
   status: string;
   body: string;
   contact_id: string | null;
-  scout_contacts?: { email: string | null } | null;
+  scout_contacts?: { email: string | null; email_status: "usable" | "verify" | "not_usable"; email_type: string | null } | null;
   scout_companies?: { domain: string | null } | null;
 }

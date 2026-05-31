@@ -9,7 +9,8 @@ const { state } = vi.hoisted(() => ({
   state: {
     dnc: false,
     messageStatus: "proposed",
-    messageBody: "Bonjour, message spécifique."
+    messageBody: "Bonjour, message spécifique.",
+    emailStatus: "usable" as "usable" | "verify" | "not_usable"
   }
 }));
 
@@ -184,6 +185,39 @@ describe("scout actions", () => {
     expect(calls.some((call) => call.table === "rpc:scout_is_do_not_contact")).toBe(false);
     expect(calls).not.toContainEqual({ table: "scout_messages", op: "update", payload: { status: "copied" } });
   });
+
+  it("bloque la copie email si l'adresse est seulement a verifier", async () => {
+    reset();
+    state.emailStatus = "verify";
+
+    const result = await recordScoutAction({ action: "copy_email", leadId: "core-cambon" });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("email contact à vérifier");
+    expect(calls.some((call) => call.table === "rpc:scout_is_do_not_contact")).toBe(false);
+    expect(calls).not.toContainEqual({ table: "scout_messages", op: "update", payload: { status: "copied" } });
+  });
+
+  it("bloque la copie de relance si l'adresse est non utilisable", async () => {
+    reset();
+    state.emailStatus = "not_usable";
+
+    const result = await recordScoutAction({ action: "copy_follow_up", leadId: "core-cambon" });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("email contact à vérifier");
+    expect(calls).not.toContainEqual({ table: "scout_messages", op: "update", payload: { status: "copied" } });
+  });
+
+  it("autorise la copie LinkedIn meme si l'email reste a verifier", async () => {
+    reset();
+    state.emailStatus = "verify";
+
+    const result = await recordScoutAction({ action: "copy_linkedin", leadId: "core-cambon" });
+
+    expect(result.ok).toBe(true);
+    expect(calls).toContainEqual({ table: "scout_messages", op: "update", payload: { status: "copied" } });
+  });
 });
 
 function reset() {
@@ -191,6 +225,7 @@ function reset() {
   state.dnc = false;
   state.messageStatus = "proposed";
   state.messageBody = "Bonjour, message spécifique.";
+  state.emailStatus = "usable";
 }
 
 function fakeTable(table: string) {
@@ -223,7 +258,7 @@ function singleRow(table: string) {
       status: state.messageStatus,
       body: state.messageBody,
       contact_id: "contact-1",
-      scout_contacts: { email: "romu@example.com" },
+      scout_contacts: { email: "romu@example.com", email_status: state.emailStatus, email_type: "public_named" },
       scout_companies: { domain: "example.com" }
     };
   }

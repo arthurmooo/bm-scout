@@ -41,7 +41,7 @@ Verdict : `production_not_ready`.
 - Les scripts `worker:real:*` et le runner de queue écrivent maintenant les artefacts `latest-real-*.json` attendus par `quality:readiness`.
 - Un workflow GitHub Actions cron/dispatch existe pour consommer `scout_agent_tasks`.
 - Les actions Romu passent par une route serveur et une table d'événements.
-- Les copies email/relance/LinkedIn ne touchent plus le presse-papiers avant validation serveur, et le serveur bloque une copie DNC ou QC bloquée.
+- Les copies email/relance/LinkedIn ne touchent plus le presse-papiers avant validation serveur, et le serveur bloque une copie DNC, QC bloquée ou email non utilisable.
 - Les actions feedback/outcome Romu alimentent maintenant `scout_feedback` et `scout_outcomes`, donc la mémoire agentique ne dépend plus seulement de notes fictives.
 - Le DNC est un gate déterministe côté TS, worker offline et DB.
 - `quality:readiness` ne peut plus transformer des fixtures en claim de readiness.

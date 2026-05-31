@@ -71,14 +71,14 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Console runtime : si Supabase serveur est configuré mais ne contient aucun run, elle affiche zéro lead et les routines à lancer au lieu de retomber sur les fixtures.
 - Auth interne : home protégée en mode `BM_SCOUT_AUTH_MODE=internal`, login magic link Supabase, fallback démo seulement si l'auth publique est absente ou explicitement forcée.
 - DNC bloque côté TS, worker offline et trigger Supabase.
-- Les actions de copie attendent maintenant la validation serveur avant d'écrire dans le presse-papiers ; côté serveur, un message bloqué QC ou une cible DNC refuse la copie et trace l'échec.
+- Les actions de copie attendent maintenant la validation serveur avant d'écrire dans le presse-papiers ; côté serveur, un message bloqué QC, une cible DNC ou un email `verify/not_usable` refuse la copie et trace l'échec.
 - Feedback Romu influence le scoring et les messages dans le moteur TS et le worker provider testés.
 - Run steps et email confidence sont écrits par le worker/RPC quand `--persist` est exécuté.
 - Console Next buildée avec route d'action dynamique.
 
 ## Vérifications exécutées
 
-- `npm run test` : 49 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie DNC/QC bloquée, indexes FK Supabase, index anti-doublon, policy Auth BM Scout et actions Romu.
+- `npm run test` : 52 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie DNC/QC/email incertain bloquée, indexes FK Supabase, index anti-doublon, policy Auth BM Scout et actions Romu.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.
