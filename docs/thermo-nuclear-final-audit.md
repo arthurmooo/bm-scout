@@ -33,7 +33,7 @@ Verdict : `production_not_ready`.
 - Les routines Daily Brief, Learning Review, DNC check et followup review ne restent plus bloquées par défaut : elles lisent le runtime Supabase et refusent les fixtures comme preuve opérationnelle.
 - Le worker réel ne retombe plus silencieusement sur fixtures et expose `WebSearchTool` OpenAI plus 8 tools métier Agents SDK.
 - `search_jobs` produit maintenant des preuves recrutement publiques et des run steps au lieu d'être un no-op.
-- La mémoire feedback TS et worker pénalise les secteurs faibles, bloque les leads rejetés/DNC, renforce les angles validés et régénère les messages trop génériques. Le worker charge aussi `scout_do_not_contact` directement pour les blocages domaine/hash email et expose les impacts dans `feedback_memory_effects`.
+- La mémoire feedback TS et worker pénalise les secteurs faibles, bloque les leads rejetés/DNC, renforce les angles validés et régénère les messages trop génériques. Le worker charge aussi `scout_do_not_contact` directement, court-circuite DNC/rejets avant outreach quand possible et expose les impacts dans `feedback_memory_effects`.
 - Observé/Inféré/Incertain et email confidence sont maintenant portés par TS, worker Pydantic, DB et RPC.
 - Le RPC écrit des run steps minimaux (`mission_start`, `lead_persisted`, steps worker, `mission_complete`).
 - Le provider réel ajoute des run steps outil-par-outil pour déduplication, fetch, extraction, email discovery, evidence save et scoring.
@@ -45,7 +45,7 @@ Verdict : `production_not_ready`.
 - Les actions Romu passent par une route serveur et une table d'événements.
 - Les copies email/relance/LinkedIn ne touchent plus le presse-papiers avant validation serveur, et le serveur bloque une copie ou approbation de message DNC, QC bloquée ou email non utilisable.
 - Les actions feedback/outcome Romu alimentent maintenant `scout_feedback` et `scout_outcomes`, donc la mémoire agentique ne dépend plus seulement de notes fictives.
-- Le DNC est un gate déterministe côté TS, worker offline, provider réel avant génération d'outreach et DB ; `feedback:evidence` exige désormais le run step `dnc_pre_generation_gate`.
+- Le DNC et les rejets/outcomes négatifs sont des gates déterministes côté TS/worker/provider/DB selon leur portée ; `feedback:evidence` exige désormais les run steps `dnc_pre_generation_gate` et `feedback_reject_pre_generation_gate`.
 - `quality:readiness` ne peut plus transformer des fixtures en claim de readiness.
 - Le dashboard ne contient plus de routine codée en dur.
 - Le provider OpenAI web est branché et testé avec contexte `medium`, verbosité compatible `gpt-4.1-mini` et surface de requêtes élargie ; le dernier smoke réel atteint les volumes PRD (`15/15` Core, `100/100` Exploration).

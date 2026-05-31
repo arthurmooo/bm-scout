@@ -196,6 +196,30 @@ class ConfiguredWebResearchProvider:
                 )
                 candidates.append(blocked)
                 continue
+            seed_rejected_target = seed_rejected_feedback_target(seed, feedback_memory)
+            if seed_rejected_target:
+                blocked = to_blocked_feedback_reject_lead(
+                    seed,
+                    mode,
+                    reason=feedback_memory.target_reasons.get(seed_rejected_target),
+                    signals=[],
+                    evidence=[],
+                    emails=[],
+                )
+                feedback_effects.append(pre_generation_reject_effect(blocked))
+                self.record_step(
+                    "feedback_reject_pre_generation_gate",
+                    {
+                        "company": seed.company,
+                        "website": seed.website,
+                        "stage": "seed",
+                        "matched_target": seed_rejected_target,
+                        "message_generation": "skipped",
+                        "decision": "blocked",
+                    },
+                )
+                candidates.append(blocked)
+                continue
             source_url = seed.source_url or seed.website
             page = self.fetch_company_site(source_url)
             self.record_step("fetch_company_site", {"company": seed.company, "url": source_url, "chars": len(page), "failed": page.startswith("Fetch failed")})
@@ -238,6 +262,31 @@ class ConfiguredWebResearchProvider:
                         "website": seed.website,
                         "stage": "contact",
                         "matched_target": email_dnc_target,
+                        "email_count": len(emails),
+                        "message_generation": "skipped",
+                        "decision": "blocked",
+                    },
+                )
+                candidates.append(blocked)
+                continue
+            email_rejected_target = email_rejected_feedback_target(emails, feedback_memory)
+            if email_rejected_target:
+                blocked = to_blocked_feedback_reject_lead(
+                    seed,
+                    mode,
+                    reason=feedback_memory.target_reasons.get(email_rejected_target),
+                    signals=signals,
+                    evidence=evidence,
+                    emails=emails,
+                )
+                feedback_effects.append(pre_generation_reject_effect(blocked))
+                self.record_step(
+                    "feedback_reject_pre_generation_gate",
+                    {
+                        "company": seed.company,
+                        "website": seed.website,
+                        "stage": "contact",
+                        "matched_target": email_rejected_target,
                         "email_count": len(emails),
                         "message_generation": "skipped",
                         "decision": "blocked",
@@ -707,6 +756,14 @@ def summarize_feedback_effects(effects: list[dict[str, object]]) -> dict[str, ob
 
 
 def seed_do_not_contact_target(seed: CompanySeed, memory: ProviderFeedbackMemory) -> str | None:
+    return seed_memory_target(seed, memory.do_not_contact_targets)
+
+
+def seed_rejected_feedback_target(seed: CompanySeed, memory: ProviderFeedbackMemory) -> str | None:
+    return seed_memory_target(seed, memory.rejected_targets)
+
+
+def seed_memory_target(seed: CompanySeed, targets: set[str]) -> str | None:
     domain = normalized_domain(seed.website)
     candidates = {
         normalize(seed.company),
@@ -716,10 +773,18 @@ def seed_do_not_contact_target(seed: CompanySeed, memory: ProviderFeedbackMemory
     }
     if seed.linkedin_url:
         candidates.add(normalize(normalized_url(seed.linkedin_url)))
-    return next((target for target in memory.do_not_contact_targets if target in candidates), None)
+    return next((target for target in targets if target in candidates), None)
 
 
 def email_do_not_contact_target(emails: list[dict[str, str]], memory: ProviderFeedbackMemory) -> str | None:
+    return email_memory_target(emails, memory.do_not_contact_targets)
+
+
+def email_rejected_feedback_target(emails: list[dict[str, str]], memory: ProviderFeedbackMemory) -> str | None:
+    return email_memory_target(emails, memory.rejected_targets)
+
+
+def email_memory_target(emails: list[dict[str, str]], targets: set[str]) -> str | None:
     candidates: set[str] = set()
     for item in emails:
         email = str(item.get("email", "")).strip()
@@ -727,7 +792,7 @@ def email_do_not_contact_target(emails: list[dict[str, str]], memory: ProviderFe
             continue
         candidates.add(normalize(email))
         candidates.add(email_hash(email))
-    return next((target for target in memory.do_not_contact_targets if target in candidates), None)
+    return next((target for target in targets if target in candidates), None)
 
 
 def pre_generation_dnc_effect(lead: ScoutLead) -> dict[str, object]:
@@ -741,6 +806,24 @@ def pre_generation_dnc_effect(lead: ScoutLead) -> dict[str, object]:
         "after_quality_decision": lead.quality_decision,
         "blocked_by_feedback": True,
         "blocked_do_not_contact": True,
+        "message_regenerated": False,
+        "angle_reinforced": False,
+        "segment_delta_applied": False,
+        "message_generation_skipped": True,
+    }
+
+
+def pre_generation_reject_effect(lead: ScoutLead) -> dict[str, object]:
+    return {
+        "before_score": None,
+        "after_score": lead.score,
+        "score_changed": True,
+        "before_verdict": None,
+        "after_verdict": lead.verdict,
+        "verdict_changed": True,
+        "after_quality_decision": lead.quality_decision,
+        "blocked_by_feedback": True,
+        "blocked_do_not_contact": False,
         "message_regenerated": False,
         "angle_reinforced": False,
         "segment_delta_applied": False,
@@ -1303,6 +1386,74 @@ def to_blocked_do_not_contact_lead(
             QualityGate(code="message_generation", passed=False, reason="Génération d'outreach court-circuitée avant brouillon."),
         ],
         next_action="Ne pas contacter. Conserver uniquement la trace d'audit.",
+        rejection_reason=rejection_reason,
+    )
+
+
+def to_blocked_feedback_reject_lead(
+    seed: CompanySeed,
+    mode: ScoutMode,
+    *,
+    reason: str | None,
+    signals: list[str],
+    evidence: list[Evidence],
+    emails: list[dict[str, str]],
+) -> ScoutLead:
+    lead_id = f"{mode}-{hashlib.sha1((seed.company + seed.website).encode('utf-8')).hexdigest()[:10]}"
+    primary_email = emails[0] if emails else {}
+    email_source_url = (
+        primary_email.get("source_url") or evidence[0].url
+        if primary_email and evidence
+        else None
+    )
+    rejection_reason = reason or "Lead déjà rejeté ou outcome négatif Romu : ne pas le remettre sans preuve nouvelle."
+    observed = [
+        {"text": signal, "evidence_id": evidence[min(index, len(evidence) - 1)].url}
+        for index, signal in enumerate(signals)
+        if evidence
+    ]
+    return ScoutLead(
+        id=lead_id,
+        company=seed.company,
+        website=seed.website,
+        mode=mode,
+        segment=seed.segment,
+        score=0,
+        verdict="reject",
+        quality_decision="blocked",
+        observed_signals=signals,
+        pain_hypotheses=[],
+        score_justification="Score forcé à 0 : compte bloqué par feedback Romu avant génération de message.",
+        short_card=f"{seed.company} : compte rejeté par mémoire Romu, non remis en shortlist.",
+        deep_card="Fiche bloquée avant génération d'outreach. Revenir seulement avec une preuve nouvelle explicite.",
+        personas=[
+            Persona(
+                role="Operations / Partner",
+                reason="Persona non activé : compte bloqué par feedback Romu.",
+                contact_confidence="uncertain",
+                email=primary_email.get("email"),
+                email_type=primary_email.get("type", "unknown"),
+                email_confidence=primary_email.get("confidence", "low"),
+                email_status="not_usable",
+                email_source_url=email_source_url,
+            )
+        ],
+        evidence=evidence,
+        insights=StructuredInsights(
+            observed=observed,
+            inferred=[],
+            uncertain=["Compte bloqué par feedback Romu : preuve nouvelle requise avant réintroduction."],
+        ),
+        outreach=OutreachPack(
+            cold_email="Brouillon bloqué : lead déjà rejeté par Romu.",
+            follow_up="Brouillon bloqué : lead déjà rejeté par Romu.",
+            linkedin="Brouillon bloqué : lead déjà rejeté par Romu.",
+        ),
+        quality_gates=[
+            QualityGate(code="feedback_memory", passed=False, reason=rejection_reason),
+            QualityGate(code="message_generation", passed=False, reason="Génération d'outreach court-circuitée avant brouillon."),
+        ],
+        next_action="Ne pas remettre ce lead dans la shortlist sans preuve nouvelle et justification explicite.",
         rejection_reason=rejection_reason,
     )
 

@@ -507,7 +507,11 @@ def test_provider_feedback_memory_blocks_rejected_company() -> None:
     provider = ConfiguredWebResearchProvider(
         [CompanySeed(company="Test Finance Ops", website="https://example.com", segment="Finance ops")]
     )
-    provider.fetch_company_site = lambda _url: "Finance reporting document client team"
+
+    def fail_fetch(_url):
+        raise AssertionError("Un lead déjà rejeté ne doit pas être fetché avant blocage.")
+
+    provider.fetch_company_site = fail_fetch
     feedbacks = [
         FeedbackEvent(
             id="fb-reject-company",
@@ -526,7 +530,9 @@ def test_provider_feedback_memory_blocks_rejected_company() -> None:
     assert lead.quality_decision == "blocked"
     assert lead.score <= 15
     assert "déjà rejeté" in (lead.rejection_reason or "")
-    assert any(step.step == "apply_feedback_memory" for step in provider.run_steps)
+    reject_step = next(step for step in provider.run_steps if step.step == "feedback_reject_pre_generation_gate")
+    assert reject_step.payload["stage"] == "seed"
+    assert reject_step.payload["message_generation"] == "skipped"
 
 
 def test_provider_feedback_memory_does_not_block_neutral_outcome() -> None:

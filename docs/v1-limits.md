@@ -29,7 +29,7 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 
 - Supabase stocke runs, companies, contacts, preuves, scores, fiches, messages, feedbacks, outcomes, do-not-contact, lessons, email confidence, insights structurés et run steps.
 - Le worker ne fabrique pas d'email : nominatif public sourcé = `usable/high`, générique public = `verify/medium`, pattern observé = `verify/low`, absence ou no-reply = `not_usable`.
-- Le provider réel court-circuite les domaines/companies DNC avant fetch et les contacts/email hashes DNC avant génération d'outreach ; les preuves `dnc_pre_generation_gate` restent à relire dans les artefacts réels persistés avant claim V1.
+- Le provider réel court-circuite les domaines/companies DNC ou déjà rejetés avant fetch et les contacts/email hashes DNC ou liés à un outcome négatif avant génération d'outreach ; les preuves `dnc_pre_generation_gate` et `feedback_reject_pre_generation_gate` restent à relire dans les artefacts réels persistés avant claim V1.
 - Les feedbacks/outcomes Romu et les entrées do-not-contact sont persistés par l'API serveur et relus par le worker. Les outcomes neutres restent neutres dans la mémoire, mais l'effet à volume doit encore être démontré par runs réels persistés avec compteurs d'impact non nuls.
 - La persistance worker passe par RPC transactionnelle, mais doit etre reverifiee dans chaque env avant demo.
 - La console lit Supabase cote serveur si `SUPABASE_SERVICE_ROLE_KEY` existe. Elle n'affiche les fixtures demo que sans env Supabase serveur ; une base Supabase vide reste affichée comme vide.
@@ -69,6 +69,6 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 - `npm run verify:supabase` passe avec l'env serveur.
 - `artifacts/supabase-runtime/latest-verify.json` est produit par `verify:supabase`, porte la révision courante, n'est pas `-dirty`, prouve les actions Romu persistées, et prouve la fusion RPC par domaine avec priorité Core et cleanup à zéro.
 - `--persist` cree un run lisible en Supabase via la RPC.
-- Un run reel Agents SDK utilise les feedbacks/outcomes/DNC Supabase, écrit des artefacts avec `feedback_memory_source=supabase`, `dnc_pre_generation_gate`, des compteurs `feedback_memory_effects` non nuls, des métadonnées runtime complètes, une révision code courante, et modifie les recommandations learning. Pour les volumes Core/Exploration, le provider runtime doit être `openai_web`, `serpapi` ou `web`, pas `configured`.
+- Un run reel Agents SDK utilise les feedbacks/outcomes/DNC Supabase, écrit des artefacts avec `feedback_memory_source=supabase`, `dnc_pre_generation_gate`, `feedback_reject_pre_generation_gate`, des compteurs `feedback_memory_effects` non nuls, des métadonnées runtime complètes, une révision code courante, et modifie les recommandations learning. Pour les volumes Core/Exploration, le provider runtime doit être `openai_web`, `serpapi` ou `web`, pas `configured`.
 - `npm run quality:readiness` passe.
 - L'audit thermo-nuclear final ne contient plus de P1 bloquant.

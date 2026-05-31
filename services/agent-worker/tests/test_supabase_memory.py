@@ -67,6 +67,38 @@ def test_provider_feedback_memory_hard_blocks_dnc_email_hash(monkeypatch) -> Non
     assert dnc_step.payload["message_generation"] == "skipped"
 
 
+def test_provider_feedback_memory_blocks_negative_outcome_email_hash_before_generation(monkeypatch) -> None:
+    email = "ops@negative-outcome.example"
+    provider = ConfiguredWebResearchProvider(
+        [CompanySeed(company="Negative Outcome M&A", website="https://negative-outcome.example", segment="Conseil M&A")]
+    )
+    provider.fetch_company_site = lambda _url: f"M&A transaction reporting document client team {email}"
+    feedbacks = [
+        FeedbackEvent(
+            id="negative-email",
+            lead_id="hash-only",
+            kind="negative_outcome",
+            note="Outcome négatif Romu : ne pas relancer.",
+            created_at="2026-05-30T10:00:00+00:00",
+            normalized_email_hash=sha256(email.encode("utf-8")).hexdigest(),
+        )
+    ]
+
+    def fail_to_scout_lead(*_args, **_kwargs):
+        raise AssertionError("Un outcome négatif contact ne doit pas générer d'outreach standard.")
+
+    monkeypatch.setattr(provider_module, "to_scout_lead", fail_to_scout_lead)
+
+    lead = provider.build_candidates("core", feedback_events=feedbacks)[0]
+
+    assert lead.quality_decision == "blocked"
+    assert lead.verdict == "reject"
+    assert "Brouillon bloqué" in lead.outreach.cold_email
+    reject_step = next(step for step in provider.run_steps if step.step == "feedback_reject_pre_generation_gate")
+    assert reject_step.payload["stage"] == "contact"
+    assert reject_step.payload["message_generation"] == "skipped"
+
+
 def test_supabase_memory_persists_output_through_atomic_rpc() -> None:
     output = offline_output("core")
     requests = []

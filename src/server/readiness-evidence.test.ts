@@ -64,6 +64,14 @@ describe("readiness evidence", () => {
             message_generation: "skipped"
           }
         },
+        {
+          step: "feedback_reject_pre_generation_gate",
+          event_type: "tool_call",
+          payload: {
+            decision: "blocked",
+            message_generation: "skipped"
+          }
+        },
         { step: "persist_complete", event_type: "supabase_persist" }
       ],
       "abcdef1234567890"
@@ -79,6 +87,7 @@ describe("readiness evidence", () => {
       feedbackBlockedCount: 1,
       feedbackDncBlockedCount: 1,
       dncPreGenerationBlockedCount: 1,
+      feedbackPreGenerationRejectedCount: 1,
       feedbackMessageRegeneratedCount: 1,
       feedbackAngleReinforcedCount: 1,
       feedbackSegmentDeltaCount: 1,
