@@ -116,6 +116,8 @@ Le scheduler évite les doublons de même journée pour une tâche non annulée.
 - autres jours ouvrés : `daily_brief`, `dnc_check`, `followup_review` ;
 - week-end : aucune tâche, sauf lancement manuel ciblé.
 
+La base ajoute aussi l'index unique partiel `scout_agent_tasks_active_type_schedule_uniq`, qui bloque deux tâches `queued/running` identiques sur le même `type` + `scheduled_for`.
+
 Lancement ciblé ou rerun assumé :
 
 ```bash

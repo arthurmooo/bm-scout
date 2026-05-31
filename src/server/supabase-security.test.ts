@@ -55,6 +55,14 @@ describe("supabase security posture", () => {
     expect(migration).toContain("revoke execute on function public.scout_is_do_not_contact(text, text, uuid, uuid) from public, anon");
     expect(migration).toContain("grant execute on function public.scout_is_do_not_contact(text, text, uuid, uuid) to authenticated, service_role");
   });
+
+  it("empeche les doublons de taches agentiques actives cote base", () => {
+    const migration = readMigration("agent_tasks_active_dedupe");
+
+    expect(migration).toContain("create unique index if not exists scout_agent_tasks_active_type_schedule_uniq");
+    expect(migration).toContain("on public.scout_agent_tasks (type, scheduled_for)");
+    expect(migration).toContain("where status in ('queued', 'running')");
+  });
 });
 
 function readMigration(name: string): string {

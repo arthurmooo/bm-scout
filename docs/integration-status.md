@@ -28,6 +28,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Cron GitHub Actions versionné : `.github/workflows/bm-scout-agent-tasks.yml`.
 - Tests scheduler avec routines Core, Exploration, Daily Brief, Learning, DNC, followup.
 - Migration Supabase `20260530210927_agent_tasks_and_actions.sql`.
+- Migration Supabase `20260531004848_agent_tasks_active_dedupe.sql` : index unique partiel pour empêcher deux tâches `queued/running` identiques sur le même créneau.
 - Migration Supabase `20260530232128_restrict_internal_rls_policies.sql` : suppression des policies `using (true)` et restriction aux rôles internes `app_metadata`.
 - Migration Supabase `20260530232456_close_security_definer_rpc_exposure.sql` : fermeture des fonctions `SECURITY DEFINER` exposées en RPC publique.
 - API `POST /api/scout/actions`.
@@ -74,7 +75,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 
 ## Vérifications exécutées
 
-- `npm run test` : 42 tests pass, dont scheduler idempotent, policy Auth BM Scout et actions Romu.
+- `npm run test` : 43 tests pass, dont scheduler idempotent, index anti-doublon Supabase, policy Auth BM Scout et actions Romu.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.
@@ -92,6 +93,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Browser intégré : pass sur `http://127.0.0.1:3030` ; login interne visible, dashboard `production_not_ready` visible, clic feedback `Bon lead` passe en état `Erreur` attendu sans env Supabase serveur.
 - `npm audit --omit=dev` : fail modéré connu via `next -> postcss <8.5.10`; `npm audit fix --force` propose un downgrade Next cassant vers 9.x, donc non appliqué dans cette passe.
 - Supabase interne `Interne_Agentic_prospection` : migrations `agent_tasks_and_actions`, `bm_scout_structured_insights_email_confidence_steps`, `scout_feedback_outcome_actions`, `restrict_internal_rls_policies` et `close_security_definer_rpc_exposure` appliquées.
+- Supabase interne : index `scout_agent_tasks_active_type_schedule_uniq` vérifié en base via MCP après absence de doublons actifs.
 - Supabase advisor sécurité : 0 lint après durcissement RLS/RPC.
 
 ## Prochaine tranche P0

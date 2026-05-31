@@ -10,7 +10,7 @@ Verdict courant : `production_not_ready`.
 | --- | --- | --- |
 | Console interne orientée décision Romu | Partiel | `src/ui/ScoutDashboard.tsx`, build OK |
 | Séparation Core / Exploration | Partiel | `ScoutMode`, fixtures, workflows locaux |
-| Proactivité réelle | Partiel | `scout_agent_tasks` appliqué Supabase, scheduler local idempotent des 6 routines P0, runner queue Core/Exploration + routines brief/learning/DNC/followup déterministes, cron GitHub Actions versionné mais non prouvé |
+| Proactivité réelle | Partiel | `scout_agent_tasks` appliqué Supabase, scheduler local idempotent des 6 routines P0, index DB anti-doublon actif, runner queue Core/Exploration + routines brief/learning/DNC/followup déterministes, cron GitHub Actions versionné mais non prouvé |
 | 15 leads Core / semaine | Non prouvé | Objectif paramétré, pas de run réel à volume |
 | 100 comptes Exploration scannés | Non prouvé | Objectif paramétré, pas de run réel à volume |
 | Vraie recherche marché | Partiel | Provider SerpAPI + OpenAI `web_search` + fallback web public + job search minimal + tools métier, pas encore prouvé à volume |
@@ -28,7 +28,7 @@ Verdict courant : `production_not_ready`.
 
 ## P0 corrigés partiellement
 
-- P0.1 Proactivité : table tasks, statuts, types de tâches, scheduler local idempotent couvrant les 6 routines P0, lancement manuel, runner de queue, routines brief/learning/DNC/followup et workflow cron GitHub Actions posés.
+- P0.1 Proactivité : table tasks, statuts, types de tâches, scheduler local idempotent couvrant les 6 routines P0, index DB anti-doublon actif, lancement manuel, runner de queue, routines brief/learning/DNC/followup et workflow cron GitHub Actions posés.
 - P0.2/P0.3 Preuve runs réels : harnais `worker:real:*` ajouté pour produire les artefacts `latest-real-*.json` sans passer par fixtures.
 - P0.4 Do-not-contact : gate déterministe ajouté côté TS, worker offline et DB.
 - P0.5 Feedback loop : mémoire locale causale ajoutée côté TS et worker provider pour rejet, pénalité secteur, bonus angle, anti-générique et DNC.
