@@ -5,6 +5,7 @@ import json
 from hashlib import sha256
 from unittest.mock import patch
 
+from bm_scout_worker import providers as provider_module
 from bm_scout_worker.fixtures import offline_output
 from bm_scout_worker.memory import SupabaseConfig, SupabaseMemory, outcome_feedback_kind
 from bm_scout_worker.providers import CompanySeed, ConfiguredWebResearchProvider
@@ -34,7 +35,7 @@ def test_provider_feedback_memory_hard_blocks_dnc_domain_from_table() -> None:
     assert lead.rejection_reason == "Do-not-contact issu du feedback Romu."
 
 
-def test_provider_feedback_memory_hard_blocks_dnc_email_hash() -> None:
+def test_provider_feedback_memory_hard_blocks_dnc_email_hash(monkeypatch) -> None:
     email = "ops@dnc-email.example"
     provider = ConfiguredWebResearchProvider(
         [CompanySeed(company="DNC Email M&A", website="https://dnc-email.example", segment="Conseil M&A")]
@@ -51,10 +52,19 @@ def test_provider_feedback_memory_hard_blocks_dnc_email_hash() -> None:
         )
     ]
 
+    def fail_to_scout_lead(*_args, **_kwargs):
+        raise AssertionError("Un email DNC ne doit pas passer par la génération de lead/outreach standard.")
+
+    monkeypatch.setattr(provider_module, "to_scout_lead", fail_to_scout_lead)
+
     lead = provider.build_candidates("core", feedback_events=feedbacks)[0]
 
     assert lead.quality_decision == "blocked"
     assert all(persona.do_not_contact for persona in lead.personas)
+    assert "Brouillon bloqué" in lead.outreach.cold_email
+    dnc_step = next(step for step in provider.run_steps if step.step == "dnc_pre_generation_gate")
+    assert dnc_step.payload["stage"] == "contact"
+    assert dnc_step.payload["message_generation"] == "skipped"
 
 
 def test_supabase_memory_persists_output_through_atomic_rpc() -> None:

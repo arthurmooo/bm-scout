@@ -13,7 +13,14 @@ from typing import Protocol
 from urllib.parse import urlparse
 
 from .fixtures import candidate_leads
-from .feedback_memory import apply_provider_feedback_memory, build_provider_feedback_memory
+from .feedback_memory import (
+    ProviderFeedbackMemory,
+    apply_provider_feedback_memory,
+    build_provider_feedback_memory,
+    domain_key,
+    email_hash,
+    normalize,
+)
 from .schemas import Evidence, FeedbackEvent, OutreachPack, Persona, QualityGate, RunStep, ScoutLead, ScoutMode, StructuredInsights
 
 
@@ -165,6 +172,30 @@ class ConfiguredWebResearchProvider:
                     "decision": "kept",
                 },
             )
+            seed_dnc_target = seed_do_not_contact_target(seed, feedback_memory)
+            if seed_dnc_target:
+                blocked = to_blocked_do_not_contact_lead(
+                    seed,
+                    mode,
+                    reason=feedback_memory.target_reasons.get(seed_dnc_target),
+                    signals=[],
+                    evidence=[],
+                    emails=[],
+                )
+                feedback_effects.append(pre_generation_dnc_effect(blocked))
+                self.record_step(
+                    "dnc_pre_generation_gate",
+                    {
+                        "company": seed.company,
+                        "website": seed.website,
+                        "stage": "seed",
+                        "matched_target": seed_dnc_target,
+                        "message_generation": "skipped",
+                        "decision": "blocked",
+                    },
+                )
+                candidates.append(blocked)
+                continue
             source_url = seed.source_url or seed.website
             page = self.fetch_company_site(source_url)
             self.record_step("fetch_company_site", {"company": seed.company, "url": source_url, "chars": len(page), "failed": page.startswith("Fetch failed")})
@@ -189,6 +220,31 @@ class ConfiguredWebResearchProvider:
                 + job_evidence
             )
             self.record_step("save_evidence", {"company": seed.company, "evidence_count": len(evidence)})
+            email_dnc_target = email_do_not_contact_target(emails, feedback_memory)
+            if email_dnc_target:
+                blocked = to_blocked_do_not_contact_lead(
+                    seed,
+                    mode,
+                    reason=feedback_memory.target_reasons.get(email_dnc_target),
+                    signals=signals,
+                    evidence=evidence,
+                    emails=emails,
+                )
+                feedback_effects.append(pre_generation_dnc_effect(blocked))
+                self.record_step(
+                    "dnc_pre_generation_gate",
+                    {
+                        "company": seed.company,
+                        "website": seed.website,
+                        "stage": "contact",
+                        "matched_target": email_dnc_target,
+                        "email_count": len(emails),
+                        "message_generation": "skipped",
+                        "decision": "blocked",
+                    },
+                )
+                candidates.append(blocked)
+                continue
             score = self.score_candidate(seed, evidence, feedback_notes or [])
             self.record_step("score_candidate", {"company": seed.company, "score": score, "feedback_notes_count": len(feedback_notes or [])})
             lead = to_scout_lead(seed, mode, score, signals, evidence, emails)
@@ -647,6 +703,48 @@ def summarize_feedback_effects(effects: list[dict[str, object]]) -> dict[str, ob
         "message_regenerated_count": sum(1 for effect in effects if effect.get("message_regenerated") is True),
         "angle_reinforced_count": sum(1 for effect in effects if effect.get("angle_reinforced") is True),
         "segment_delta_count": sum(1 for effect in effects if effect.get("segment_delta_applied") is True),
+    }
+
+
+def seed_do_not_contact_target(seed: CompanySeed, memory: ProviderFeedbackMemory) -> str | None:
+    domain = normalized_domain(seed.website)
+    candidates = {
+        normalize(seed.company),
+        normalize(seed.website),
+        normalize(domain),
+        normalize(domain_key(seed.website)),
+    }
+    if seed.linkedin_url:
+        candidates.add(normalize(normalized_url(seed.linkedin_url)))
+    return next((target for target in memory.do_not_contact_targets if target in candidates), None)
+
+
+def email_do_not_contact_target(emails: list[dict[str, str]], memory: ProviderFeedbackMemory) -> str | None:
+    candidates: set[str] = set()
+    for item in emails:
+        email = str(item.get("email", "")).strip()
+        if not email:
+            continue
+        candidates.add(normalize(email))
+        candidates.add(email_hash(email))
+    return next((target for target in memory.do_not_contact_targets if target in candidates), None)
+
+
+def pre_generation_dnc_effect(lead: ScoutLead) -> dict[str, object]:
+    return {
+        "before_score": None,
+        "after_score": lead.score,
+        "score_changed": True,
+        "before_verdict": None,
+        "after_verdict": lead.verdict,
+        "verdict_changed": True,
+        "after_quality_decision": lead.quality_decision,
+        "blocked_by_feedback": True,
+        "blocked_do_not_contact": True,
+        "message_regenerated": False,
+        "angle_reinforced": False,
+        "segment_delta_applied": False,
+        "message_generation_skipped": True,
     }
 
 
@@ -1137,6 +1235,75 @@ def to_scout_lead(
             QualityGate(code="source", passed=bool(evidence), reason="Preuve publique enregistrée." if evidence else "Preuve absente."),
         ],
         next_action="Valider la pertinence ICP et enrichir le décideur exact.",
+    )
+
+
+def to_blocked_do_not_contact_lead(
+    seed: CompanySeed,
+    mode: ScoutMode,
+    *,
+    reason: str | None,
+    signals: list[str],
+    evidence: list[Evidence],
+    emails: list[dict[str, str]],
+) -> ScoutLead:
+    lead_id = f"{mode}-{hashlib.sha1((seed.company + seed.website).encode('utf-8')).hexdigest()[:10]}"
+    primary_email = emails[0] if emails else {}
+    email_source_url = (
+        primary_email.get("source_url") or evidence[0].url
+        if primary_email and evidence
+        else None
+    )
+    rejection_reason = reason or "Do-not-contact issu du feedback Romu."
+    observed = [
+        {"text": signal, "evidence_id": evidence[min(index, len(evidence) - 1)].url}
+        for index, signal in enumerate(signals)
+        if evidence
+    ]
+    return ScoutLead(
+        id=lead_id,
+        company=seed.company,
+        website=seed.website,
+        mode=mode,
+        segment=seed.segment,
+        score=0,
+        verdict="reject",
+        quality_decision="blocked",
+        observed_signals=signals,
+        pain_hypotheses=[],
+        score_justification="Score forcé à 0 : cible bloquée par do-not-contact avant génération de message.",
+        short_card=f"{seed.company} : cible do-not-contact, rejet automatique avant génération.",
+        deep_card="Fiche bloquée avant génération d'outreach. Aucun message exploitable ne doit être produit pour cette cible.",
+        personas=[
+            Persona(
+                role="Operations / Partner",
+                reason="Persona bloqué par do-not-contact avant tout outreach.",
+                contact_confidence="uncertain",
+                do_not_contact=True,
+                email=primary_email.get("email"),
+                email_type=primary_email.get("type", "unknown"),
+                email_confidence=primary_email.get("confidence", "low"),
+                email_status="not_usable",
+                email_source_url=email_source_url,
+            )
+        ],
+        evidence=evidence,
+        insights=StructuredInsights(
+            observed=observed,
+            inferred=[],
+            uncertain=["Relance interdite : cible présente dans la mémoire do-not-contact."],
+        ),
+        outreach=OutreachPack(
+            cold_email="Brouillon bloqué : do-not-contact.",
+            follow_up="Brouillon bloqué : do-not-contact.",
+            linkedin="Brouillon bloqué : do-not-contact.",
+        ),
+        quality_gates=[
+            QualityGate(code="do_not_contact", passed=False, reason=rejection_reason),
+            QualityGate(code="message_generation", passed=False, reason="Génération d'outreach court-circuitée avant brouillon."),
+        ],
+        next_action="Ne pas contacter. Conserver uniquement la trace d'audit.",
+        rejection_reason=rejection_reason,
     )
 
 

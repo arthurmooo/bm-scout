@@ -616,7 +616,11 @@ def test_provider_feedback_memory_hard_blocks_dnc() -> None:
     provider = ConfiguredWebResearchProvider(
         [CompanySeed(company="DNC M&A", website="https://dnc.example", segment="Conseil M&A")]
     )
-    provider.fetch_company_site = lambda _url: "M&A transaction reporting document client team"
+
+    def fail_fetch(_url):
+        raise AssertionError("Un domaine DNC ne doit pas être fetché avant blocage.")
+
+    provider.fetch_company_site = fail_fetch
     feedbacks = [
         FeedbackEvent(
             id="fb-dnc",
@@ -633,6 +637,9 @@ def test_provider_feedback_memory_hard_blocks_dnc() -> None:
     assert lead.quality_decision == "blocked"
     assert all(persona.do_not_contact for persona in lead.personas)
     assert "do-not-contact" in lead.outreach.cold_email.lower()
+    dnc_step = next(step for step in provider.run_steps if step.step == "dnc_pre_generation_gate")
+    assert dnc_step.payload["stage"] == "seed"
+    assert dnc_step.payload["message_generation"] == "skipped"
     effects = next(step.payload for step in provider.run_steps if step.step == "feedback_memory_effects")
     assert effects["blocked_count"] == 1
     assert effects["blocked_do_not_contact_count"] == 1

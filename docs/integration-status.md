@@ -41,6 +41,7 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Triggers DB `scout_prevent_dnc_message` et `scout_messages_prevent_blocking_outcome` pour empêcher un message non bloqué sur une cible DNC ou un outcome négatif ; un outcome négatif bloque aussi les messages existants.
 - QC TS : DNC déterministe et Observé relié à une preuve.
 - Worker offline : DNC interdit en shortlist.
+- Provider réel : les domaines/companies DNC sont bloqués avant fetch, et les emails/hash DNC sont bloqués avant `to_scout_lead`; le run step `dnc_pre_generation_gate` prouve que la génération d'outreach a été court-circuitée.
 - Worker réel : provider `auto` avec seeds, SerpAPI, OpenAI `web_search` ou fallback web public, plus 8 tools métier Agents SDK. Le `WebSearchTool` hébergé OpenAI est disponible en opt-in via `BM_SCOUT_AGENT_HOSTED_WEB_SEARCH=1`, mais désactivé par défaut pour éviter de relancer une deuxième recherche web non bornée après le provider.
 - Provider OpenAI web : utilise le tool officiel Responses API `{ "type": "web_search" }` avec `tool_choice=required`, conserve les sources/traces, parse JSON ou sources web, et n'utilise pas OpenAI récursivement pour les recherches jobs sauf opt-in `BM_SCOUT_OPENAI_SEARCH_JOBS=1`.
 - Preuve provider : `latest-comparison.json` porte maintenant `code_revision`, `python_version` et `openai_sdk_version`; `quality:readiness` refuse une comparaison provider ancienne ou sans métadonnées runtime.
