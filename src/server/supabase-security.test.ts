@@ -195,6 +195,16 @@ describe("supabase security posture", () => {
     expect(runtimeScript).toContain("noApprovedMessageConstraint");
     expect(runtimeScript).toContain("dncUniqueEmailHash");
   });
+
+  it("fait remonter les gates conformité Supabase dans quality:readiness live", () => {
+    const qualityScript = readFileSync(join(root, "scripts", "run-quality-runs.ts"), "utf8");
+
+    expect(qualityScript).toContain("verifySupabaseComplianceGates");
+    expect(qualityScript).toContain("complianceGatesVerified: complianceGates.verified");
+    expect(qualityScript).toContain("noApprovedMessageConstraint: complianceGates.noApprovedMessageConstraint");
+    expect(qualityScript).toContain("Supabase compliance gates");
+    expect(qualityScript).toContain("dncUniqueEmailHash: complianceGates.dncUniqueEmailHash");
+  });
 });
 
 function readMigration(name: string): string {

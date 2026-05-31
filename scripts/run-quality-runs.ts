@@ -19,7 +19,7 @@ import {
 import { getScoutSnapshot } from "../src/server/scout-repository";
 import type { OpenAiPreflightArtifact } from "../src/server/openai-preflight";
 import { createServerSupabaseClient } from "../src/server/supabase";
-import { verifySupabasePersistenceDedupe } from "../src/server/supabase-runtime-verification";
+import { verifySupabaseComplianceGates, verifySupabasePersistenceDedupe } from "../src/server/supabase-runtime-verification";
 import { loadLocalEnvFiles } from "../src/server/runtime-env";
 
 type RunVerdict = "pass" | "fail";
@@ -376,6 +376,7 @@ function renderReport(
     `- Console serveur Supabase : ${consoleEvidence.verdict}; source : ${consoleEvidence.source}; artefact : ${consoleEvidence.sourceFile ?? "live"}; runs : ${consoleEvidence.runCount}; leads : ${consoleEvidence.leadCount}; rejetes : ${consoleEvidence.rejectedCount}; lessons : ${consoleEvidence.lessonCount}`,
     `- Console runtime : metadata ${consoleEvidence.runtimeMetadataComplete ? "oui" : "non"}; révision ${consoleEvidence.codeRevision}; révision courante ${consoleEvidence.runtimeRevisionMatchesCurrent ? "oui" : "non"}; actions : ${consoleEvidence.actionEventCount}; actions liées task : ${consoleEvidence.taskActionLinkCount}`,
     `- Supabase RPC dedupe : ${consoleEvidence.persistenceDedupeVerified ? "oui" : "non"}; companies : ${consoleEvidence.persistenceDedupeCompanyCount}; mode conservé : ${consoleEvidence.persistenceDedupeRetainedMode ?? "absent"}; run steps merged : ${consoleEvidence.persistenceDedupeRunStepCount}; cleanup companies/runs : ${consoleEvidence.persistenceDedupeCleanupRemainingCompanies}/${consoleEvidence.persistenceDedupeCleanupRemainingRuns}`,
+    `- Supabase compliance gates : ${consoleEvidence.complianceGatesVerified ? "oui" : "non"}; no approved : ${consoleEvidence.noApprovedMessageConstraint ? "oui" : "non"}; DNC unique company/domain/contact/email : ${consoleEvidence.dncUniqueCompany ? "oui" : "non"}/${consoleEvidence.dncUniqueDomain ? "oui" : "non"}/${consoleEvidence.dncUniqueContact ? "oui" : "non"}/${consoleEvidence.dncUniqueEmailHash ? "oui" : "non"}; cleanup companies/contacts/dnc/messages : ${consoleEvidence.complianceCleanupRemainingCompanies}/${consoleEvidence.complianceCleanupRemainingContacts}/${consoleEvidence.complianceCleanupRemainingDncRows}/${consoleEvidence.complianceCleanupRemainingMessages}`,
     consoleEvidence.traces.length ? `- Traces console : ${consoleEvidence.traces.join(", ")}` : "- Traces console : aucune.",
     ...(consoleEvidence.error ? [`- Erreur console : ${consoleEvidence.error}`] : []),
     ...(consoleEvidence.blockers.length ? consoleEvidence.blockers.map((blocker) => `- Blocker console : ${blocker}`) : []),
@@ -761,6 +762,16 @@ interface SupabaseConsoleEvidence {
   persistenceDedupeRunStepCount: number;
   persistenceDedupeCleanupRemainingCompanies: number;
   persistenceDedupeCleanupRemainingRuns: number;
+  complianceGatesVerified: boolean;
+  noApprovedMessageConstraint: boolean;
+  dncUniqueCompany: boolean;
+  dncUniqueDomain: boolean;
+  dncUniqueContact: boolean;
+  dncUniqueEmailHash: boolean;
+  complianceCleanupRemainingCompanies: number;
+  complianceCleanupRemainingContacts: number;
+  complianceCleanupRemainingDncRows: number;
+  complianceCleanupRemainingMessages: number;
   traces: string[];
   blockers: string[];
   runtimeMetadataComplete: boolean;
@@ -839,6 +850,16 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
       persistenceDedupeRunStepCount: 0,
       persistenceDedupeCleanupRemainingCompanies: 0,
       persistenceDedupeCleanupRemainingRuns: 0,
+      complianceGatesVerified: false,
+      noApprovedMessageConstraint: false,
+      dncUniqueCompany: false,
+      dncUniqueDomain: false,
+      dncUniqueContact: false,
+      dncUniqueEmailHash: false,
+      complianceCleanupRemainingCompanies: 0,
+      complianceCleanupRemainingContacts: 0,
+      complianceCleanupRemainingDncRows: 0,
+      complianceCleanupRemainingMessages: 0,
       traces: [],
       blockers: [],
       runtimeMetadataComplete: false,
@@ -865,7 +886,10 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
     const rejectedCount = snapshot.runs.reduce((sum, run) => sum + run.rejected.length, 0);
     const lessonCount = snapshot.lessons.length;
     const traces = snapshot.runs.map((run) => run.traceId).filter(Boolean);
-    const persistenceDedupe = await verifySupabasePersistenceDedupe(client);
+    const [persistenceDedupe, complianceGates] = await Promise.all([
+      verifySupabasePersistenceDedupe(client),
+      verifySupabaseComplianceGates(client)
+    ]);
     const payload: SupabaseRuntimeArtifactEvidence = {
       status:
         snapshot.runs.length > 0 &&
@@ -881,6 +905,7 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
         actionEventCount > 0 &&
         taskActionLinkCount > 0 &&
         persistenceDedupe.verified &&
+        complianceGates.verified &&
         traces.length > 0
           ? "pass"
           : "fail",
@@ -905,6 +930,16 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
       persistenceDedupeCleanupRemainingCompanies: persistenceDedupe.cleanupRemainingCompanies,
       persistenceDedupeCleanupRemainingRuns: persistenceDedupe.cleanupRemainingRuns,
       persistenceDedupeTraceIds: persistenceDedupe.traceIds,
+      complianceGatesVerified: complianceGates.verified,
+      noApprovedMessageConstraint: complianceGates.noApprovedMessageConstraint,
+      dncUniqueCompany: complianceGates.dncUniqueCompany,
+      dncUniqueDomain: complianceGates.dncUniqueDomain,
+      dncUniqueContact: complianceGates.dncUniqueContact,
+      dncUniqueEmailHash: complianceGates.dncUniqueEmailHash,
+      complianceCleanupRemainingCompanies: complianceGates.cleanupRemainingCompanies,
+      complianceCleanupRemainingContacts: complianceGates.cleanupRemainingContacts,
+      complianceCleanupRemainingDncRows: complianceGates.cleanupRemainingDncRows,
+      complianceCleanupRemainingMessages: complianceGates.cleanupRemainingMessages,
       traces,
       blockers: [
         ...(snapshot.runs.length < 1 ? ["Aucun run Supabase lisible par la console."] : []),
@@ -920,6 +955,7 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
         ...(actionEventCount < 1 ? ["Aucune trace d'action Romu persistée."] : []),
         ...(taskActionLinkCount < 1 ? ["Aucune action Romu reliée à une tâche agentique par task_id."] : []),
         ...persistenceDedupe.blockers,
+        ...complianceGates.blockers,
         ...(traces.length < 1 ? ["Aucune trace de run Supabase disponible."] : [])
       ]
     };
@@ -944,6 +980,16 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
       persistenceDedupeRunStepCount: persistenceDedupe.mergedRunStepCount,
       persistenceDedupeCleanupRemainingCompanies: persistenceDedupe.cleanupRemainingCompanies,
       persistenceDedupeCleanupRemainingRuns: persistenceDedupe.cleanupRemainingRuns,
+      complianceGatesVerified: complianceGates.verified,
+      noApprovedMessageConstraint: complianceGates.noApprovedMessageConstraint,
+      dncUniqueCompany: complianceGates.dncUniqueCompany,
+      dncUniqueDomain: complianceGates.dncUniqueDomain,
+      dncUniqueContact: complianceGates.dncUniqueContact,
+      dncUniqueEmailHash: complianceGates.dncUniqueEmailHash,
+      complianceCleanupRemainingCompanies: complianceGates.cleanupRemainingCompanies,
+      complianceCleanupRemainingContacts: complianceGates.cleanupRemainingContacts,
+      complianceCleanupRemainingDncRows: complianceGates.cleanupRemainingDncRows,
+      complianceCleanupRemainingMessages: complianceGates.cleanupRemainingMessages,
       traces,
       blockers: analysis.blockers,
       runtimeMetadataComplete: analysis.runtimeMetadataComplete,
@@ -971,6 +1017,16 @@ async function loadSupabaseConsoleEvidence(currentRevision: string): Promise<Sup
       persistenceDedupeRunStepCount: 0,
       persistenceDedupeCleanupRemainingCompanies: 0,
       persistenceDedupeCleanupRemainingRuns: 0,
+      complianceGatesVerified: false,
+      noApprovedMessageConstraint: false,
+      dncUniqueCompany: false,
+      dncUniqueDomain: false,
+      dncUniqueContact: false,
+      dncUniqueEmailHash: false,
+      complianceCleanupRemainingCompanies: 0,
+      complianceCleanupRemainingContacts: 0,
+      complianceCleanupRemainingDncRows: 0,
+      complianceCleanupRemainingMessages: 0,
       traces: [],
       blockers: [],
       runtimeMetadataComplete: false,
@@ -1009,6 +1065,16 @@ async function loadSupabaseRuntimeArtifact(currentRevision: string): Promise<Sup
       persistenceDedupeRunStepCount: numberValue(payload.persistenceDedupeRunStepCount),
       persistenceDedupeCleanupRemainingCompanies: numberValue(payload.persistenceDedupeCleanupRemainingCompanies),
       persistenceDedupeCleanupRemainingRuns: numberValue(payload.persistenceDedupeCleanupRemainingRuns),
+      complianceGatesVerified: payload.complianceGatesVerified === true,
+      noApprovedMessageConstraint: payload.noApprovedMessageConstraint === true,
+      dncUniqueCompany: payload.dncUniqueCompany === true,
+      dncUniqueDomain: payload.dncUniqueDomain === true,
+      dncUniqueContact: payload.dncUniqueContact === true,
+      dncUniqueEmailHash: payload.dncUniqueEmailHash === true,
+      complianceCleanupRemainingCompanies: numberValue(payload.complianceCleanupRemainingCompanies),
+      complianceCleanupRemainingContacts: numberValue(payload.complianceCleanupRemainingContacts),
+      complianceCleanupRemainingDncRows: numberValue(payload.complianceCleanupRemainingDncRows),
+      complianceCleanupRemainingMessages: numberValue(payload.complianceCleanupRemainingMessages),
       traces: analysis.traces,
       blockers: analysis.blockers,
       runtimeMetadataComplete: analysis.runtimeMetadataComplete,
@@ -1038,6 +1104,16 @@ async function loadSupabaseRuntimeArtifact(currentRevision: string): Promise<Sup
       persistenceDedupeRunStepCount: 0,
       persistenceDedupeCleanupRemainingCompanies: 0,
       persistenceDedupeCleanupRemainingRuns: 0,
+      complianceGatesVerified: false,
+      noApprovedMessageConstraint: false,
+      dncUniqueCompany: false,
+      dncUniqueDomain: false,
+      dncUniqueContact: false,
+      dncUniqueEmailHash: false,
+      complianceCleanupRemainingCompanies: 0,
+      complianceCleanupRemainingContacts: 0,
+      complianceCleanupRemainingDncRows: 0,
+      complianceCleanupRemainingMessages: 0,
       traces: [],
       blockers: [],
       runtimeMetadataComplete: false,
