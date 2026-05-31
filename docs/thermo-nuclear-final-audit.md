@@ -28,6 +28,7 @@ Verdict : `production_not_ready`.
 - Les routines sont dans un module dédié, pas dispersées dans l'UI.
 - Le scheduler de cron couvre maintenant `dnc_check` et `followup_review`, pas seulement les 4 actions lançables depuis l'UI.
 - Un index unique partiel bloque les doublons actifs `queued/running` côté Supabase pour les tâches agentiques.
+- Les foreign keys de persistance/actions/messages/evidence/learning sont couvertes par indexes ; l'advisor Supabase ne remonte plus de `unindexed_foreign_keys`.
 - Les tâches `queued` peuvent maintenant passer par un runner `running -> completed/blocked/failed`.
 - Les routines Daily Brief, Learning Review, DNC check et followup review ne restent plus bloquées par défaut : elles lisent le runtime Supabase et refusent les fixtures comme preuve opérationnelle.
 - Le worker réel ne retombe plus silencieusement sur fixtures et expose `WebSearchTool` OpenAI plus 8 tools métier Agents SDK.

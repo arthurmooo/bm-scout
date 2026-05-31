@@ -63,6 +63,21 @@ describe("supabase security posture", () => {
     expect(migration).toContain("on public.scout_agent_tasks (type, scheduled_for)");
     expect(migration).toContain("where status in ('queued', 'running')");
   });
+
+  it("indexe les cles etrangeres de persistance et d'audit", () => {
+    const migration = readMigration("scout_fk_covering_indexes");
+
+    for (const indexName of [
+      "scout_action_events_message_id_idx",
+      "scout_agent_tasks_result_run_id_idx",
+      "scout_evidence_created_by_run_id_idx",
+      "scout_messages_created_by_run_id_idx",
+      "scout_learning_lessons_source_run_id_idx",
+      "scout_scores_created_by_run_id_idx"
+    ]) {
+      expect(migration).toContain(`create index if not exists ${indexName}`);
+    }
+  });
 });
 
 function readMigration(name: string): string {
