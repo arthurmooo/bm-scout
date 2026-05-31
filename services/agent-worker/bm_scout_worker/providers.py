@@ -24,6 +24,10 @@ class CompanySeed:
     segment: str = "M&A / finance ops"
     region: str = "fr"
     source_url: str | None = None
+    city: str | None = None
+    country: str = "fr"
+    linkedin_url: str | None = None
+    registration_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -135,15 +139,32 @@ class ConfiguredWebResearchProvider:
             },
         )
         for seed in self.seeds:
-            dedupe_key = self.dedupe_company(seed)
-            if dedupe_key in seen_keys:
+            dedupe_keys = self.dedupe_company_keys(seed)
+            duplicate_keys = sorted(dedupe_keys & seen_keys)
+            if duplicate_keys:
                 self.record_step(
                     "dedupe_company",
-                    {"company": seed.company, "website": seed.website, "dedupe_key": dedupe_key, "decision": "skipped_duplicate"},
+                    {
+                        "company": seed.company,
+                        "website": seed.website,
+                        "dedupe_key": self.dedupe_company(seed),
+                        "dedupe_keys": sorted(dedupe_keys),
+                        "duplicate_keys": duplicate_keys,
+                        "decision": "skipped_duplicate",
+                    },
                 )
                 continue
-            seen_keys.add(dedupe_key)
-            self.record_step("dedupe_company", {"company": seed.company, "website": seed.website, "dedupe_key": dedupe_key, "decision": "kept"})
+            seen_keys.update(dedupe_keys)
+            self.record_step(
+                "dedupe_company",
+                {
+                    "company": seed.company,
+                    "website": seed.website,
+                    "dedupe_key": self.dedupe_company(seed),
+                    "dedupe_keys": sorted(dedupe_keys),
+                    "decision": "kept",
+                },
+            )
             source_url = seed.source_url or seed.website
             page = self.fetch_company_site(source_url)
             self.record_step("fetch_company_site", {"company": seed.company, "url": source_url, "chars": len(page), "failed": page.startswith("Fetch failed")})
@@ -246,7 +267,31 @@ class ConfiguredWebResearchProvider:
         return emails[:3]
 
     def dedupe_company(self, seed: CompanySeed) -> str:
-        return normalized_domain(seed.website) or normalized_name(seed.company)
+        keys = sorted(self.dedupe_company_keys(seed))
+        return keys[0] if keys else normalized_name(seed.company)
+
+    def dedupe_company_keys(self, seed: CompanySeed) -> set[str]:
+        keys: set[str] = set()
+        domain = normalized_domain(seed.website)
+        if domain:
+            keys.add(f"domain:{domain}")
+            registrable = registrable_domain(domain)
+            if registrable and registrable != domain:
+                keys.add(f"registrable_domain:{registrable}")
+        identity = normalized_company_identity(seed.company)
+        if identity:
+            country = normalized_name(seed.country or seed.region or "")
+            city = normalized_name(seed.city or "")
+            keys.add(f"name:{identity}|country:{country}|city:{city}")
+        if seed.linkedin_url:
+            linkedin_key = normalized_url(seed.linkedin_url)
+            if linkedin_key:
+                keys.add(f"linkedin:{linkedin_key}")
+        if seed.registration_id:
+            registration = re.sub(r"[^a-z0-9]+", "", seed.registration_id.lower())
+            if registration:
+                keys.add(f"registration:{normalized_name(seed.country)}:{registration}")
+        return keys
 
     def score_candidate(self, seed: CompanySeed, evidence: list[Evidence], feedback_notes: list[str]) -> int:
         base = 55
@@ -316,10 +361,10 @@ class OpenWebResearchProvider(ConfiguredWebResearchProvider):
                 seed = seed_from_search_result(result, query)
                 if not seed:
                     continue
-                key = self.dedupe_company(seed)
-                if key in seen:
+                keys = self.dedupe_company_keys(seed)
+                if keys & seen:
                     continue
-                seen.add(key)
+                seen.update(keys)
                 seeds.append(seed)
                 if len(seeds) >= target_scan:
                     return seeds
@@ -610,6 +655,10 @@ def parse_company_seeds(value: str) -> list[CompanySeed]:
                 segment=item.get("segment", "M&A / finance ops"),
                 region=item.get("region", "fr"),
                 source_url=item.get("source_url"),
+                city=item.get("city"),
+                country=item.get("country", item.get("region", "fr")),
+                linkedin_url=item.get("linkedin_url"),
+                registration_id=item.get("registration_id") or item.get("siren"),
             )
             for item in payload
         ]
@@ -617,7 +666,15 @@ def parse_company_seeds(value: str) -> list[CompanySeed]:
     for item in value.split(";"):
         parts = [part.strip() for part in item.split("|")]
         if len(parts) >= 2:
-            seeds.append(CompanySeed(company=parts[0], website=parts[1], segment=parts[2] if len(parts) > 2 else "M&A / finance ops"))
+            seeds.append(
+                CompanySeed(
+                    company=parts[0],
+                    website=parts[1],
+                    segment=parts[2] if len(parts) > 2 else "M&A / finance ops",
+                    city=parts[3] if len(parts) > 3 else None,
+                    country=parts[4] if len(parts) > 4 else "fr",
+                )
+            )
     return seeds
 
 
@@ -1076,6 +1133,37 @@ def normalized_domain(url: str) -> str:
 
 def normalized_name(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+def normalized_company_identity(name: str) -> str:
+    normalized = normalized_name(
+        re.sub(
+            r"\b(sas|sasu|sa|sarl|eurl|llc|ltd|limited|inc|gmbh|group|groupe|partners?|partner|associ[eé]s?|france)\b",
+            " ",
+            name.lower(),
+        )
+    )
+    tokens = [
+        token
+        for token in normalized.split("-")
+        if token and token not in {"the", "and", "et", "of", "de", "du", "des", "la", "le", "les", "cabinet", "conseil"}
+    ]
+    value = "-".join(tokens)
+    generic = {"m-a", "ma", "finance", "consulting", "advisory", "transaction", "services", "contact", "accueil"}
+    if len(value.replace("-", "")) < 4 or value in generic:
+        return ""
+    return value
+
+
+def registrable_domain(domain: str) -> str:
+    parts = [part for part in domain.lower().split(".") if part]
+    if len(parts) < 2:
+        return domain
+    two_part_suffixes = {"co.uk", "com.au", "com.br", "com.tr", "co.jp"}
+    suffix = ".".join(parts[-2:])
+    if suffix in two_part_suffixes and len(parts) >= 3:
+        return ".".join(parts[-3:])
+    return ".".join(parts[-2:])
 
 
 def strip_html(value: str) -> str:

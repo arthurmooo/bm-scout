@@ -74,11 +74,37 @@ def find_public_emails(company_name: str, domain: str, pages: list[str]) -> list
 
 
 @function_tool
-def dedupe_company(company_name: str, website: str, segment: str = "M&A / finance ops") -> str:
-    """Retourne une clé de déduplication prudente domaine/nom."""
-    inputs = {"company_name": company_name, "website": website, "segment": segment}
+def dedupe_company(
+    company_name: str,
+    website: str,
+    segment: str = "M&A / finance ops",
+    city: str | None = None,
+    country: str = "fr",
+    linkedin_url: str | None = None,
+    registration_id: str | None = None,
+) -> str:
+    """Retourne une clé de déduplication prudente domaine/nom/pays/ville/identifiant."""
+    inputs = {
+        "company_name": company_name,
+        "website": website,
+        "segment": segment,
+        "city": city,
+        "country": country,
+        "has_linkedin_url": bool(linkedin_url),
+        "has_registration_id": bool(registration_id),
+    }
     try:
-        output = provider_from_env().dedupe_company(CompanySeed(company=company_name, website=website, segment=segment))
+        output = provider_from_env().dedupe_company(
+            CompanySeed(
+                company=company_name,
+                website=website,
+                segment=segment,
+                city=city,
+                country=country,
+                linkedin_url=linkedin_url,
+                registration_id=registration_id,
+            )
+        )
     except Exception as error:
         record_tool_call("dedupe_company", inputs, error=error)
         raise

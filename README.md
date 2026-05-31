@@ -11,7 +11,7 @@ BM Scout n'est pas un CRM, pas un SaaS standard et pas un générateur de messag
 - Console Next.js centrée sur la prochaine décision Romu.
 - Schéma Supabase pour runs, leads, preuves, messages, feedbacks, outcomes, DNC, run steps, tasks et action events.
 - Worker Python OpenAI Agents SDK avec `Runner.run`, `trace`, agents spécialisés et outputs Pydantic.
-- Recherche métier provider : découverte web, fetch site, extraction signaux, job search public, emails publics, déduplication et scoring.
+- Recherche métier provider : découverte web, fetch site, extraction signaux, job search public, emails publics, déduplication domaine/nom/pays/ville/LinkedIn/identifiant et scoring.
 - Scheduler local reproductible qui crée les routines Core, Exploration, Daily Brief, Learning, DNC check et followup review.
 - Runner de queue `scout_agent_tasks` qui claim les tâches `queued -> running`, récupère explicitement les `running` trop anciennes, puis passe en `completed/blocked/failed` seulement si elles sont encore `running`.
 - Routines Daily Brief, Learning Review, DNC check et followup review exécutables depuis les runs Supabase persistés, avec blocage explicite si elles n'ont que les fixtures.
@@ -59,7 +59,7 @@ Variables serveur :
 - `SERPAPI_API_KEY` optionnel ; si présent, `auto` choisit SerpAPI avant OpenAI web.
 - `BM_SCOUT_PROVIDER=auto|serpapi|openai_web|web|configured|demo`, par défaut `auto`
 - `BM_SCOUT_SEARCH_QUERIES` optionnel pour piloter les requêtes web, format JSON ou `;`
-- `BM_SCOUT_REAL_SEEDS` pour le mode `configured`, ex. `[{"company":"Cambon Partners","website":"https://www.cambonpartners.com","segment":"Conseil M&A"}]`
+- `BM_SCOUT_REAL_SEEDS` pour le mode `configured`, ex. `[{"company":"Cambon Partners","website":"https://www.cambonpartners.com","segment":"Conseil M&A","city":"Paris","country":"fr","linkedin_url":"https://www.linkedin.com/company/cambon-partners"}]`
 - `BM_SCOUT_PROVIDER=demo` uniquement pour forcer explicitement le mode fixtures.
 
 ## Scheduler local

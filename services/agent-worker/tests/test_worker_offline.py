@@ -395,6 +395,62 @@ def test_configured_provider_dedupes_same_domain() -> None:
     assert len(leads) == 1
 
 
+def test_configured_provider_dedupes_same_legal_name_without_same_domain() -> None:
+    provider = ConfiguredWebResearchProvider(
+        [
+            CompanySeed(company="Cambon Partners SAS", website="https://cambon.fr", segment="Conseil M&A", city="Paris"),
+            CompanySeed(company="Cambon Partner France", website="https://cambonpartners.eu", segment="Conseil M&A", city="Paris"),
+        ]
+    )
+    provider.fetch_company_site = lambda _url: "M&A transaction reporting document"
+
+    leads = provider.build_candidates("core")
+
+    assert len(leads) == 1
+    skipped = [step for step in provider.run_steps if step.step == "dedupe_company" and step.payload["decision"] == "skipped_duplicate"]
+    assert skipped
+    assert any(str(key).startswith("name:cambon|country:fr|city:paris") for key in skipped[0].payload["duplicate_keys"])
+
+
+def test_configured_provider_keeps_same_name_when_city_differs() -> None:
+    provider = ConfiguredWebResearchProvider(
+        [
+            CompanySeed(company="Altitude Conseil", website="https://altitude-paris.example", segment="Conseil M&A", city="Paris"),
+            CompanySeed(company="Altitude Conseil", website="https://altitude-lyon.example", segment="Conseil M&A", city="Lyon"),
+        ]
+    )
+    provider.fetch_company_site = lambda _url: "M&A transaction reporting document"
+
+    leads = provider.build_candidates("core")
+
+    assert len(leads) == 2
+
+
+def test_parse_company_seeds_keeps_dedupe_fields() -> None:
+    seeds = parse_company_seeds(
+        json.dumps(
+            [
+                {
+                    "company": "Eight Advisory",
+                    "website": "https://www.8advisory.com",
+                    "segment": "Conseil M&A",
+                    "city": "Paris",
+                    "country": "fr",
+                    "linkedin_url": "https://www.linkedin.com/company/eight-advisory",
+                    "siren": "123456789",
+                }
+            ]
+        )
+    )
+    provider = ConfiguredWebResearchProvider(seeds)
+
+    keys = provider.dedupe_company_keys(seeds[0])
+
+    assert "name:eight-advisory|country:fr|city:paris" in keys
+    assert "linkedin:https://www.linkedin.com/company/eight-advisory" in keys
+    assert "registration:fr:123456789" in keys
+
+
 def test_provider_score_uses_negative_feedback_notes() -> None:
     seed = CompanySeed(company="Test Finance Ops", website="https://example.com", segment="Finance ops")
     provider = ConfiguredWebResearchProvider([seed])
