@@ -546,13 +546,37 @@ function failedWorkerOutput(
   result: { code: number | null; stdout: string; stderr: string }
 ): WorkerCliOutput {
   const error = [result.stderr, result.stdout].filter(Boolean).join("\n").slice(0, 4000);
+  const failure = classifyWorkerCliFailure(error);
   return {
     verdict: "fail",
-    blockers: [`Worker CLI ${mode} échoué sans sortie JSON valide.`],
-    output: fallbackWorkerOutput(mode, "worker_cli_failed", "Worker CLI échoué sans sortie JSON valide.", {
+    blockers: [`${failure.summary} (${mode}).`],
+    output: fallbackWorkerOutput(mode, failure.step, failure.reason, {
       code: result.code,
       error
     })
+  };
+}
+
+export function classifyWorkerCliFailure(error: string): { step: string; summary: string; reason: string } {
+  const normalized = error.toLowerCase();
+  if (normalized.includes("insufficient_quota") || normalized.includes("exceeded your current quota")) {
+    return {
+      step: "openai_quota_blocked",
+      summary: "Dépendance OpenAI indisponible: quota insuffisant",
+      reason: "OpenAI a refusé le run Agents SDK pour quota insuffisant."
+    };
+  }
+  if (normalized.includes("timeout")) {
+    return {
+      step: "worker_cli_timeout",
+      summary: "Worker CLI interrompu par timeout",
+      reason: "Le worker a dépassé le délai configuré avant de produire une sortie JSON valide."
+    };
+  }
+  return {
+    step: "worker_cli_failed",
+    summary: "Worker CLI échoué sans sortie JSON valide",
+    reason: "Worker CLI échoué sans sortie JSON valide."
   };
 }
 
@@ -613,11 +637,16 @@ async function runWorkerCli(mode: "core" | "exploration", options: WorkerCliOpti
   };
 }
 
-export function workerEvidenceFileName(mode: "core" | "exploration", options: Pick<WorkerCliOptions, "real" | "persist">): string {
-  if (!options.real && options.persist !== false) return "latest-cli-persist-offline.json";
-  if (options.real && options.persist !== false) return `latest-real-${mode}-supabase-persist.json`;
-  if (options.real) return `latest-real-${mode}.json`;
-  return `latest-offline-${mode}.json`;
+export function workerEvidenceFileName(
+  mode: "core" | "exploration",
+  options: Pick<WorkerCliOptions, "real" | "persist">,
+  state: "latest" | "failed" = "latest"
+): string {
+  const prefix = state === "failed" ? "latest-failed" : "latest";
+  if (!options.real && options.persist !== false) return state === "failed" ? "latest-failed-cli-persist-offline.json" : "latest-cli-persist-offline.json";
+  if (options.real && options.persist !== false) return `${prefix}-real-${mode}-supabase-persist.json`;
+  if (options.real) return `${prefix}-real-${mode}.json`;
+  return `${prefix}-offline-${mode}.json`;
 }
 
 async function writeWorkerEvidence(
@@ -626,7 +655,7 @@ async function writeWorkerEvidence(
   parsed: WorkerCliOutput
 ): Promise<string> {
   const evidenceDir = options.evidenceDir ?? join(process.cwd(), "artifacts", "agent-worker-real");
-  const fileName = workerEvidenceFileName(mode, options);
+  const fileName = workerEvidenceFileName(mode, options, parsed.verdict === "pass" ? "latest" : "failed");
   await mkdir(evidenceDir, { recursive: true });
   await writeFile(join(evidenceDir, fileName), `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
   return fileName;

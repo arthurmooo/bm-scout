@@ -11,6 +11,7 @@ import type {
   RecoveredAgentTask
 } from "./agent-task-runner";
 import {
+  classifyWorkerCliFailure,
   createCliAgentTaskExecutor,
   processAgentTaskQueue,
   runWorkerCliForEvidence,
@@ -252,6 +253,9 @@ describe("agent task runner", () => {
       "latest-real-exploration-supabase-persist.json"
     );
     expect(workerEvidenceFileName("core", { real: false, persist: true })).toBe("latest-cli-persist-offline.json");
+    expect(workerEvidenceFileName("exploration", { real: true, persist: true }, "failed")).toBe(
+      "latest-failed-real-exploration-supabase-persist.json"
+    );
   });
 
   it("transmet les objectifs PRD des agent_tasks au worker Python", () => {
@@ -326,7 +330,7 @@ describe("agent task runner", () => {
     ).toEqual([]);
   });
 
-  it("ecrase l'artefact attendu avec un verdict fail si le worker ne retourne pas de JSON", async () => {
+  it("isole un verdict fail dans un artefact failed si le worker ne retourne pas de JSON", async () => {
     const artifactsDir = await mkdtemp(join(tmpdir(), "bm-scout-worker-fail-"));
 
     const result = await runWorkerCliForEvidence("exploration", {
@@ -338,7 +342,7 @@ describe("agent task runner", () => {
     });
 
     expect(result.code).not.toBe(0);
-    expect(result.evidenceFile).toBe("latest-real-exploration.json");
+    expect(result.evidenceFile).toBe("latest-failed-real-exploration.json");
     expect(result.parsed?.verdict).toBe("fail");
     expect(result.parsed?.blockers?.[0]).toContain("sans sortie JSON valide");
 
@@ -349,6 +353,12 @@ describe("agent task runner", () => {
     expect(payload.verdict).toBe("fail");
     expect(payload.output?.final_decision).toBe("not_ready");
     expect(payload.output?.run_steps?.[0]?.step).toBe("worker_cli_failed");
+  });
+
+  it("classe les erreurs quota OpenAI comme dépendance externe bloquée", () => {
+    expect(classifyWorkerCliFailure("Error code: 429 insufficient_quota").step).toBe("openai_quota_blocked");
+    expect(classifyWorkerCliFailure("You exceeded your current quota").summary).toContain("quota insuffisant");
+    expect(classifyWorkerCliFailure("Worker CLI timeout après 300000ms.").step).toBe("worker_cli_timeout");
   });
 });
 
