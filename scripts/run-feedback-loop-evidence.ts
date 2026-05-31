@@ -81,6 +81,7 @@ export async function runFeedbackLoopEvidence() {
     real: true,
     persist: true,
     artifactsDir: "artifacts/agent-worker-real",
+    evidenceDir: "artifacts/feedback-loop",
     env: feedbackLoopWorkerEnv()
   });
   const workerSteps = worker.parsed?.output?.run_steps ?? [];

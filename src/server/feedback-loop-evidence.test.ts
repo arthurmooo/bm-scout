@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   analyzeFeedbackLoopEvidence,
@@ -14,6 +16,12 @@ describe("feedback loop evidence", () => {
     expect(env.BM_SCOUT_EVIDENCE_PURPOSE).toBe("feedback_loop");
     expect(JSON.parse(env.BM_SCOUT_REAL_SEEDS)).toEqual(feedbackLoopScenarioSeeds());
     expect(feedbackLoopScenarioSeeds()).toHaveLength(3);
+  });
+
+  it("n'écrase pas l'artefact worker opérationnel Core persisté", () => {
+    const script = readFileSync(join(process.cwd(), "scripts", "run-feedback-loop-evidence.ts"), "utf8");
+
+    expect(script).toContain('evidenceDir: "artifacts/feedback-loop"');
   });
 
   it("valide une preuve feedback Supabase avec impacts structurés", () => {
