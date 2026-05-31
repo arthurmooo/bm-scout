@@ -39,9 +39,14 @@ export function ScoutActionButton({ action, leadId, className, children, reason,
       setState("error");
       return;
     }
-    if (copyText && navigator.clipboard) {
+    if (copyText && !result.copyText) {
+      setMessage("Copie refusée : contenu serveur non autorisé.");
+      setState("error");
+      return;
+    }
+    if (result.copyText && navigator.clipboard) {
       try {
-        await navigator.clipboard.writeText(copyText);
+        await navigator.clipboard.writeText(result.copyText);
       } catch {
         // La trace serveur reste prioritaire si le presse-papiers navigateur est indisponible.
       }
@@ -72,6 +77,7 @@ export function ScoutActionButton({ action, leadId, className, children, reason,
 interface ScoutActionResponse {
   ok: boolean;
   message: string;
+  copyText?: string;
 }
 
 async function parseActionResponse(response: Response): Promise<ScoutActionResponse> {
@@ -80,7 +86,8 @@ async function parseActionResponse(response: Response): Promise<ScoutActionRespo
     const payload = (await response.json()) as Partial<ScoutActionResponse>;
     return {
       ok: payload.ok === true && response.ok,
-      message: typeof payload.message === "string" && payload.message.trim() ? payload.message : fallback
+      message: typeof payload.message === "string" && payload.message.trim() ? payload.message : fallback,
+      copyText: typeof payload.copyText === "string" && payload.copyText.trim() ? payload.copyText : undefined
     };
   } catch {
     return { ok: false, message: fallback };

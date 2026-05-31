@@ -13,6 +13,7 @@ export interface ScoutActionResult {
   ok: boolean;
   persisted: boolean;
   message: string;
+  copyText?: string;
 }
 
 type CompanyPatch = {
@@ -49,6 +50,7 @@ type ActionMutationTrace = {
   taskId?: string;
   taskType?: AgentTaskType;
   taskStatus?: AgentTaskStatus;
+  copyText?: string;
 };
 
 const ACTION_LABELS: Record<LeadActionType, string> = {
@@ -187,6 +189,7 @@ export async function recordScoutAction(input: ScoutActionInput): Promise<ScoutA
     }
   }
 
+  const persistedMutationTrace = stripNonPersistedMutationFields(mutationTrace);
   const { error } = await client.from("scout_action_events").insert({
     company_id: companyId,
     message_id: mutationTrace?.messageId ?? null,
@@ -195,7 +198,7 @@ export async function recordScoutAction(input: ScoutActionInput): Promise<ScoutA
     payload: {
       leadId: input.leadId ?? null,
       reason: input.reason ?? null,
-      mutation: mutationTrace,
+      mutation: persistedMutationTrace,
       ok: mutationError === null,
       error: mutationError
     }
@@ -207,7 +210,8 @@ export async function recordScoutAction(input: ScoutActionInput): Promise<ScoutA
   return {
     ok: true,
     persisted: true,
-    message: ACTION_LABELS[input.action]
+    message: ACTION_LABELS[input.action],
+    copyText: mutationTrace?.copyText
   };
 }
 
@@ -355,7 +359,7 @@ async function markMessageCopied(companyId: string, channel: MessageChannel): Pr
       .eq("id", message.id)
       .neq("status", "blocked")
   );
-  return { messageId: message.id, channel };
+  return { messageId: message.id, channel, copyText: message.body };
 }
 
 async function assertMessageCopyAllowed(companyId: string, channel: MessageChannel): Promise<CopyableMessageRow> {
@@ -532,6 +536,13 @@ function failure(message: string): ScoutActionResult {
     persisted: false,
     message
   };
+}
+
+function stripNonPersistedMutationFields(trace: ActionMutationTrace | null): ActionMutationTrace | null {
+  if (!trace) return null;
+  const persistedTrace = { ...trace };
+  delete persistedTrace.copyText;
+  return persistedTrace;
 }
 
 interface CopyableMessageRow {

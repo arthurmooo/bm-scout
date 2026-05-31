@@ -45,7 +45,7 @@ BM Scout V1 est une console interne. Elle doit rester sobre sur ses promesses.
 - Le DNC et l'outcome négatif sont maintenant bloqués par QC/mémoire TS, worker offline, triggers DB sur messages, blocage DB des messages existants et gate serveur avant copie presse-papiers.
 - Une action DNC Romu écrit les scopes company/domain/contact disponibles, mais ne remplace pas encore un centre de gestion DNC granulaire par personne avec interface dédiée.
 - Les copies email/relance et le marquage "message utilisé" sont bloqués si l'email contact est `verify` ou `not_usable`; LinkedIn seul reste copiable si le DNC/QC passe.
-- Les copies et marquages `used_manually` sont bornés aux IDs de messages validés côté serveur. Cela évite de marquer des anciens brouillons historiques comme copiés ou utilisés, et ne crée jamais de statut d'envoi.
+- Les copies et marquages `used_manually` sont bornés aux IDs de messages validés côté serveur. Le client copie le texte relu et autorisé par le serveur, tandis que les traces d'action conservent seulement les IDs/canaux. Cela évite de marquer des anciens brouillons historiques comme copiés ou utilisés, de copier une version locale périmée et de créer un statut d'envoi.
 - La V1 ne remplace pas une validation juridique.
 - La prospection B2B francophone doit rester limitee, sourcee et respectueuse des oppositions.
 - Les donnees sensibles client doivent rester anonymisees.

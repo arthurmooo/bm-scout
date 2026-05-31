@@ -455,6 +455,20 @@ describe("scout actions", () => {
     ).toBe(true);
   });
 
+  it("renvoie au client le message autorisé sans persister le corps dans la trace", async () => {
+    reset();
+    state.messageBody = "Bonjour Arthur, message serveur autorisé et spécifique.";
+
+    const result = await recordScoutAction({ action: "copy_email", leadId: "core-cambon" });
+
+    expect(result.ok).toBe(true);
+    expect(result.copyText).toBe("Bonjour Arthur, message serveur autorisé et spécifique.");
+    const event = calls.find((call) => call.table === "scout_action_events" && call.op === "insert");
+    expect(JSON.stringify(event?.payload)).toContain('"message_id":"message-1"');
+    expect(JSON.stringify(event?.payload)).toContain('"messageId":"message-1"');
+    expect(JSON.stringify(event?.payload)).not.toContain("message serveur autorisé");
+  });
+
   it("bloque la copie si un outcome negatif existe meme sans DNC explicite", async () => {
     reset();
     state.blockingOutcome = true;
