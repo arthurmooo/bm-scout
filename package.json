@@ -20,6 +20,7 @@
     "agent:tasks:real": "tsx scripts/run-agent-task-queue.ts --real",
     "agent:tasks:recover-stale": "tsx scripts/run-agent-task-queue.ts --offline --recover-stale",
     "agent:cron:evidence": "tsx scripts/run-agent-task-cron-evidence.ts",
+    "openai:preflight": "tsx scripts/check-openai-runtime.ts",
     "feedback:evidence": "tsx scripts/run-feedback-loop-evidence.ts",
     "verify:supabase": "tsx scripts/verify-supabase-runtime.ts",
     "worker:install": ".venv/bin/python -m pip install -e \"services/agent-worker[dev]\"",

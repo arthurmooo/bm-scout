@@ -57,6 +57,9 @@ jobs:
           npm run lint
           npm run worker:test
           npm run build
+      - name: OpenAI runtime preflight
+        continue-on-error: true
+        run: npm run openai:preflight
       - name: Provider comparison
         continue-on-error: true
         run: npm run provider:compare
@@ -89,6 +92,7 @@ jobs:
             artifacts/agent-worker-real/*.json
             artifacts/agent-tasks/*.json
             artifacts/feedback-loop/*.json
+            artifacts/openai-runtime/*.json
             artifacts/provider-comparison/*.json
             artifacts/supabase-runtime/*.json
             artifacts/quality-runs/*.json

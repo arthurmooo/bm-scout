@@ -17,6 +17,7 @@ import {
   type SupabaseRuntimeArtifactEvidence
 } from "../src/server/readiness-evidence";
 import { getScoutSnapshot } from "../src/server/scout-repository";
+import type { OpenAiPreflightArtifact } from "../src/server/openai-preflight";
 import { createServerSupabaseClient } from "../src/server/supabase";
 import { verifySupabasePersistenceDedupe } from "../src/server/supabase-runtime-verification";
 import { loadLocalEnvFiles } from "../src/server/runtime-env";
@@ -49,6 +50,7 @@ const globalScore = Math.round(
 );
 const fixtureVerdict: RunVerdict = globalBlockers.length === 0 && globalScore >= 85 ? "pass" : "fail";
 const currentCodeRevision = await resolveCurrentCodeRevision();
+const openAiPreflightEvidence = await loadOpenAiPreflightEvidence(currentCodeRevision);
 const realRunnerEvidence = await loadRealRunnerEvidence(currentCodeRevision);
 const feedbackLoopEvidence = await loadFeedbackLoopEvidence(currentCodeRevision);
 const cliPersistEvidence = await loadCliPersistEvidence();
@@ -57,6 +59,7 @@ const supabaseConsoleEvidence = await loadSupabaseConsoleEvidence(currentCodeRev
 const providerComparisonEvidence = await loadProviderComparisonEvidence(currentCodeRevision);
 const readinessMode = process.argv.includes("--readiness");
 const productBlockers = buildProductBlockers(
+  openAiPreflightEvidence,
   realRunnerEvidence,
   feedbackLoopEvidence,
   cliPersistEvidence,
@@ -71,6 +74,7 @@ const report = renderReport(
   globalScore,
   fixtureVerdict,
   globalBlockers,
+  openAiPreflightEvidence,
   realRunnerEvidence,
   feedbackLoopEvidence,
   cliPersistEvidence,
@@ -90,6 +94,7 @@ await writeFile(
       fixtureVerdict,
       productReadiness,
       productBlockers,
+      openAiPreflightEvidence,
       realRunnerEvidence,
       feedbackLoopEvidence,
       cliPersistEvidence,
@@ -258,6 +263,7 @@ function renderReport(
   globalScore: number,
   fixtureVerdict: RunVerdict,
   blockers: string[],
+  openAiPreflightEvidence: OpenAiPreflightEvidence | null,
   realEvidence: RealRunnerEvidence[],
   feedbackEvidence: FeedbackLoopEvidence | null,
   persistEvidence: CliPersistEvidence | null,
@@ -282,6 +288,15 @@ function renderReport(
     "## Blockers produit restants",
     "",
     ...productBlockers.map((blocker) => `- ${blocker}`),
+    "",
+    "## Evidence dépendances",
+    "",
+    openAiPreflightEvidence
+      ? `- OpenAI preflight : ${openAiPreflightEvidence.verdict}; source : ${openAiPreflightEvidence.source}; modèle : ${openAiPreflightEvidence.model}; HTTP : ${openAiPreflightEvidence.httpStatus ?? "n/a"}; révision : ${openAiPreflightEvidence.codeRevision}; révision courante : ${openAiPreflightEvidence.runtimeRevisionMatchesCurrent ? "oui" : "non"}`
+      : "- OpenAI preflight : aucune preuve locale.",
+    ...(openAiPreflightEvidence?.blockers.length
+      ? openAiPreflightEvidence.blockers.map((blocker) => `- Blocker OpenAI : ${blocker}`)
+      : []),
     "",
     "## Evidence runner reel",
     "",
@@ -461,6 +476,36 @@ interface RealRunnerEvidence {
   runtimeCodeRevision: string;
   runtimeDurationMs: number;
   runtimeModel: string;
+}
+
+interface OpenAiPreflightEvidence {
+  verdict: RunVerdict;
+  source: string;
+  model: string;
+  httpStatus?: number;
+  codeRevision: string;
+  runtimeRevisionMatchesCurrent: boolean;
+  blockers: string[];
+}
+
+async function loadOpenAiPreflightEvidence(currentRevision: string): Promise<OpenAiPreflightEvidence | null> {
+  const path = join(process.cwd(), "artifacts", "openai-runtime", "latest-preflight.json");
+  try {
+    const payload = JSON.parse(await readFile(path, "utf8")) as OpenAiPreflightArtifact;
+    const codeRevision = typeof payload.code_revision === "string" ? payload.code_revision : "unknown";
+    const blockers = Array.isArray(payload.blockers) ? payload.blockers.filter((item): item is string => typeof item === "string") : [];
+    return {
+      verdict: payload.status === "pass" ? "pass" : "fail",
+      source: typeof payload.source === "string" ? payload.source : "artifact",
+      model: typeof payload.model === "string" ? payload.model : "unknown",
+      httpStatus: typeof payload.http_status === "number" ? payload.http_status : undefined,
+      codeRevision,
+      runtimeRevisionMatchesCurrent: codeRevisionMatchesCurrent(codeRevision, currentRevision),
+      blockers
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function loadRealRunnerEvidence(currentRevision: string): Promise<RealRunnerEvidence[]> {
@@ -1024,6 +1069,7 @@ async function resolveCurrentCodeRevision(): Promise<string> {
 }
 
 function buildProductBlockers(
+  openAiPreflightEvidence: OpenAiPreflightEvidence | null,
   realEvidence: RealRunnerEvidence[],
   feedbackEvidence: FeedbackLoopEvidence | null,
   persistEvidence: CliPersistEvidence | null,
@@ -1032,6 +1078,13 @@ function buildProductBlockers(
   providerEvidence: ProviderComparisonEvidence | null
 ): string[] {
   const blockers: string[] = [];
+  if (!openAiPreflightEvidence) {
+    blockers.push("OpenAI preflight absent : disponibilité modèle/quota non prouvée avant runs Agents SDK.");
+  } else if (openAiPreflightEvidence.verdict !== "pass") {
+    blockers.push(...openAiPreflightEvidence.blockers);
+  } else if (!openAiPreflightEvidence.runtimeRevisionMatchesCurrent) {
+    blockers.push(`OpenAI preflight généré par la révision ${openAiPreflightEvidence.codeRevision}, différente du code courant.`);
+  }
   const eligibleRealEvidence = realEvidence.filter(
     (item) => item.verdict === "pass" && item.runtimeMetadataComplete && item.runtimeRevisionMatchesCurrent
   );

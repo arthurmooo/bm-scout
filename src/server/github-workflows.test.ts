@@ -9,6 +9,7 @@ describe("github readiness workflows", () => {
     const workflow = readFileSync(join(root, ".github", "workflows", "bm-scout-readiness.yml"), "utf8");
 
     for (const command of [
+      "npm run openai:preflight",
       "npm run provider:compare",
       "npm run feedback:evidence",
       "npm run worker:real:core:persist",
@@ -28,6 +29,7 @@ describe("github readiness workflows", () => {
     expect(workflow).toContain("actions/upload-artifact@v4");
     expect(workflow).toContain("bm-scout-readiness-evidence");
     expect(workflow).toContain("artifacts/quality-runs/*.md");
+    expect(workflow).toContain("artifacts/openai-runtime/*.json");
   });
 
   it("force les six routines P0 dans le mode cron de readiness", () => {
