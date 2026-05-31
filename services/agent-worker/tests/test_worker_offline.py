@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import urllib.request
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -212,6 +213,18 @@ def test_open_web_provider_builds_candidates_without_seed(monkeypatch) -> None:
     assert leads[0].evidence[0].url == "https://www.pwc.fr/fr/expertises/transactions.html"
     assert any(step.step == "search_web" for step in provider.run_steps)
     assert any(step.step == "fetch_company_site" for step in provider.run_steps)
+
+
+def test_open_web_provider_search_web_records_unexpected_network_errors(monkeypatch) -> None:
+    provider = OpenWebResearchProvider(["conseil M&A France"])
+
+    def fail_urlopen(*_args, **_kwargs):
+        raise RuntimeError("network reset")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fail_urlopen)
+
+    assert provider.search_web("conseil M&A France", "fr", 3) == []
+    assert any(step.step == "search_web_error" and "network reset" in str(step.payload["error"]) for step in provider.run_steps)
 
 
 def test_open_web_provider_adds_job_search_evidence(monkeypatch) -> None:

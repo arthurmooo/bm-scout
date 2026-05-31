@@ -494,7 +494,7 @@ class OpenWebResearchProvider(ConfiguredWebResearchProvider):
         try:
             with urllib.request.urlopen(request, timeout=12) as response:
                 body = response.read(180_000).decode("utf-8", errors="replace")
-        except (urllib.error.URLError, TimeoutError) as error:
+        except Exception as error:
             self.record_step("search_web_error", {"query": query, "error": str(error)})
             return []
         return parse_duckduckgo_lite_results(body, limit)
