@@ -266,6 +266,7 @@ function renderReport(
   providerEvidence: ProviderComparisonEvidence | null,
   currentRevision: string
 ): string {
+  const combinedBlockers = [...productBlockers, ...blockers];
   const lines = [
     "# Rapport qualite BM Scout - socle fixture",
     "",
@@ -410,7 +411,7 @@ function renderReport(
       ]),
     "## Blockers globaux",
     "",
-    blockers.length ? blockers.map((blocker) => `- ${blocker}`).join("\n") : "- Aucun blocker.",
+    combinedBlockers.length ? combinedBlockers.map((blocker) => `- ${blocker}`).join("\n") : "- Aucun blocker.",
     "",
     "## Limites restantes",
     "",
