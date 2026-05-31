@@ -71,22 +71,23 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - Console runtime : si Supabase serveur est configuré mais ne contient aucun run, elle affiche zéro lead et les routines à lancer au lieu de retomber sur les fixtures.
 - Auth interne : home protégée en mode `BM_SCOUT_AUTH_MODE=internal`, login magic link Supabase, fallback démo seulement si l'auth publique est absente ou explicitement forcée.
 - DNC bloque côté TS, worker offline et trigger Supabase.
-- Les actions de copie attendent maintenant la validation serveur avant d'écrire dans le presse-papiers ; côté serveur, un message bloqué QC, une cible DNC ou un email `verify/not_usable` refuse la copie et trace l'échec.
+- Les actions de copie attendent maintenant la validation serveur avant d'écrire dans le presse-papiers ; côté serveur, un message bloqué QC, une cible DNC ou un email `verify/not_usable` refuse la copie et trace l'échec. `mark_message_used` repasse par les mêmes gates avant d'approuver un message.
 - Feedback Romu influence le scoring et les messages dans le moteur TS et le worker provider testés.
 - Run steps et email confidence sont écrits par le worker/RPC quand `--persist` est exécuté.
 - Console Next buildée avec route d'action dynamique.
 
 ## Vérifications exécutées
 
-- `npm run test` : 52 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie DNC/QC/email incertain bloquée, indexes FK Supabase, index anti-doublon, policy Auth BM Scout et actions Romu.
+- `npm run test` : 53 tests pass, dont scheduler idempotent, absence de fallback fixture quand Supabase est vide, copie ou approbation DNC/QC/email incertain bloquée, indexes FK Supabase, index anti-doublon, policy Auth BM Scout et actions Romu.
 - `npm run typecheck` : pass.
 - `npm run lint` : pass.
 - `npm run build` : pass.
 - `npm run quality:runs` : pass fixture, décision produit `production_not_ready`.
 - `npm run quality:readiness` : fail attendu, décision produit `production_not_ready`.
-- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 41 tests pass, dont provider SerpAPI, provider OpenAI web, fallback jobs, parsing sources, comparaison provider et anti-faux-positif PRD sur smoke Core seul.
-- Avec `OPENAI_API_KEY` présent en env et `BM_SCOUT_FETCH_LIMIT=3`, `npm run provider:compare -- --providers=openai_web --modes=core` : pass réel, Core découvre 15 candidats, enrichit 3 comptes et 3 passent QC ; `prd_volume_proven=false` car ce smoke n'inclut pas Exploration.
-- Avec `OPENAI_API_KEY` présent en env et `BM_SCOUT_FETCH_LIMIT=5`, `npm run provider:compare -- --providers=openai_web --modes=exploration` : fail attendu côté volume, Exploration découvre 36/100 comptes, produit une shortlist de 5 avec 2 pass QC et bloque les messages directs. Conclusion : OpenAI `web_search` est utile pour Core/enrichissement ciblé, mais SerpAPI reste à brancher pour prouver le scan large 100 comptes.
+- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 44 tests pass, dont provider SerpAPI, provider OpenAI web, schéma strict Agents SDK, verbosité OpenAI compatible, seuil Core validable, fallback jobs, parsing sources, comparaison provider et anti-faux-positif PRD sur smoke Core seul.
+- Avec `OPENAI_API_KEY` présent en env, `OPENAI_MODEL=gpt-4.1-mini`, `OPENAI_SEARCH_MODEL=gpt-4.1-mini` et `BM_SCOUT_FETCH_LIMIT=3`, `npm run provider:compare -- --providers=openai_web --modes=core,exploration` : smoke réel exécuté. Core passe QC avec 14 candidats découverts sur 15 attendus, Exploration passe QC avec 75 candidats découverts sur 100 attendus ; `openai_web` est recommandé, mais `prd_volume_proven=false`.
+- Avec `OPENAI_API_KEY` présent en env, `OPENAI_MODEL=gpt-4.1-mini`, `OPENAI_SEARCH_MODEL=gpt-4.1-mini`, `BM_SCOUT_PROVIDER=openai_web` et `BM_SCOUT_FETCH_LIMIT=2`, `npm run worker:real:core` : pass réel Agents SDK, artefact `latest-real-core.json`, 2 leads retenus, 5 lessons.
+- Avec les mêmes env, `npm run worker:real:exploration` : pass réel Agents SDK, artefact `latest-real-exploration.json`, 2 leads retenus, 5 lessons, aucun message direct.
 - Import Agents SDK manager : 13 tools disponibles, dont `WebSearchTool` et 8 tools métier provider.
 - `npm run agent:schedule -- --now=2026-06-01T06:00:00.000Z` : pass, 6 routines planifiées et 6 routines dues le lundi ouvré.
 - `npm run agent:schedule:run -- --now=2026-06-01T06:00:00.000Z` sans env serveur : fail attendu avec message env Supabase requis.

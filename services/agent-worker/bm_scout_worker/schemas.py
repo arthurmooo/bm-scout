@@ -123,3 +123,20 @@ class MissionOutput(BaseModel):
     run_steps: list[RunStep] = Field(default_factory=list)
     final_decision: Literal["ready", "not_ready"]
     qualitative_report: str
+
+
+class MissionAgentOutput(BaseModel):
+    run_id: str
+    mode: ScoutMode
+    trace_id: str
+    scanned_count: int = Field(ge=0)
+    kept_count: int = Field(ge=0)
+    rejected_count: int = Field(ge=0)
+    leads: list[ScoutLead]
+    rejected: list[ScoutLead]
+    lessons: list[LearningLesson]
+    final_decision: Literal["ready", "not_ready"]
+    qualitative_report: str
+
+    def to_mission_output(self) -> MissionOutput:
+        return MissionOutput(**self.model_dump(), run_steps=[])

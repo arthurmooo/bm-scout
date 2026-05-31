@@ -144,6 +144,17 @@ describe("scout actions", () => {
     expect(calls.some((call) => JSON.stringify(call.payload).includes("sent"))).toBe(false);
   });
 
+  it("bloque le marquage utilise si l'email n'est pas utilisable", async () => {
+    reset();
+    state.emailStatus = "verify";
+
+    const result = await recordScoutAction({ action: "mark_message_used", leadId: "core-cambon" });
+
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain("email contact à vérifier");
+    expect(calls).not.toContainEqual({ table: "scout_messages", op: "update", payload: { status: "approved" } });
+  });
+
   it("bloque la copie de message si la cible est do-not-contact", async () => {
     reset();
     state.dnc = true;

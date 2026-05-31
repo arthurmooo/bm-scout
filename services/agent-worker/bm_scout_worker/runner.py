@@ -6,7 +6,7 @@ from pathlib import Path
 from .fixtures import offline_output, seed_feedbacks
 from .memory import SupabaseConfig, SupabaseMemory
 from .providers import build_candidate_batch_with_steps
-from .schemas import FeedbackEvent, MissionOutput, RunStep, ScoutMode
+from .schemas import FeedbackEvent, MissionAgentOutput, MissionOutput, RunStep, ScoutMode
 
 
 async def run_bm_scout_mission(
@@ -102,16 +102,23 @@ Produis une mission complète conforme au PRD BM Scout :
 - décision finale prête/pas prête.
 
 Contraintes de sortie :
-- En Core, conserve au moins Cambon Partners si les preuves et le message passent.
+- En Core, conserve les candidats `quality_decision=pass` avec preuves publiques ; le meilleur candidat Core pass doit rester `verdict=validate`.
 - En Exploration, ne génère aucun message direct.
 - Pour chaque lead Exploration retenu, `outreach.cold_email`, `outreach.follow_up` et `outreach.linkedin` doivent commencer par `Brouillon bloqué`.
 - Tout contact non confirmé reste `role_only` ou `uncertain`.
+- Pour chaque `insights.observed[]`, `evidence_id` doit être exactement égal à une URL ou un label déjà présent dans `evidence`.
+- Produis toujours 3 à 5 `lessons`, même si elles sont prudentes et issues du QC, des exclusions ou des limites de sourcing.
 - Les textes doivent rester en français.
 """
     with capture_tool_calls() as tool_steps:
         with trace("BM Scout V1", metadata={"mode": mode, "include_weak": str(include_weak).lower()}):
             result = await Runner.run(manager, prompt, max_turns=8)
     final_output = result.final_output
-    output = final_output if isinstance(final_output, MissionOutput) else MissionOutput.model_validate(final_output)
+    if isinstance(final_output, MissionOutput):
+        output = final_output
+    elif isinstance(final_output, MissionAgentOutput):
+        output = final_output.to_mission_output()
+    else:
+        output = MissionAgentOutput.model_validate(final_output).to_mission_output()
     output.run_steps = [provider_step, *candidate_batch.run_steps, *tool_steps, *output.run_steps]
     return output

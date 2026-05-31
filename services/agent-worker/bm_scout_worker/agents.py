@@ -3,7 +3,7 @@ from __future__ import annotations
 from agents import Agent, GuardrailFunctionOutput, RunContextWrapper, WebSearchTool, output_guardrail
 
 from .quality import mission_blockers
-from .schemas import MissionOutput
+from .schemas import MissionAgentOutput
 from .tools import (
     dedupe_company,
     extract_company_signals,
@@ -23,6 +23,8 @@ Tu es le Manager BM Scout. Orchestration obligatoire :
 3. Fais passer la sortie par Quality Control. Si QC bloque, le verdict final doit être not_ready.
 4. Produis un MissionOutput strict : sources, hypothèses prudentes, score justifié, messages manuels, learning.
 5. N'envoie rien. Ne promets aucune action externe. Ne génère pas de message direct en Exploration.
+6. Chaque insight Observé doit recopier un `evidence_id` exact depuis `lead.evidence[].url` ou `lead.evidence[].label`.
+7. La synthèse learning doit toujours contenir 3 à 5 apprentissages exploitables.
 """
 
 CORE_INSTRUCTIONS = """
@@ -48,6 +50,7 @@ Explique toujours pourquoi bloquer, enrichir ou laisser passer.
 LEARNING_INSTRUCTIONS = """
 Tu synthétises les feedbacks Romu en 3 à 5 apprentissages exploitables pour la semaine suivante.
 Un do-not-contact bloque toute relance et doit passer avant toute recommandation commerciale.
+Si la mémoire feedback est faible, produis quand même 3 apprentissages prudents à partir des décisions QC et limites du run.
 """
 
 
@@ -55,9 +58,9 @@ Un do-not-contact bloque toute relance et doit passer avant toute recommandation
 async def bm_scout_output_quality(
     _context: RunContextWrapper[None],
     _agent: Agent[None],
-    output: MissionOutput,
+    output: MissionAgentOutput,
 ) -> GuardrailFunctionOutput:
-    blockers = mission_blockers(output)
+    blockers = mission_blockers(output.to_mission_output())
     return GuardrailFunctionOutput(
         output_info={"blockers": blockers},
         tripwire_triggered=bool(blockers),
@@ -72,7 +75,7 @@ def build_manager_agent(model: str) -> Agent[None]:
         instructions=CORE_INSTRUCTIONS,
         model=model,
         tools=[hosted_web_search, search_web, fetch_company_site, extract_company_signals, search_jobs],
-        output_type=MissionOutput,
+        output_type=MissionAgentOutput,
     )
     exploration_agent = Agent(
         name="Exploration Agent",
@@ -80,28 +83,28 @@ def build_manager_agent(model: str) -> Agent[None]:
         instructions=EXPLORATION_INSTRUCTIONS,
         model=model,
         tools=[hosted_web_search, search_web, fetch_company_site, extract_company_signals, search_jobs],
-        output_type=MissionOutput,
+        output_type=MissionAgentOutput,
     )
     outreach_agent = Agent(
         name="Outreach Agent",
         handoff_description="Rédaction de messages manuels spécifiques.",
         instructions=OUTREACH_INSTRUCTIONS,
         model=model,
-        output_type=MissionOutput,
+        output_type=MissionAgentOutput,
     )
     learning_agent = Agent(
         name="Learning Agent",
         handoff_description="Synthèse des feedbacks et apprentissages.",
         instructions=LEARNING_INSTRUCTIONS,
         model=model,
-        output_type=MissionOutput,
+        output_type=MissionAgentOutput,
     )
     quality_control_agent = Agent(
         name="quality_control_agent",
         handoff_description="Décision finale bloquante si la sortie est faible.",
         instructions=QC_INSTRUCTIONS,
         model=model,
-        output_type=MissionOutput,
+        output_type=MissionAgentOutput,
         output_guardrails=[bm_scout_output_quality],
     )
 
@@ -125,6 +128,6 @@ def build_manager_agent(model: str) -> Agent[None]:
             learning_agent.as_tool("summarize_learning", "Transformer feedbacks Romu en apprentissages."),
         ],
         handoffs=[quality_control_agent],
-        output_type=MissionOutput,
+        output_type=MissionAgentOutput,
         output_guardrails=[bm_scout_output_quality],
     )

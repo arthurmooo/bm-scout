@@ -18,6 +18,7 @@ from bm_scout_worker.providers import (
     SerpApiResearchProvider,
     build_candidate_batch,
     is_company_related_result,
+    openai_text_verbosity,
     parse_company_seeds,
     parse_duckduckgo_lite_results,
     parse_openai_response_sources,
@@ -188,6 +189,16 @@ def test_auto_provider_prefers_openai_web_when_key_is_present(monkeypatch) -> No
     assert isinstance(provider_from_env(), OpenAIWebResearchProvider)
 
 
+def test_openai_web_search_verbosity_defaults_to_model_compatible_medium(monkeypatch) -> None:
+    monkeypatch.delenv("OPENAI_TEXT_VERBOSITY", raising=False)
+
+    assert openai_text_verbosity() == "medium"
+
+    monkeypatch.setenv("OPENAI_TEXT_VERBOSITY", "low")
+
+    assert openai_text_verbosity() == "low"
+
+
 def test_auto_provider_prefers_serpapi_when_key_is_present(monkeypatch) -> None:
     monkeypatch.delenv("BM_SCOUT_PROVIDER", raising=False)
     monkeypatch.delenv("BM_SCOUT_REAL_SEEDS", raising=False)
@@ -233,6 +244,19 @@ def test_configured_provider_builds_candidates_from_public_seed() -> None:
         "save_evidence",
         "score_candidate",
     }
+
+
+def test_core_provider_passed_qc_lead_is_validable() -> None:
+    provider = ConfiguredWebResearchProvider(
+        [CompanySeed(company="Test M&A", website="https://example.com", segment="Conseil M&A")]
+    )
+    provider.fetch_company_site = lambda _url: "M&A transaction"
+
+    lead = provider.build_candidates("core")[0]
+
+    assert lead.score == 77
+    assert lead.quality_decision == "pass"
+    assert lead.verdict == "validate"
 
 
 def test_public_email_is_marked_to_verify_with_source() -> None:
@@ -698,6 +722,13 @@ def test_runner_writes_artifact(tmp_path) -> None:
 
     assert (tmp_path / f"{output.run_id}.json").exists()
     assert output.run_steps[0].event_type == "offline_run"
+
+
+def test_agent_output_schema_is_strict_compatible() -> None:
+    from agents.agent_output import AgentOutputSchema
+    from bm_scout_worker.schemas import MissionAgentOutput
+
+    AgentOutputSchema(MissionAgentOutput)
 
 
 def test_supabase_memory_persists_output_through_atomic_rpc() -> None:

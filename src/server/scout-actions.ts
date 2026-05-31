@@ -346,6 +346,9 @@ async function assertMessageCopyAllowed(companyId: string, channel: MessageChann
 async function markMessagesUsed(companyId: string): Promise<void> {
   const client = createServerSupabaseClient();
   if (!client) return;
+  await assertMessageCopyAllowed(companyId, "email");
+  await assertMessageCopyAllowed(companyId, "follow_up");
+  await assertMessageCopyAllowed(companyId, "linkedin");
   await checked(
     client
       .from("scout_messages")

@@ -385,7 +385,7 @@ class OpenAIWebResearchProvider(OpenWebResearchProvider):
                 max_tool_calls=1,
                 max_output_tokens=1200,
                 store=False,
-                text={"verbosity": "low"},
+                text={"verbosity": openai_text_verbosity()},
                 timeout=float(os.getenv("OPENAI_SEARCH_TIMEOUT_SECONDS", "45")),
             )
         except Exception as error:
@@ -655,6 +655,11 @@ Contraintes :
 - exclue annuaires faibles, réseaux sociaux, articles génériques et pages impossibles à sourcer ;
 - chaque snippet doit contenir un signal utile pour qualification, pas une phrase marketing vague.
 """
+
+
+def openai_text_verbosity() -> str:
+    configured = os.getenv("OPENAI_TEXT_VERBOSITY", "").strip()
+    return configured or "medium"
 
 
 def parse_openai_search_results(text: str, limit: int) -> list[SearchResult]:
@@ -965,7 +970,7 @@ def to_scout_lead(
         mode=mode,
         segment=seed.segment,
         score=score,
-        verdict="validate" if mode == "core" and score >= 80 else "watch",
+        verdict="validate" if mode == "core" and score >= 75 else "watch",
         quality_decision="pass" if evidence and score >= 75 else "needs_enrichment",
         observed_signals=signals,
         pain_hypotheses=["Possible tâche grise entre emails, documents, reporting et outils existants."],

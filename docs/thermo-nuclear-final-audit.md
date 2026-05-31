@@ -41,11 +41,13 @@ Verdict : `production_not_ready`.
 - Les scripts `worker:real:*` et le runner de queue écrivent maintenant les artefacts `latest-real-*.json` attendus par `quality:readiness`.
 - Un workflow GitHub Actions cron/dispatch existe pour consommer `scout_agent_tasks`.
 - Les actions Romu passent par une route serveur et une table d'événements.
-- Les copies email/relance/LinkedIn ne touchent plus le presse-papiers avant validation serveur, et le serveur bloque une copie DNC, QC bloquée ou email non utilisable.
+- Les copies email/relance/LinkedIn ne touchent plus le presse-papiers avant validation serveur, et le serveur bloque une copie ou approbation de message DNC, QC bloquée ou email non utilisable.
 - Les actions feedback/outcome Romu alimentent maintenant `scout_feedback` et `scout_outcomes`, donc la mémoire agentique ne dépend plus seulement de notes fictives.
 - Le DNC est un gate déterministe côté TS, worker offline et DB.
 - `quality:readiness` ne peut plus transformer des fixtures en claim de readiness.
 - Le dashboard ne contient plus de routine codée en dur.
+- Le provider OpenAI web est branché et testé avec une verbosité compatible `gpt-4.1-mini`, mais le dernier smoke réel reste sous les volumes PRD (`14/15` Core, `75/100` Exploration).
+- Les runs réels Agents SDK Core et Exploration passent sans persistance Supabase, après séparation du schéma strict modèle et du `MissionOutput` runtime avec `run_steps`.
 
 ## Tests exécutés
 
@@ -56,12 +58,14 @@ Verdict : `production_not_ready`.
 - `npm run quality:runs`
 - `npm run quality:readiness` échoue comme attendu en `production_not_ready`
 - `npm exec tsx -- scripts/run-agent-worker-evidence.ts --offline --mode=core` : pass, harnais d'artefact vérifié sans Supabase.
+- `npm run worker:real:core` : pass réel Agents SDK sans persistance Supabase.
+- `npm run worker:real:exploration` : pass réel Agents SDK sans persistance Supabase.
 - `npm run agent:tasks` échoue sans env Supabase avec un message explicite.
 - Tests runner TS : routines brief/learning/DNC/followup couvertes.
 - Tests actions TS : feedback bon angle, message générique, outcome RDV et DNC vers mémoire couverts.
 - Tests sécurité Supabase : policies RLS internes, absence de service role côté client, fermeture RPC security definer.
 - Import manager Agents SDK : 13 tools dont `WebSearchTool` et 8 tools métier.
-- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 28 tests
+- `.venv/bin/python -m pytest services/agent-worker/tests` / `npm run worker:test` : 44 tests
 - Supabase interne : migrations feedback/outcome et RLS appliquées ; advisor sécurité à 0 lint.
 
 ## Décision

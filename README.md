@@ -87,7 +87,7 @@ npm run provider:compare
 
 `quality:runs` valide seulement le socle fixture. `quality:readiness` doit rester bloquant tant que BM Scout est `production_not_ready`.
 `provider:compare` est un gate de recherche réelle : sans `SERPAPI_API_KEY` ou `OPENAI_API_KEY`, un échec est attendu et doit rester visible.
-OpenAI a bien un tool officiel de recherche web via Responses API (`web_search`) et le provider `openai_web` l'utilise. Dans les smokes réels actuels, OpenAI web passe Core borné mais ne prouve pas encore Exploration 100 comptes ; SerpAPI reste à brancher pour comparer le scan large.
+OpenAI a bien un tool officiel de recherche web via Responses API (`web_search`) et le provider `openai_web` l'utilise. Dans les smokes réels actuels, OpenAI web passe Core et Exploration en qualité, mais reste sous les volumes PRD (`14/15` Core, `75/100` Exploration) ; SerpAPI reste à brancher pour comparer le scan large.
 
 ## Worker agentique
 
@@ -106,7 +106,7 @@ cd services/agent-worker
 La persistance `--persist` passe par la RPC Supabase transactionnelle `scout_persist_mission_output`.
 Le chemin réel expose le `WebSearchTool` hébergé OpenAI dans l'orchestration Agents SDK, plus les tools métier `search_web`, `fetch_company_site`, `extract_company_signals`, `search_jobs`, `find_public_emails`, `dedupe_company`, `score_candidate`, `save_evidence`.
 Les scripts `worker:real:*` écrivent les artefacts `artifacts/agent-worker-real/latest-real-*.json` consommés par `quality:readiness`.
-SerpAPI est branché derrière le même contrat métier que `openai_web`. En `auto`, `BM_SCOUT_REAL_SEEDS` reste prioritaire, puis `SERPAPI_API_KEY`, puis OpenAI web, puis le fallback web public. OpenAI web est utile pour Core et l'enrichissement ciblé ; SerpAPI reste le candidat à prouver pour Exploration 100 comptes.
+SerpAPI est branché derrière le même contrat métier que `openai_web`. En `auto`, `BM_SCOUT_REAL_SEEDS` reste prioritaire, puis `SERPAPI_API_KEY`, puis OpenAI web, puis le fallback web public. OpenAI web est utile pour Core et l'enrichissement ciblé ; SerpAPI ou des requêtes mieux calibrées restent nécessaires pour prouver les volumes PRD.
 
 ## Documentation
 

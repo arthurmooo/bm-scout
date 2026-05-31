@@ -19,7 +19,7 @@ const result = await runWorkerCliForEvidence(mode, {
   artifactsDir: "artifacts/agent-worker-real"
 });
 
-const ok = result.code === 0 && result.parsed?.verdict === "pass";
+const ok = result.code === 0 && result.parsed?.verdict === "pass" && Boolean(result.parsed.output);
 console.log(
   JSON.stringify(
     {
@@ -31,9 +31,9 @@ console.log(
       evidenceFile: result.evidenceFile ?? null,
       verdict: result.parsed?.verdict ?? null,
       blockers: result.parsed?.blockers ?? [],
-      traceId: result.parsed?.output.trace_id ?? null,
-      keptCount: result.parsed?.output.kept_count ?? 0,
-      rejectedCount: result.parsed?.output.rejected_count ?? 0,
+      traceId: result.parsed?.output?.trace_id ?? null,
+      keptCount: result.parsed?.output?.kept_count ?? 0,
+      rejectedCount: result.parsed?.output?.rejected_count ?? 0,
       error: ok ? null : [result.stderr, result.stdout].filter(Boolean).join("\n").slice(0, 4000)
     },
     null,
