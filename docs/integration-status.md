@@ -98,7 +98,8 @@ Le repo n'est plus présenté comme V1 prête. La passe actuelle transforme la d
 - `npm run test:e2e` : pass, 2 scénarios Playwright ; le smoke force `BM_SCOUT_AUTH_MODE=demo`, vérifie dashboard/actions et page login interne.
 - Browser intégré : pass sur `http://127.0.0.1:3030` ; login interne visible, dashboard `production_not_ready` visible, clic feedback `Bon lead` passe en état `Erreur` attendu sans env Supabase serveur.
 - `npm audit --omit=dev` : fail modéré connu via `next -> postcss <8.5.10`; `npm audit fix --force` propose un downgrade Next cassant vers 9.x, donc non appliqué dans cette passe.
-- Supabase interne `Interne_Agentic_prospection` : migrations `agent_tasks_and_actions`, `bm_scout_structured_insights_email_confidence_steps`, `scout_feedback_outcome_actions`, `restrict_internal_rls_policies` et `close_security_definer_rpc_exposure` appliquées.
+- Supabase interne `Interne_Agentic_prospection` : migrations `agent_tasks_and_actions`, `bm_scout_structured_insights_email_confidence_steps`, `scout_feedback_outcome_actions`, `restrict_internal_rls_policies`, `close_security_definer_rpc_exposure` et `block_messages_after_negative_outcome` appliquées.
+- Supabase interne : triggers `scout_messages_prevent_blocking_outcome` et `scout_outcomes_block_messages` vérifiés en base via MCP ; advisor sécurité à 0 lint après application.
 - Supabase interne : index `scout_agent_tasks_active_type_schedule_uniq` vérifié en base via MCP après absence de doublons actifs.
 - Supabase advisor performance : plus aucun lint `unindexed_foreign_keys`; les lints restants sont `unused_index`, attendus sur une base de test à faible volume.
 - Supabase advisor sécurité : 0 lint après durcissement RLS/RPC.
